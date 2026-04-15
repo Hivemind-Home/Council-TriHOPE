@@ -1,0 +1,98 @@
+# CPU smoke test: tiny dims, 5 steps, 2 synthetic teachers
+model:
+  vocab_size: 256
+  dim: 64
+  num_layers: 2
+  heads: 4
+  ffn_hidden_multiplier: 4
+  activation: silu
+  max_seq_len: 64
+  dropout: 0.0
+  gradient_checkpointing: false
+  lora:
+    rank: 4
+    alpha: 8.0
+    dropout: 0.0
+    target_modules: [q, k, v, o, up, gate, down]
+
+teachers:
+  num_teachers: 2
+  prototype_seed_samples: 5
+
+distillation:
+  tau: 4.0
+  lambda_kd: 1.0
+  lambda_ce: 0.5
+  lambda_reg: 0.01
+
+regularization:
+  weight_decay: 0.01
+  trust_region_weight: 0.0
+  anti_forgetting_weight: 0.0
+  lora_sparsity_weight: 0.0
+
+controller:
+  surprise:
+    s_min: 0.0
+    s_max: 20.0
+    eps: 1.0e-8
+  stability:
+    ema_alpha: 0.1
+    warmup_threshold: 1.0e-6
+    eps: 1.0e-8
+  repetition:
+    alpha_mom: 0.05
+    alpha_hash: 0.1
+    kappa: 5.0
+    sim_threshold: 0.85
+    bucket_smoothing_k: 10.0
+    lookback_delta: 100
+    lambda_mom: 0.3
+    lambda_hash: 0.5
+    lambda_ret: 0.2
+    buffer_size: 100
+  policy:
+    top_m_modules: 4
+    surprise_high: 2.0
+    repetition_low: 0.3
+    repetition_medium: 0.5
+    stability_high_C: 0.5
+    stability_low_V: 0.3
+  consolidation:
+    period: 0
+    min_stability_C: 0.7
+    min_repetition: 0.6
+    merge_strategy: direct
+  writer:
+    top_k_granularity: rank_components
+    top_k_fraction: 0.5
+
+data:
+  source: synthetic
+  vocab_size: 256
+  seq_len: 32
+  batch_size: 2
+  dataset_size: 100
+  num_workers: 0
+  seed: 42
+
+train:
+  steps: 5
+  log_interval: 1
+  seed: 1337
+  device: cpu
+  mixed_precision:
+    enabled: false
+    dtype: bf16
+
+optim:
+  type: adamw
+  lr: 3.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.01
+  eps: 1.0e-8
+
+logging:
+  enabled: true
+  backend: json
+  path: logs/smoke_metrics.json
