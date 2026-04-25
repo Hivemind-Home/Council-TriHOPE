@@ -141,3 +141,26 @@ class SignalComputer:
             results[mid] = signals
 
         return results
+
+    def state_dict(self) -> dict:
+        def _encode(mid: ModuleId) -> str:
+            return f"{mid.layer}|{mid.block_type}|{mid.param_type}"
+
+        return {
+            "stability": {_encode(mid): tr.state_dict() for mid, tr in self._stability.items()},
+            "repetition": {_encode(mid): tr.state_dict() for mid, tr in self._repetition.items()},
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        def _decode(key: str) -> ModuleId:
+            layer_s, block, ptype = key.split("|")
+            return ModuleId(int(layer_s), block, ptype)
+
+        for key, sub in state.get("stability", {}).items():
+            mid = _decode(key)
+            if mid in self._stability:
+                self._stability[mid].load_state_dict(sub)
+        for key, sub in state.get("repetition", {}).items():
+            mid = _decode(key)
+            if mid in self._repetition:
+                self._repetition[mid].load_state_dict(sub)

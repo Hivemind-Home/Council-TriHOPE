@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from ..student.lora import LoRALinear
+from ..student.lora_adapter import get_adapter
 
 
 @dataclass(frozen=True)
@@ -69,11 +69,12 @@ def build_module_index(model: nn.Module) -> list[ModuleInfo]:
             proj = getattr(attn, proj_name, None)
             if proj is None:
                 continue
-            if isinstance(proj, LoRALinear):
-                for p in proj.base_params:
+            adapter = get_adapter(proj)
+            if adapter is not None:
+                for p in adapter.base_params:
                     attn_base_params.append(p)
                     attn_base_names.append(f"blocks.{layer_idx}.attn.{proj_name}.base")
-                for p in proj.lora_params:
+                for p in adapter.lora_params:
                     attn_lora_params.append(p)
                     attn_lora_names.append(f"blocks.{layer_idx}.attn.{proj_name}.lora")
             elif isinstance(proj, nn.Linear):
@@ -104,11 +105,12 @@ def build_module_index(model: nn.Module) -> list[ModuleInfo]:
             proj = getattr(ffn, proj_name, None)
             if proj is None:
                 continue
-            if isinstance(proj, LoRALinear):
-                for p in proj.base_params:
+            adapter = get_adapter(proj)
+            if adapter is not None:
+                for p in adapter.base_params:
                     ffn_base_params.append(p)
                     ffn_base_names.append(f"blocks.{layer_idx}.ffn.{proj_name}.base")
-                for p in proj.lora_params:
+                for p in adapter.lora_params:
                     ffn_lora_params.append(p)
                     ffn_lora_names.append(f"blocks.{layer_idx}.ffn.{proj_name}.lora")
             elif isinstance(proj, nn.Linear):

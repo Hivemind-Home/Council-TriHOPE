@@ -14,9 +14,11 @@ from typing import Any, cast
 
 import numpy as np
 import torch
+import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
+from .checkpoint import CheckpointConfig, CheckpointManager
 from .config_utils import unwrap_config
 from .controller.config import (
     ConsolidationConfig,
@@ -35,6 +37,7 @@ from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
 from .distillation import DistillationConfig, compute_distillation_objective
 from .embedding import SharedEmbedding
+from .evaluation import EvaluationConfig, ForgettingTracker, run_evaluation
 from .logging_utils import BaseLogger, init_logger
 from .optim.factory import build_optimizer
 from .optim.masked_adamw import MaskedAdamW
@@ -44,8 +47,15 @@ from .stores.permanent import PermanentStore
 from .stores.retrieval import RetrievalStore
 from .student.config import LoRAConfig, StudentConfig
 from .student.model import StudentModel
-from .teacher_registry import TeacherRegistry, create_synthetic_teachers
-from .teacher_router import TeacherRouter, batch_teacher_forward
+from .student.hf_backbone import HFStudent
+from .student.unsloth_backbone import UnslothStudent
+from .teacher_hf import create_hf_live_teachers, parse_hf_teacher_specs
+from .teacher_registry import (
+    TeacherRegistry,
+    create_hf_cache_teachers,
+    create_synthetic_teachers,
+)
+from .teacher_router import MetadataRouter, TeacherRouter, batch_teacher_forward
 
 
 def _seed_everything(seed: int) -> None:
@@ -57,8 +67,15 @@ def _seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def _build_student(cfg: DictConfig, device: torch.device) -> StudentModel:
-    """Build student model from config."""
+def _build_student(cfg: DictConfig, device: torch.device) -> nn.Module:
+    """Build student model from config.
+
+    Supports two backbones:
+    - ``in_repo`` (default): the small hand-rolled StudentModel, used by
+      the existing CPU smoke test.
+    - ``hf``: wraps a pretrained ``AutoModelForCausalLM`` (Qwen / Llama
+      family) and injects LoRA in-place on the target projections.
+    """
     model_cfg = cfg.model
     lora_cfg = LoRAConfig(
         rank=model_cfg.lora.get("rank", 8),
@@ -66,6 +83,42 @@ def _build_student(cfg: DictConfig, device: torch.device) -> StudentModel:
         dropout=model_cfg.lora.get("dropout", 0.0),
         target_modules=list(model_cfg.lora.get("target_modules", ["q", "k", "v", "o", "up", "gate", "down"])),
     )
+
+    backbone = str(model_cfg.get("backbone", "in_repo"))
+    if backbone == "hf":
+        pretrained = model_cfg.get("pretrained_name")
+        if not pretrained:
+            raise ValueError("model.backbone=hf requires model.pretrained_name")
+        student = HFStudent(
+            pretrained_name=str(pretrained),
+            lora_config=lora_cfg,
+            dtype=str(model_cfg.get("dtype", "float32")),
+            trust_remote_code=bool(model_cfg.get("trust_remote_code", False)),
+            cache_dir=model_cfg.get("hf_cache_dir"),
+        )
+        return student.to(device)
+
+    if backbone == "unsloth":
+        pretrained = model_cfg.get("pretrained_name")
+        if not pretrained:
+            raise ValueError("model.backbone=unsloth requires model.pretrained_name")
+        # UnslothStudent calls FastLanguageModel which already places the
+        # model on GPU per its own config — but be explicit for safety.
+        student = UnslothStudent(
+            pretrained_name=str(pretrained),
+            lora_config=lora_cfg,
+            max_seq_len=int(model_cfg.get("max_seq_len", 2048)),
+            dtype=str(model_cfg.get("dtype", "bfloat16")),
+            load_in_4bit=bool(model_cfg.get("load_in_4bit", False)),
+            load_in_16bit=bool(model_cfg.get("load_in_16bit", True)),
+            full_finetuning=bool(model_cfg.get("full_finetuning", False)),
+            use_gradient_checkpointing=model_cfg.get(
+                "use_gradient_checkpointing", "unsloth"
+            ),
+            cache_dir=model_cfg.get("hf_cache_dir"),
+        )
+        return student
+
     student_cfg = StudentConfig(
         vocab_size=model_cfg.vocab_size,
         dim=model_cfg.dim,
@@ -79,6 +132,62 @@ def _build_student(cfg: DictConfig, device: torch.device) -> StudentModel:
         lora=lora_cfg,
     )
     return StudentModel(student_cfg).to(device)
+
+
+def _bucket_to_int(bucket: Any, fallback: int) -> int:
+    """Stable int id for a bucket string (non-negative, fits in python int).
+
+    Controller repetition state keys are ints; the HF dataset gives strings.
+    We use python ``hash`` modded into a large-but-fixed space. Collisions
+    are rare and harmless — worst case two buckets share a repetition
+    slot, which just couples their statistics.
+    """
+    if bucket is None or bucket == "":
+        return int(fallback)
+    return abs(hash(str(bucket))) % (2**31 - 1)
+
+
+def _unpack_batch(raw: Any, device: torch.device) -> dict[str, Any]:
+    """Normalize a batch into the shape the training step expects.
+
+    Synthetic path: ``raw`` is a ``[B, T]`` token tensor. We expand into
+    a dict where ``labels = input_ids`` (full-sequence CE) and teacher
+    supervision is absent (set by caller from live teacher forward).
+
+    HF path: ``raw`` is already a dict from ``DistillCollator``; we just
+    move tensors to device.
+    """
+    if isinstance(raw, torch.Tensor):
+        input_ids = raw.to(device)
+        return {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "labels": input_ids,  # synthetic next-token loss
+            "teacher_logits": None,
+            "teacher_logits_mask": None,
+            "sample_ids": None,
+            "metadata": None,
+        }
+
+    # dict path — move tensors, pass through metadata
+    out: dict[str, Any] = {}
+    for key in (
+        "input_ids",
+        "attention_mask",
+        "labels",
+        "teacher_logits",
+        "teacher_logits_mask",
+        "teacher_confidence",
+        "teacher_entropy",
+    ):
+        v = raw.get(key)
+        if isinstance(v, torch.Tensor):
+            out[key] = v.to(device)
+        else:
+            out[key] = v
+    out["sample_ids"] = raw.get("sample_ids")
+    out["metadata"] = raw.get("metadata")
+    return out
 
 
 def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
@@ -118,26 +227,75 @@ def run_training_loop(
     student = _build_student(cfg, device)
     print(f"Student model: {sum(p.numel() for p in student.parameters()):,} params")
 
+    # Data source decides the teacher kind + router kind.
+    data_source = cfg.data.get("source", "synthetic")
+    router_kind = cfg.data.get("router", "metadata" if data_source == "hf" else "cosine")
+
     # Teachers
     teachers_cfg = cfg.get("teachers", {})
-    num_teachers = teachers_cfg.get("num_teachers", 2)
-    teachers = create_synthetic_teachers(num_teachers, student.config, device)
+    teacher_mode = str(teachers_cfg.get("mode", "cache" if data_source == "hf" else "synthetic"))
+    if data_source == "hf" and teacher_mode == "live":
+        raw_specs = teachers_cfg.get("pretrained", {})
+        specs = parse_hf_teacher_specs(raw_specs)
+        if not specs:
+            raise ValueError(
+                "teachers.mode=live requires teachers.pretrained "
+                "(map of domain → pretrained_name, or a list of specs)."
+            )
+        teachers = create_hf_live_teachers(
+            specs,
+            vocab_size=cfg.model.vocab_size,
+            device=device,
+            dtype=str(teachers_cfg.get("dtype", "float32")),
+            trust_remote_code=bool(teachers_cfg.get("trust_remote_code", False)),
+            cache_dir=teachers_cfg.get("hf_cache_dir"),
+        )
+    elif data_source == "hf":
+        domains = list(cfg.data.get("domains", ["code"]))
+        teacher_ids = dict(teachers_cfg.get("teacher_ids", {}))
+        teachers = create_hf_cache_teachers(
+            domains=domains,
+            teacher_ids=teacher_ids,
+            vocab_size=cfg.model.vocab_size,
+            device=device,
+        )
+    else:
+        num_teachers = teachers_cfg.get("num_teachers", 2)
+        teachers = create_synthetic_teachers(num_teachers, student.config, device)
     registry = TeacherRegistry(teachers)
 
     # Shared embedding for routing
     routing_embed = SharedEmbedding(student.embed)
 
-    # Compute teacher prototypes from synthetic seed data
+    # Compute teacher prototypes.
+    # - synthetic: random seed data, as before.
+    # - hf: random seed until a future pass plumbs real input_text samples
+    #   through the embedder. Metadata routing is the default for hf so
+    #   prototypes are only used by the cosine-router ablation.
     seed_data = SyntheticTeacherSeedData(
-        num_teachers=num_teachers,
+        num_teachers=len(teachers),
         samples_per_teacher=teachers_cfg.get("prototype_seed_samples", 10),
         vocab_size=cfg.model.vocab_size,
-        seq_len=cfg.data.get("seq_len", 32),
+        seq_len=cfg.data.get("seq_len", 32) if data_source == "synthetic" else 32,
     )
-    registry.compute_prototypes(routing_embed, seed_data.get_seed_data())
+    # Re-key seed_data to match registered teacher names.
+    named_seed: dict[str, list[torch.Tensor]] = {}
+    raw_seed = seed_data.get_seed_data()
+    for idx, t in enumerate(registry.teachers):
+        named_seed[t.name] = raw_seed.get(f"teacher_{idx}", [])
+    registry.compute_prototypes(routing_embed, named_seed)
 
     # Router
-    router = TeacherRouter()
+    if router_kind == "metadata":
+        domain_to_index = {
+            getattr(t.model, "domain", ""): i for i, t in enumerate(registry.teachers)
+        }
+        router: TeacherRouter | MetadataRouter = MetadataRouter(
+            teacher_names=[t.name for t in registry.teachers],
+            domain_to_index=domain_to_index,
+        )
+    else:
+        router = TeacherRouter()
 
     # Optimizer
     optimizer = build_optimizer(student, OmegaConf.to_container(cfg.optim, resolve=True))
@@ -149,6 +307,9 @@ def run_training_loop(
         lambda_kd=dist_cfg.get("lambda_kd", 1.0),
         lambda_ce=dist_cfg.get("lambda_ce", 0.5),
         lambda_reg=dist_cfg.get("lambda_reg", 0.01),
+        use_teacher_confidence=dist_cfg.get("use_teacher_confidence", False),
+        confidence_floor=dist_cfg.get("confidence_floor", 0.0),
+        confidence_power=dist_cfg.get("confidence_power", 1.0),
     )
 
     # Regularization config
@@ -158,6 +319,7 @@ def run_training_loop(
         trust_region_weight=reg_dict.get("trust_region_weight", 0.0),
         anti_forgetting_weight=reg_dict.get("anti_forgetting_weight", 0.0),
         lora_sparsity_weight=reg_dict.get("lora_sparsity_weight", 0.0),
+        consistency_weight=reg_dict.get("consistency_weight", 0.0),
     )
 
     # Controller
@@ -178,8 +340,47 @@ def run_training_loop(
     writer = WriteExecutor(student, optimizer, r_store, f_store, p_store, ctrl_config.writer)
     consolidator = ConsolidationScheduler(ctrl_config.consolidation, student, p_store)
 
+    # Checkpointing
+    ckpt_cfg_raw = cfg.get("checkpoint", {}) or {}
+    ckpt_cfg = CheckpointConfig(
+        enabled=bool(ckpt_cfg_raw.get("enabled", False)),
+        dir=str(ckpt_cfg_raw.get("dir", "checkpoints")),
+        save_every=int(ckpt_cfg_raw.get("save_every", 1000)),
+        keep_last=int(ckpt_cfg_raw.get("keep_last", 3)),
+        resume_from=ckpt_cfg_raw.get("resume_from"),
+    )
+    ckpt_manager = CheckpointManager(ckpt_cfg)
+
     # Data
     dataloader = build_dataloader(OmegaConf.to_container(cfg.data, resolve=True), distributed)
+
+    # Per-domain validation loaders (HF path only; synthetic skips eval).
+    eval_cfg_raw = cfg.get("eval", {}) or {}
+    eval_config = EvaluationConfig(
+        enabled=bool(eval_cfg_raw.get("enabled", False)),
+        interval=int(eval_cfg_raw.get("interval", 500)),
+        max_batches=int(eval_cfg_raw.get("max_batches", 32)),
+        track_forgetting=bool(eval_cfg_raw.get("track_forgetting", True)),
+        lora_sparsity_threshold=float(eval_cfg_raw.get("lora_sparsity_threshold", 1e-4)),
+    )
+    val_loaders: dict[str, Any] = {}
+    if eval_config.enabled and data_source == "hf":
+        base_data = OmegaConf.to_container(cfg.data, resolve=True)
+        for domain in list(cfg.data.get("domains", [])):
+            per_domain = dict(base_data)
+            per_domain["split"] = eval_cfg_raw.get("split", "validation")
+            per_domain["domains"] = [domain]
+            per_domain["shuffle"] = False
+            per_domain["drop_last"] = False
+            per_domain["batch_size"] = int(eval_cfg_raw.get("batch_size", base_data.get("batch_size", 4)))
+            per_domain["max_rows_per_domain"] = int(
+                eval_cfg_raw.get("max_rows_per_domain", per_domain.get("max_rows_per_domain") or 256)
+            )
+            try:
+                val_loaders[domain] = build_dataloader(per_domain, distributed=False)
+            except RuntimeError as exc:
+                print(f"eval: skipping domain {domain}: {exc}")
+    forgetting_tracker = ForgettingTracker() if eval_config.track_forgetting else None
 
     # Logger
     log_cfg = OmegaConf.to_container(cfg.get("logging", {}), resolve=True)
@@ -200,28 +401,63 @@ def run_training_loop(
     data_iter = iter(dataloader)
     final_metrics: dict[str, float] = {}
 
+    # Resume if configured
+    start_step = 0
+    resume_path = ckpt_manager.resolve_resume_path()
+    if resume_path is not None:
+        meta = ckpt_manager.load(
+            resume_path,
+            student=student,
+            optimizer=optimizer,
+            signal_computer=signal_computer,
+            r_store=r_store,
+            consolidator=consolidator,
+            forgetting=forgetting_tracker,
+            map_location=str(device),
+        )
+        start_step = int(meta.get("step", 0)) + 1
+        print(f"Resumed from {resume_path} at step {start_step}.")
+
     student.train()
-    pbar = tqdm(range(steps), desc="Training")
+    pbar = tqdm(range(start_step, steps), desc="Training", initial=start_step, total=steps)
 
     for step in pbar:
         # Get batch
         try:
-            tokens = next(data_iter)
+            raw = next(data_iter)
         except StopIteration:
             data_iter = iter(dataloader)
-            tokens = next(data_iter)
+            raw = next(data_iter)
 
-        tokens = tokens.to(device)  # [B, T]
+        batch = _unpack_batch(raw, device)
+        tokens = batch["input_ids"]  # [B, T]
 
         # === Step 1: Embed for routing ===
         h_t = routing_embed(tokens)  # [B, d]
 
         # === Step 2: Route to teacher ===
-        teacher_indices, scores = router.route(h_t, registry.prototypes.to(device))
+        if isinstance(router, MetadataRouter):
+            if batch["metadata"] is None:
+                raise RuntimeError(
+                    "router='metadata' requires HF-style batches with a metadata dict."
+                )
+            teacher_indices = router.route(batch["metadata"], device=device)
+            scores = None
+        else:
+            teacher_indices, scores = router.route(
+                h_t, registry.prototypes.to(device)
+            )
 
-        # === Step 3: Teacher forward (frozen, no grad) ===
+        # === Step 3: Teacher forward (cache fast-path if batch carries logits) ===
+        cached_logits = batch.get("teacher_logits")
+        cached_mask = batch.get("teacher_logits_mask")
         teacher_logits = batch_teacher_forward(
-            tokens, teacher_indices, registry.teachers, cfg.model.vocab_size
+            tokens,
+            teacher_indices,
+            registry.teachers,
+            cfg.model.vocab_size,
+            cached_logits=cached_logits,
+            cached_logits_mask=cached_mask,
         )
 
         # === Step 4-6: Student forward + loss + backward ===
@@ -230,16 +466,29 @@ def run_training_loop(
         with autocast_ctx:
             student_logits = student(tokens)  # [B, T, V]
 
-            # Regularization
-            reg_loss = compute_total_regularization(student, reg_config)
+            # Regularization (incl. dropout-based consistency penalty if enabled)
+            consistency_forward = (
+                (lambda: student(tokens)) if reg_config.consistency_weight > 0 else None
+            )
+            reg_loss = compute_total_regularization(
+                student,
+                reg_config,
+                consistency_forward=consistency_forward,
+                consistency_attention_mask=batch.get("attention_mask"),
+                consistency_labels=batch.get("labels"),
+            )
 
             # Combined distillation objective
             loss, loss_metrics = compute_distillation_objective(
                 teacher_logits=teacher_logits,
                 student_logits=student_logits,
-                targets=tokens,  # self-supervised: predict next token
+                targets=tokens,
                 config=distill_config,
                 reg_loss=reg_loss,
+                labels=batch.get("labels"),
+                attention_mask=batch.get("attention_mask"),
+                teacher_logits_mask=cached_mask,
+                teacher_confidence=batch.get("teacher_confidence"),
             )
 
         # Backward
@@ -247,8 +496,13 @@ def run_training_loop(
         scaler.unscale_(optimizer)
 
         # === Step 7-8: Compute controller signals ===
-        # Use first teacher index in batch as bucket_id
-        bucket_id = teacher_indices[0].item() if teacher_indices.numel() > 0 else 0
+        # Prefer the dataset-provided bucket when present (Theory 101 §4C);
+        # fall back to the teacher index for the synthetic path.
+        meta = batch.get("metadata")
+        if meta and meta.get("bucket_id"):
+            bucket_id = _bucket_to_int(meta["bucket_id"][0], fallback=0)
+        else:
+            bucket_id = teacher_indices[0].item() if teacher_indices.numel() > 0 else 0
         embedding = h_t[0] if h_t.numel() > 0 else None
 
         module_signals = signal_computer.compute_all(
@@ -275,6 +529,9 @@ def run_training_loop(
         scaler.update()
 
         # === Step 12: Consolidation check ===
+        # Record the batch for distill-based consolidation replay (no-op
+        # for the direct strategy).
+        consolidator.record_batch(tokens)
         consolidated = []
         if consolidator.should_check(step):
             consolidated = consolidator.consolidate(module_signals)
@@ -306,6 +563,47 @@ def run_training_loop(
             )
             logger.log(metrics, step)
             final_metrics = metrics
+
+        # Evaluation
+        if (
+            eval_config.enabled
+            and val_loaders
+            and eval_config.interval > 0
+            and step > 0
+            and (step % eval_config.interval == 0 or step == steps - 1)
+        ):
+            eval_metrics = run_evaluation(
+                student=student,
+                val_loaders=val_loaders,
+                device=device,
+                config=eval_config,
+                forgetting=forgetting_tracker,
+                r_store=r_store,
+                probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
+            )
+            logger.log(eval_metrics, step)
+            # Surface key eval numbers on the progress bar
+            macro = eval_metrics.get("eval/macro_loss")
+            if macro is not None:
+                pbar.set_postfix_str(f"val_loss={macro:.3f}", refresh=False)
+
+        # Checkpoint
+        if (
+            ckpt_cfg.enabled
+            and ckpt_cfg.save_every > 0
+            and step > 0
+            and (step % ckpt_cfg.save_every == 0 or step == steps - 1)
+        ):
+            ckpt_manager.save(
+                step=step,
+                student=student,
+                optimizer=optimizer,
+                signal_computer=signal_computer,
+                r_store=r_store,
+                consolidator=consolidator,
+                forgetting=forgetting_tracker,
+                extra={"final_metrics": final_metrics},
+            )
 
     logger.close()
     print(f"\nTraining complete. Final loss: {final_metrics.get('loss/total', 'N/A')}")

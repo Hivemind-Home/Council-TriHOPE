@@ -85,3 +85,31 @@ class RetrievalStore:
     @property
     def size(self) -> int:
         return len(self._buffer)
+
+    def state_dict(self) -> dict:
+        return {
+            "max_size": self.max_size,
+            "entries": [
+                {
+                    "embedding": e.embedding.detach().cpu(),
+                    "teacher_id": int(e.teacher_id),
+                    "bucket_id": int(e.bucket_id),
+                    "step": int(e.step),
+                    "metadata": dict(e.metadata),
+                }
+                for e in self._buffer
+            ],
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        self._buffer = deque(maxlen=self.max_size)
+        for raw in state.get("entries", []):
+            self._buffer.append(
+                RetrievalEntry(
+                    embedding=raw["embedding"],
+                    teacher_id=int(raw["teacher_id"]),
+                    bucket_id=int(raw["bucket_id"]),
+                    step=int(raw["step"]),
+                    metadata=dict(raw.get("metadata", {})),
+                )
+            )

@@ -1,0 +1,164 @@
+# Unsloth Qwen3.5 student + cached DeepSeek R1 supervision (code + math).
+#
+# Defaults to Qwen3.5-4B (~10 GB bf16 LoRA — fits a single 24 GB GPU).
+# Bump model.pretrained_name to unsloth/Qwen3.5-9B (22 GB) on H100 or
+# unsloth/Qwen3.5-27B (56 GB) on A100-80GB. No code change required.
+#
+# Per the Unsloth Qwen3.5 docs we keep load_in_4bit=False (quantization
+# differences hurt fine-tune quality) and load_in_16bit=True. MoE
+# variants (35B-A3B, 122B-A10B) work but need bigger GPUs and a smaller
+# batch size.
+defaults: []
+
+model:
+  backbone: unsloth
+  pretrained_name: unsloth/Qwen3.5-4B
+  dtype: bfloat16
+  load_in_4bit: false
+  load_in_16bit: true
+  full_finetuning: false
+  use_gradient_checkpointing: unsloth
+  hf_cache_dir: null
+
+  # Vocab/dim/heads/layers are populated automatically from the loaded
+  # model's config — these are placeholders for code paths that still
+  # read cfg.model.* directly. UnslothStudent.config overrides them.
+  vocab_size: 151936
+  dim: 2048
+  num_layers: 32
+  heads: 16
+  ffn_hidden_multiplier: 4
+  activation: silu
+  max_seq_len: 2048
+  dropout: 0.0
+  gradient_checkpointing: true
+
+  lora:
+    rank: 16
+    alpha: 32.0
+    dropout: 0.0
+    target_modules: [q, k, v, o, up, gate, down]
+
+teachers:
+  mode: cache
+  num_teachers: 2
+  prototype_seed_samples: 100
+  teacher_ids:
+    code: code_teacher_deepseek_r1
+    math: math_teacher_deepseek_r1_1p5b
+  pretrained: {}
+  dtype: bfloat16
+  trust_remote_code: false
+  hf_cache_dir: null
+
+distillation:
+  tau: 4.0
+  lambda_kd: 0.0           # flip to 1.0 once teacher_logits NPZs are mounted
+  lambda_ce: 1.0
+  lambda_reg: 0.01
+  use_teacher_confidence: true
+  confidence_floor: 0.1
+  confidence_power: 1.0
+
+regularization:
+  weight_decay: 0.01
+  trust_region_weight: 0.001
+  anti_forgetting_weight: 0.0
+  lora_sparsity_weight: 0.0001
+  consistency_weight: 0.01    # closes Theory 201 §5.2 — KL(p₁.detach() ‖ p₂)
+                              # under dropout. ~1 extra forward per step.
+
+controller:
+  surprise:
+    s_min: 0.0
+    s_max: 20.0
+    eps: 1.0e-8
+  stability:
+    ema_alpha: 0.1
+    warmup_threshold: 1.0e-6
+    eps: 1.0e-8
+  repetition:
+    alpha_mom: 0.05
+    alpha_hash: 0.1
+    kappa: 5.0
+    sim_threshold: 0.85
+    bucket_smoothing_k: 10.0
+    lookback_delta: 100
+    lambda_mom: 0.3
+    lambda_hash: 0.5
+    lambda_ret: 0.2
+    buffer_size: 1000
+  policy:
+    top_m_modules: 6
+    surprise_high: 2.0
+    repetition_low: 0.3
+    repetition_medium: 0.5
+    stability_high_C: 0.5
+    stability_low_V: 0.3
+  consolidation:
+    period: 2000
+    min_stability_C: 0.7
+    min_repetition: 0.6
+    merge_strategy: distill
+    distill_iters: 4
+    distill_lr: 1.0e-4
+    distill_tau: 2.0
+    distill_replay_size: 16
+  writer:
+    top_k_granularity: rank_components
+    top_k_fraction: 0.5
+
+data:
+  source: hf
+  router: metadata
+  domains: [code, math]
+  repo_prefix: hivemind-research
+  split: train
+  tokenizer: unsloth/Qwen3.5-4B
+  max_seq_len: 2048
+  teacher_logits_root: null
+  hf_cache_dir: null
+  streaming: false
+  max_rows_per_domain: null
+  batch_size: 1
+  num_workers: 2
+  seed: 42
+  logits_cache_size: 512
+
+train:
+  steps: 50000
+  log_interval: 50
+  seed: 1337
+  device: cuda
+  mixed_precision:
+    enabled: true
+    dtype: bf16
+
+optim:
+  type: adamw
+  lr: 1.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.01
+  eps: 1.0e-8
+
+checkpoint:
+  enabled: true
+  dir: checkpoints/pilot_unsloth
+  save_every: 1000
+  keep_last: 3
+  resume_from: null
+
+eval:
+  enabled: true
+  interval: 500
+  max_batches: 32
+  split: validation
+  batch_size: 1
+  max_rows_per_domain: 256
+  track_forgetting: true
+  lora_sparsity_threshold: 1.0e-4
+
+logging:
+  enabled: true
+  backend: json
+  path: logs/pilot_unsloth_metrics.json

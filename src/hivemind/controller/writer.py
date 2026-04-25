@@ -112,14 +112,11 @@ class WriteExecutor:
         get fast updates).
         """
         if mod.id.param_type == "F":
-            # Apply Top-K masking to LoRA gradients
-            from ..student.lora import LoRALinear
-
-            lora_modules = self.f_store.get_lora_modules_for_block(
+            adapters = self.f_store.get_lora_modules_for_block(
                 self.model, mod.id.layer, mod.id.block_type
             )
-            for lora in lora_modules:
-                self.f_store.apply_top_k_update(lora, self.optimizer)
+            for adapter in adapters:
+                self.f_store.apply_top_k_update(adapter, self.optimizer)
         else:
             # P-type module routed to F: zero base gradients (don't update base)
             for p in mod.params:

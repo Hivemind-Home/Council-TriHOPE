@@ -131,9 +131,11 @@ class StudentModel(nn.Module):
     def get_param_groups(self) -> dict[str, list[nn.Parameter]]:
         """Separate parameters into P-store (base), F-store (LoRA), and shared groups.
 
-        Returns:
-            {"P": base_params, "F": lora_params, "shared": embed/norm/head params}
+        Uses the ``LoRAAdapter`` protocol so this is identical for our
+        ``LoRALinear`` and any PEFT/Unsloth-attached LoRA.
         """
+        from .lora_adapter import iter_lora_adapters
+
         lora_params: list[nn.Parameter] = []
         base_params: list[nn.Parameter] = []
         shared_params: list[nn.Parameter] = []
@@ -141,17 +143,14 @@ class StudentModel(nn.Module):
         lora_param_ids: set[int] = set()
         base_param_ids: set[int] = set()
 
-        # Collect LoRA and base params from LoRALinear modules
-        for module in self.modules():
-            if isinstance(module, LoRALinear):
-                for p in module.lora_params:
-                    lora_params.append(p)
-                    lora_param_ids.add(id(p))
-                for p in module.base_params:
-                    base_params.append(p)
-                    base_param_ids.add(id(p))
+        for _name, adapter in iter_lora_adapters(self):
+            for p in adapter.lora_params:
+                lora_params.append(p)
+                lora_param_ids.add(id(p))
+            for p in adapter.base_params:
+                base_params.append(p)
+                base_param_ids.add(id(p))
 
-        # Everything else is shared (embedding, norms, lm_head)
         for p in self.parameters():
             pid = id(p)
             if pid not in lora_param_ids and pid not in base_param_ids:
@@ -161,12 +160,14 @@ class StudentModel(nn.Module):
 
     def merge_all_lora(self) -> None:
         """Merge all LoRA adapters into base weights (F→P consolidation)."""
-        for module in self.modules():
-            if isinstance(module, LoRALinear):
-                module.merge_lora_into_base()
+        from .lora_adapter import iter_lora_adapters
+
+        for _name, adapter in iter_lora_adapters(self):
+            adapter.merge_lora_into_base()
 
     def reset_all_lora(self) -> None:
         """Reset all LoRA adapters to initial state."""
-        for module in self.modules():
-            if isinstance(module, LoRALinear):
-                module.reset_lora()
+        from .lora_adapter import iter_lora_adapters
+
+        for _name, adapter in iter_lora_adapters(self):
+            adapter.reset_lora()

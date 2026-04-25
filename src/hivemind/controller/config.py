@@ -53,12 +53,25 @@ class PolicyConfig:
 
 @dataclass
 class ConsolidationConfig:
-    """F→P consolidation configuration."""
+    """F→P consolidation configuration.
+
+    merge_strategy:
+    - ``direct``: merge LoRA deltas into base weight and reset LoRA
+      (fast, Theory 101 §8 option 2). Always safe.
+    - ``distill``: capture the student+LoRA behaviour on a replay batch,
+      train the base weights of the target block to match it, then
+      reset LoRA (Theory 101 §8 option 1). Requires a recent-batch
+      replay buffer; tunable via ``distill_*`` fields.
+    """
 
     period: int = 1000
     min_stability_C: float = 0.7
     min_repetition: float = 0.6
     merge_strategy: str = "direct"
+    distill_iters: int = 4
+    distill_lr: float = 1.0e-4
+    distill_tau: float = 2.0
+    distill_replay_size: int = 16
 
 
 @dataclass

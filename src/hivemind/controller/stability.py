@@ -136,3 +136,15 @@ class StabilityTracker:
         m_cat = torch.cat([m.detach().flatten() for m in adam_m_list])
         v_cat = torch.cat([v.detach().flatten() for v in adam_v_list])
         return self.compute_adam_ratio(m_cat, v_cat)
+
+    def state_dict(self) -> dict:
+        return {
+            "_ema_norm": self._ema_norm,
+            "_ema_norm_sq": self._ema_norm_sq,
+            "_initialized": self._initialized,
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        self._ema_norm = float(state.get("_ema_norm", 0.0))
+        self._ema_norm_sq = float(state.get("_ema_norm_sq", 0.0))
+        self._initialized = bool(state.get("_initialized", False))

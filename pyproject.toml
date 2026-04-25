@@ -27,6 +27,17 @@ hivemind = "hivemind.cli:app"
 logging = [
   "wandb>=0.18.0",
 ]
+data = [
+  "datasets>=2.19.0",
+  "transformers>=4.44.0",
+  "huggingface_hub>=0.24.0",
+  "pyarrow>=15.0",
+]
+unsloth = [
+  "unsloth>=2025.1.0",
+  "peft>=0.13.0",
+  "bitsandbytes>=0.44.0",
+]
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",

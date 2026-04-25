@@ -1,0 +1,170 @@
+# Live HF teachers (Qwen-vocab family).
+#
+# Differences from pilot_hf_gpu.yaml:
+#  - teachers.mode: live  (HFTeacher runs forward on each batch instead
+#    of reading NPZ logits from disk)
+#  - teachers.pretrained set to actual model ids
+#  - vocab pinned to Qwen2.5 tokenizer (151,936) so KD is well-defined
+#  - lambda_kd: 1.0 — KD is the whole point of live teachers; if you
+#    only wanted CE on teacher_output_text the cache path is cheaper.
+#
+# Caveats baked into HFTeacher:
+#  - Cannot load GGUF (use Qwen/Qwen3-Coder-30B-A3B-Instruct, not the
+#    unsloth/...-GGUF variant).
+#  - Vocab mismatch raises at init. Both code & math teachers below are
+#    Qwen-family (151,936). medgemma uses Gemma vocab (262,144) and
+#    cannot be a live teacher against a Qwen-vocab student — use cache
+#    mode for medical once you generate Layer B with medgemma offline.
+#  - Qwen3-Coder-30B is MoE; needs trust_remote_code=true and lots of
+#    GPU memory. Halve target_modules or drop to Qwen2.5-Coder-7B if
+#    OOMing.
+
+defaults: []
+
+model:
+  backbone: hf
+  pretrained_name: Qwen/Qwen2.5-0.5B
+  dtype: bfloat16
+  trust_remote_code: false
+  hf_cache_dir: null
+  vocab_size: 151936
+  dim: 896
+  num_layers: 24
+  heads: 14
+  ffn_hidden_multiplier: 4
+  activation: silu
+  max_seq_len: 2048
+  dropout: 0.0
+  gradient_checkpointing: true
+  lora:
+    rank: 16
+    alpha: 32.0
+    dropout: 0.0
+    target_modules: [q, k, v, o, up, gate, down]
+
+teachers:
+  mode: live
+  num_teachers: 2
+  prototype_seed_samples: 100
+  teacher_ids:
+    code: code_teacher_qwen3coder
+    math: math_teacher_qwen3coder      # placeholder — swap when a real
+                                       # Qwen-vocab math teacher is chosen
+  pretrained:
+    code: Qwen/Qwen3-Coder-30B-A3B-Instruct
+    math: Qwen/Qwen3-Coder-30B-A3B-Instruct
+  dtype: bfloat16
+  trust_remote_code: true
+  hf_cache_dir: null
+
+distillation:
+  tau: 4.0
+  lambda_kd: 1.0
+  lambda_ce: 1.0
+  lambda_reg: 0.01
+  use_teacher_confidence: false        # confidence field is from cached
+                                       # supervision; live inference
+                                       # doesn't fill it.
+  confidence_floor: 0.0
+  confidence_power: 1.0
+
+regularization:
+  weight_decay: 0.01
+  trust_region_weight: 0.001
+  anti_forgetting_weight: 0.0
+  lora_sparsity_weight: 0.0001
+
+controller:
+  surprise:
+    s_min: 0.0
+    s_max: 20.0
+    eps: 1.0e-8
+  stability:
+    ema_alpha: 0.1
+    warmup_threshold: 1.0e-6
+    eps: 1.0e-8
+  repetition:
+    alpha_mom: 0.05
+    alpha_hash: 0.1
+    kappa: 5.0
+    sim_threshold: 0.85
+    bucket_smoothing_k: 10.0
+    lookback_delta: 100
+    lambda_mom: 0.3
+    lambda_hash: 0.5
+    lambda_ret: 0.2
+    buffer_size: 1000
+  policy:
+    top_m_modules: 6
+    surprise_high: 2.0
+    repetition_low: 0.3
+    repetition_medium: 0.5
+    stability_high_C: 0.5
+    stability_low_V: 0.3
+  consolidation:
+    period: 2000
+    min_stability_C: 0.7
+    min_repetition: 0.6
+    merge_strategy: distill
+    distill_iters: 4
+    distill_lr: 1.0e-4
+    distill_tau: 2.0
+    distill_replay_size: 16
+  writer:
+    top_k_granularity: rank_components
+    top_k_fraction: 0.5
+
+data:
+  source: hf
+  router: metadata
+  domains: [code, math]
+  repo_prefix: hivemind-research
+  split: train
+  tokenizer: Qwen/Qwen2.5-0.5B
+  max_seq_len: 2048
+  teacher_logits_root: null            # unused — live mode bypasses cache
+  hf_cache_dir: null
+  streaming: false
+  max_rows_per_domain: null
+  batch_size: 1                        # live 30B teachers need tiny batches
+  num_workers: 2
+  seed: 42
+  logits_cache_size: 32
+
+train:
+  steps: 50000
+  log_interval: 50
+  seed: 1337
+  device: cuda
+  mixed_precision:
+    enabled: true
+    dtype: bf16
+
+optim:
+  type: adamw
+  lr: 1.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.01
+  eps: 1.0e-8
+
+checkpoint:
+  enabled: true
+  dir: checkpoints/pilot_hf_live
+  save_every: 1000
+  keep_last: 3
+  resume_from: null
+
+eval:
+  enabled: true
+  interval: 500
+  max_batches: 32
+  split: validation
+  batch_size: 1
+  max_rows_per_domain: 256
+  track_forgetting: true
+  lora_sparsity_threshold: 1.0e-4
+
+logging:
+  enabled: true
+  backend: json
+  path: logs/pilot_hf_live_metrics.json

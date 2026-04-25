@@ -1,16 +1,23 @@
 """Regularization terms for the distillation objective.
 
-Implements:
-- Weight decay: ||θ||²₂
-- Trust-region KL: KL(p_θ_old || p_θ)
-- Anti-forgetting: Σ ω_i (θ_i - θ_i^old)²
-- LoRA sparsity: ||φ_F||₁
+Implements every form mentioned in Theory 201 §5:
+
+* Weight decay ``||θ||²₂``
+* Trust-region KL ``KL(p_θ_old ‖ p_θ)``
+* Anti-forgetting ``Σ ω_i (θ_i − θ_i^old)²``
+* LoRA sparsity ``||φ_F||₁``
+* Consistency penalty ``D(p_θ(x), p_θ(x̃))`` — KL between two stochastic
+  forward passes (dropout / noise) on the same input. Closes the §5.2
+  gap.
+
+All consumers reach into LoRA via the ``LoRAAdapter`` protocol so this
+file works for both the in-repo backbone and PEFT/Unsloth.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
 import torch
 import torch.nn as nn
@@ -25,10 +32,11 @@ class RegularizationConfig:
     trust_region_weight: float = 0.0
     anti_forgetting_weight: float = 0.0
     lora_sparsity_weight: float = 0.0
+    consistency_weight: float = 0.0
 
 
 def compute_weight_decay(params: Iterable[nn.Parameter]) -> torch.Tensor:
-    """L2 weight decay: ||θ||²₂."""
+    """L2 weight decay: ``||θ||²₂``."""
     total = torch.tensor(0.0)
     for p in params:
         if p.requires_grad:
@@ -40,17 +48,7 @@ def compute_trust_region_kl(
     old_logits: torch.Tensor,
     new_logits: torch.Tensor,
 ) -> torch.Tensor:
-    """Trust-region KL divergence: KL(p_θ_old || p_θ_new).
-
-    Prevents the student from drifting too far from its previous behavior.
-
-    Args:
-        old_logits: [B, T, V] logits from previous parameters (detached).
-        new_logits: [B, T, V] logits from current parameters.
-
-    Returns:
-        Scalar KL divergence.
-    """
+    """``KL(p_θ_old ‖ p_θ_new)`` — keeps updates close to prior behavior."""
     p_old = F.softmax(old_logits.detach(), dim=-1)
     log_p_new = F.log_softmax(new_logits, dim=-1)
     return F.kl_div(log_p_new, p_old, reduction="batchmean")
@@ -61,18 +59,7 @@ def compute_anti_forgetting(
     anchor_params: dict[str, torch.Tensor],
     importance: dict[str, torch.Tensor] | None = None,
 ) -> torch.Tensor:
-    """Anti-forgetting penalty: Σ ω_i (θ_i - θ_i^old)².
-
-    Discourages updates that damage previously learned knowledge.
-
-    Args:
-        current_params: {name: tensor} current parameter values.
-        anchor_params: {name: tensor} previous trusted parameter values.
-        importance: {name: tensor} per-parameter importance weights (optional).
-
-    Returns:
-        Scalar penalty.
-    """
+    """``Σ ω_i (θ_i − θ_i^old)²``."""
     total = torch.tensor(0.0)
     for name, current in current_params.items():
         if name in anchor_params:
@@ -84,11 +71,55 @@ def compute_anti_forgetting(
 
 
 def compute_lora_sparsity(lora_params: Iterable[nn.Parameter]) -> torch.Tensor:
-    """L1 sparsity penalty on LoRA parameters: ||φ_F||₁."""
+    """L1 sparsity penalty on LoRA parameters: ``||φ_F||₁``."""
     total = torch.tensor(0.0)
     for p in lora_params:
         total = total + p.float().abs().sum()
     return total
+
+
+def compute_consistency_penalty(
+    forward_fn: Callable[[], torch.Tensor],
+    *,
+    attention_mask: Optional[torch.Tensor] = None,
+    labels: Optional[torch.Tensor] = None,
+    ignore_index: int = -100,
+) -> torch.Tensor:
+    """Two-pass dropout consistency: ``KL(p₁.detach() ‖ p₂)``.
+
+    Theory 201 §5.2: the student should behave consistently under small
+    perturbations. We use dropout sampling — the simplest perturbation
+    that doesn't require building a second token sequence. The caller
+    passes a no-arg callable that runs one forward pass; we call it
+    twice. Both passes must keep dropout active (i.e. caller must set
+    ``model.train()``).
+
+    When ``attention_mask`` and/or ``labels`` are given we restrict the
+    KL to "real" positions (mask=1, label != ignore) so prompt and pad
+    tokens don't dilute the signal.
+    """
+    logits_1 = forward_fn().detach()
+    logits_2 = forward_fn()
+
+    p1 = F.softmax(logits_1, dim=-1)
+    log_p2 = F.log_softmax(logits_2, dim=-1)
+
+    # [B, T] elementwise KL
+    pointwise = (p1 * (torch.log(p1.clamp_min(1e-12)) - log_p2)).sum(dim=-1)
+
+    mask: Optional[torch.Tensor] = None
+    if labels is not None:
+        mask = (labels != ignore_index).to(pointwise.dtype)
+    elif attention_mask is not None:
+        mask = attention_mask.to(pointwise.dtype)
+
+    if mask is not None:
+        pointwise = pointwise * mask
+        denom = mask.sum().clamp_min(1.0)
+    else:
+        denom = torch.tensor(float(pointwise.numel()), device=pointwise.device).clamp_min(1.0)
+
+    return pointwise.sum() / denom
 
 
 def compute_total_regularization(
@@ -97,39 +128,41 @@ def compute_total_regularization(
     old_logits: torch.Tensor | None = None,
     new_logits: torch.Tensor | None = None,
     anchor_params: dict[str, torch.Tensor] | None = None,
+    consistency_forward: Callable[[], torch.Tensor] | None = None,
+    consistency_attention_mask: torch.Tensor | None = None,
+    consistency_labels: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Compute combined regularization loss.
-
-    L_reg = λ_wd * ||θ||² + λ_tr * KL(old||new) + λ_af * AF + λ_sp * ||φ_F||₁
-    """
-    from .student.lora import LoRALinear
+    """Combine every regularization term enabled by ``config``."""
+    from .student.lora_adapter import iter_lora_adapters
 
     total = torch.tensor(0.0, device=next(model.parameters()).device)
 
-    # Weight decay (applied to all trainable params)
     if config.weight_decay > 0:
         total = total + config.weight_decay * compute_weight_decay(model.parameters())
 
-    # Trust-region KL
     if config.trust_region_weight > 0 and old_logits is not None and new_logits is not None:
         total = total + config.trust_region_weight * compute_trust_region_kl(
             old_logits, new_logits
         )
 
-    # Anti-forgetting
     if config.anti_forgetting_weight > 0 and anchor_params is not None:
         current = {n: p for n, p in model.named_parameters() if p.requires_grad}
         total = total + config.anti_forgetting_weight * compute_anti_forgetting(
             current, anchor_params
         )
 
-    # LoRA sparsity
     if config.lora_sparsity_weight > 0:
-        lora_params = []
-        for m in model.modules():
-            if isinstance(m, LoRALinear):
-                lora_params.extend(m.lora_params)
+        lora_params: list[nn.Parameter] = []
+        for _name, adapter in iter_lora_adapters(model):
+            lora_params.extend(adapter.lora_params)
         if lora_params:
             total = total + config.lora_sparsity_weight * compute_lora_sparsity(lora_params)
+
+    if config.consistency_weight > 0 and consistency_forward is not None:
+        total = total + config.consistency_weight * compute_consistency_penalty(
+            consistency_forward,
+            attention_mask=consistency_attention_mask,
+            labels=consistency_labels,
+        )
 
     return total

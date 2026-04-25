@@ -1,15 +1,15 @@
-"""P-store: Permanent base weight consolidation.
+"""P-store: permanent base weight consolidation.
 
-Handles F→P consolidation by merging LoRA adapters into base weights,
-and direct base weight updates with regularization.
+Handles F→P consolidation by merging LoRA adapters into base weights.
+Speaks to LoRA via the ``LoRAAdapter`` protocol so this works whether
+LoRA was attached by us (``LoRALinear``) or by PEFT/Unsloth.
 """
 
 from __future__ import annotations
 
-import torch
 import torch.nn as nn
 
-from ..student.lora import LoRALinear
+from ..student.lora_adapter import get_adapter
 
 
 class PermanentStore:
@@ -18,26 +18,20 @@ class PermanentStore:
     def merge_lora_for_block(
         self, model: nn.Module, layer_idx: int, block_type: str
     ) -> int:
-        """Merge all LoRA adapters into base weights for a specific block.
-
-        Args:
-            model: the student model.
-            layer_idx: which layer.
-            block_type: "attn" or "ffn".
-
-        Returns:
-            Number of LoRA modules merged.
-        """
-        block = model.blocks[layer_idx]  # type: ignore
+        """Merge LoRA adapters into base weights for one block."""
+        block = model.blocks[layer_idx]  # type: ignore[attr-defined]
         if block_type == "attn":
-            lora_modules = block.attn.get_lora_modules()
+            container = block.attn
         elif block_type == "ffn":
-            lora_modules = block.ffn.get_lora_modules()
+            container = block.ffn
         else:
             return 0
 
         count = 0
-        for lora in lora_modules.values():
-            lora.merge_lora_into_base()
+        for mod in container.get_lora_modules().values():
+            adapter = get_adapter(mod)
+            if adapter is None:
+                continue
+            adapter.merge_lora_into_base()
             count += 1
         return count

@@ -1,0 +1,130 @@
+# CPU smoke for the HF path: tiny model, 5 steps, 10 rows per domain.
+#
+# This still downloads the tokenizer and touches the HF datasets, so it
+# needs the `data` extra installed and network access the first time.
+# For fully-offline testing run `pytest tests/test_training_loop_hf.py`
+# which monkeypatches load_dataset + tokenizer.
+model:
+  vocab_size: 151936
+  dim: 64
+  num_layers: 2
+  heads: 4
+  ffn_hidden_multiplier: 4
+  activation: silu
+  max_seq_len: 128
+  dropout: 0.0
+  gradient_checkpointing: false
+  lora:
+    rank: 4
+    alpha: 8.0
+    dropout: 0.0
+    target_modules: [q, k, v, o, up, gate, down]
+
+teachers:
+  num_teachers: 1
+  prototype_seed_samples: 4
+  teacher_ids:
+    code: code_teacher_deepseek_r1
+
+distillation:
+  tau: 4.0
+  lambda_kd: 0.0
+  lambda_ce: 1.0
+  lambda_reg: 0.01
+
+regularization:
+  weight_decay: 0.01
+  trust_region_weight: 0.0
+  anti_forgetting_weight: 0.0
+  lora_sparsity_weight: 0.0
+
+controller:
+  surprise:
+    s_min: 0.0
+    s_max: 20.0
+    eps: 1.0e-8
+  stability:
+    ema_alpha: 0.1
+    warmup_threshold: 1.0e-6
+    eps: 1.0e-8
+  repetition:
+    alpha_mom: 0.05
+    alpha_hash: 0.1
+    kappa: 5.0
+    sim_threshold: 0.85
+    bucket_smoothing_k: 10.0
+    lookback_delta: 100
+    lambda_mom: 0.3
+    lambda_hash: 0.5
+    lambda_ret: 0.2
+    buffer_size: 100
+  policy:
+    top_m_modules: 4
+    surprise_high: 2.0
+    repetition_low: 0.3
+    repetition_medium: 0.5
+    stability_high_C: 0.5
+    stability_low_V: 0.3
+  consolidation:
+    period: 0
+    min_stability_C: 0.7
+    min_repetition: 0.6
+    merge_strategy: direct
+  writer:
+    top_k_granularity: rank_components
+    top_k_fraction: 0.5
+
+data:
+  source: hf
+  router: metadata
+  domains: [code]
+  repo_prefix: hivemind-research
+  split: train
+  tokenizer: Qwen/Qwen2.5-0.5B
+  max_seq_len: 128
+  teacher_logits_root: null
+  hf_cache_dir: null
+  streaming: false
+  max_rows_per_domain: 10
+  batch_size: 2
+  num_workers: 0
+  seed: 42
+  logits_cache_size: 32
+
+train:
+  steps: 5
+  log_interval: 1
+  seed: 1337
+  device: cpu
+  mixed_precision:
+    enabled: false
+    dtype: bf16
+
+optim:
+  type: adamw
+  lr: 3.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.01
+  eps: 1.0e-8
+
+checkpoint:
+  enabled: false
+  dir: checkpoints/pilot_hf_smoke
+  save_every: 0
+  keep_last: 1
+  resume_from: null
+
+eval:
+  enabled: false
+  interval: 0
+  max_batches: 2
+  split: validation
+  batch_size: 2
+  max_rows_per_domain: 4
+  track_forgetting: true
+  lora_sparsity_threshold: 1.0e-4
+
+logging:
+  enabled: true
+  backend: json
+  path: logs/pilot_hf_smoke_metrics.json

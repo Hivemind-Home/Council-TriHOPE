@@ -48,6 +48,12 @@ class MomentumRepetition:
     def score(self) -> float:
         return self._score
 
+    def state_dict(self) -> dict:
+        return {"_score": self._score}
+
+    def load_state_dict(self, state: dict) -> None:
+        self._score = float(state.get("_score", 0.0))
+
 
 class BucketSurpriseRepetition:
     """Repetition via surprise decay across similar samples.
@@ -124,6 +130,24 @@ class BucketSurpriseRepetition:
             trend_input = 0.0
         return freq_confidence * _sigmoid(trend_input)
 
+    def state_dict(self) -> dict:
+        # Trim histories on save to bound checkpoint size; only the last
+        # lookback_delta+1 values affect the trend computation.
+        keep = self.lookback_delta + 1
+        return {
+            "_surprise_ema": dict(self._surprise_ema),
+            "_surprise_history": {k: list(v[-keep:]) for k, v in self._surprise_history.items()},
+            "_count": dict(self._count),
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        from collections import defaultdict
+        self._surprise_ema = defaultdict(float, state.get("_surprise_ema", {}))
+        self._surprise_history = defaultdict(list)
+        for k, v in state.get("_surprise_history", {}).items():
+            self._surprise_history[int(k) if isinstance(k, str) and k.lstrip("-").isdigit() else k] = list(v)
+        self._count = defaultdict(int, state.get("_count", {}))
+
 
 class RetrievalHitRepetition:
     """Repetition via retrieval hit rate (embedding similarity).
@@ -168,6 +192,20 @@ class RetrievalHitRepetition:
 
         # R_t(ret) = 1 - exp(-H_t / κ)
         return 1.0 - math.exp(-hit_count / max(self.kappa, 1e-8))
+
+    def state_dict(self) -> dict:
+        if self._buffer:
+            buf = torch.stack(self._buffer).cpu()
+        else:
+            buf = torch.empty(0)
+        return {"_buffer": buf}
+
+    def load_state_dict(self, state: dict) -> None:
+        buf = state.get("_buffer")
+        if buf is None or (hasattr(buf, "numel") and buf.numel() == 0):
+            self._buffer = []
+        else:
+            self._buffer = [buf[i].clone() for i in range(buf.shape[0])]
 
 
 class FusedRepetition:
@@ -220,6 +258,21 @@ class FusedRepetition:
         fused = lam1 * r_mom + lam2 * r_hash + lam3 * r_ret
 
         return fused, {"mom": r_mom, "hash": r_hash, "ret": r_ret}
+
+    def state_dict(self) -> dict:
+        return {
+            "momentum": self.momentum.state_dict(),
+            "bucket": self.bucket.state_dict(),
+            "retrieval": self.retrieval.state_dict(),
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        if "momentum" in state:
+            self.momentum.load_state_dict(state["momentum"])
+        if "bucket" in state:
+            self.bucket.load_state_dict(state["bucket"])
+        if "retrieval" in state:
+            self.retrieval.load_state_dict(state["retrieval"])
 
 
 def _sigmoid(x: float) -> float:
