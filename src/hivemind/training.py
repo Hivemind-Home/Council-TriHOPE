@@ -45,6 +45,7 @@ from .regularization import RegularizationConfig, compute_total_regularization
 from .stores.fast import FastStore
 from .stores.permanent import PermanentStore
 from .stores.retrieval import RetrievalStore
+from .tracing import EventTrace, ModuleLedger
 from .student.config import LoRAConfig, StudentConfig
 from .student.model import StudentModel
 from .student.hf_backbone import HFStudent
@@ -190,16 +191,26 @@ def _unpack_batch(raw: Any, device: torch.device) -> dict[str, Any]:
     return out
 
 
+def _sub_config(node: Any, key: str) -> dict[str, Any]:
+    """Fetch a config sub-dict, tolerating missing keys and plain dicts."""
+    val = node.get(key) if node is not None else None
+    if val is None:
+        return {}
+    if OmegaConf.is_config(val):
+        return OmegaConf.to_container(val, resolve=True)  # type: ignore[return-value]
+    return dict(val)
+
+
 def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
     """Build controller config from hydra config."""
-    ctrl = cfg.get("controller", {})
+    ctrl = cfg.get("controller", None)
     return ControllerConfig(
-        surprise=SurpriseConfig(**OmegaConf.to_container(ctrl.get("surprise", {}), resolve=True)),
-        stability=StabilityConfig(**OmegaConf.to_container(ctrl.get("stability", {}), resolve=True)),
-        repetition=RepetitionConfig(**OmegaConf.to_container(ctrl.get("repetition", {}), resolve=True)),
-        policy=PolicyConfig(**OmegaConf.to_container(ctrl.get("policy", {}), resolve=True)),
-        consolidation=ConsolidationConfig(**OmegaConf.to_container(ctrl.get("consolidation", {}), resolve=True)),
-        writer=WriterConfig(**OmegaConf.to_container(ctrl.get("writer", {}), resolve=True)),
+        surprise=SurpriseConfig(**_sub_config(ctrl, "surprise")),
+        stability=StabilityConfig(**_sub_config(ctrl, "stability")),
+        repetition=RepetitionConfig(**_sub_config(ctrl, "repetition")),
+        policy=PolicyConfig(**_sub_config(ctrl, "policy")),
+        consolidation=ConsolidationConfig(**_sub_config(ctrl, "consolidation")),
+        writer=WriterConfig(**_sub_config(ctrl, "writer")),
     )
 
 
@@ -406,8 +417,17 @@ def run_training_loop(
     forgetting_tracker = ForgettingTracker() if eval_config.track_forgetting else None
 
     # Logger
-    log_cfg = OmegaConf.to_container(cfg.get("logging", {}), resolve=True)
+    log_cfg = OmegaConf.to_container(cfg.get("logging", {}), resolve=True) or {}
     logger = init_logger(log_cfg)
+
+    # Event trace ("when and why parameters changed") + per-module ledger.
+    trace_enabled = bool(log_cfg.get("enabled", False)) and bool(
+        log_cfg.get("events_enabled", True)
+    )
+    event_trace = EventTrace(
+        log_cfg.get("events_path", "logs/events.jsonl"), enabled=trace_enabled
+    )
+    ledger = ModuleLedger()
 
     # Mixed precision
     mp_cfg = train_cfg.get("mixed_precision", {})
@@ -436,10 +456,38 @@ def run_training_loop(
             r_store=r_store,
             consolidator=consolidator,
             forgetting=forgetting_tracker,
+            ledger=ledger,
             map_location=str(device),
         )
         start_step = int(meta.get("step", 0)) + 1
+        event_trace.emit(
+            {"type": "resume", "step": start_step, "from": str(resume_path)}
+        )
         print(f"Resumed from {resume_path} at step {start_step}.")
+
+    # One self-describing config event per (re)start so the trace can be
+    # analyzed without the Hydra config at hand.
+    event_trace.emit(
+        {
+            "type": "run_config",
+            "start_step": start_step,
+            "top_m": ctrl_config.policy.top_m_modules,
+            "top_k_fraction": ctrl_config.writer.top_k_fraction,
+            "thresholds": {
+                "surprise_high": ctrl_config.policy.surprise_high,
+                "repetition_low": ctrl_config.policy.repetition_low,
+                "repetition_medium": ctrl_config.policy.repetition_medium,
+                "stability_high_C": ctrl_config.policy.stability_high_C,
+                "stability_low_V": ctrl_config.policy.stability_low_V,
+            },
+            "consolidation": {
+                "period": ctrl_config.consolidation.period,
+                "min_repetition": ctrl_config.consolidation.min_repetition,
+                "min_stability_C": ctrl_config.consolidation.min_stability_C,
+                "strategy": ctrl_config.consolidation.merge_strategy,
+            },
+        }
+    )
 
     student.train()
     pbar = tqdm(range(start_step, steps), desc="Training", initial=start_step, total=steps)
@@ -455,6 +503,7 @@ def run_training_loop(
             return
         try:
             print(f"\n[hivemind] {reason} — saving checkpoint at step={last_step}…")
+            event_trace.flush()
             ckpt_manager.save(
                 step=last_step,
                 student=student,
@@ -463,6 +512,7 @@ def run_training_loop(
                 r_store=r_store,
                 consolidator=consolidator,
                 forgetting=forgetting_tracker,
+                ledger=ledger,
                 extra={"interrupted": reason},
             )
             print(f"[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
@@ -603,6 +653,38 @@ def run_training_loop(
             teacher_output_text=teacher_text_repr,
         )
 
+        # Trace every routing decision + update the per-module ledger.
+        action_by_module = {str(a.module_id): a for a in actions}
+        for det in write_metrics["actions"]:
+            ledger.record_action(
+                det["module"], det["store"], step, det["coords_opened"]
+            )
+            act = action_by_module.get(det["module"])
+            if act is None:
+                continue
+            event_trace.emit(
+                {
+                    "type": "decision",
+                    "step": step,
+                    "module": det["module"],
+                    "action": det["store"],
+                    "coords_opened": det["coords_opened"],
+                    "bucket_id": bucket_id,
+                    "teacher": teacher_name_repr,
+                    "signals": {
+                        "S": round(act.surprise, 6),
+                        "C": round(act.stability_C, 6),
+                        "V": round(act.stability_V, 6),
+                        "R": round(act.repetition, 6),
+                        "R_mom": round(act.repetition_components.get("mom", 0.0), 6),
+                        "R_hash": round(act.repetition_components.get("hash", 0.0), 6),
+                        "R_ret": round(act.repetition_components.get("ret", 0.0), 6),
+                        "stability_adam": round(act.stability_adam, 6),
+                        "grad_norm": round(act.grad_norm, 6),
+                    },
+                }
+            )
+
         # === Step 11: Masked optimizer step ===
         # Coordinates not opened by an action stay bit-identical (params,
         # moments, weight decay, bias-correction clocks — Theorem 1).
@@ -622,6 +704,27 @@ def run_training_loop(
         consolidated = []
         if consolidator.should_check(step):
             consolidated = consolidator.consolidate(module_signals)
+            for mid in consolidated:
+                ledger.record_consolidation(str(mid), step)
+                sig = module_signals.get(mid)
+                event_trace.emit(
+                    {
+                        "type": "consolidation",
+                        "step": step,
+                        "module": str(mid),
+                        "strategy": ctrl_config.consolidation.merge_strategy,
+                        "pre_signals": (
+                            {
+                                "C": round(sig.stability_C, 6),
+                                "R": round(sig.repetition, 6),
+                            }
+                            if sig is not None
+                            else {}
+                        ),
+                        "forced": False,
+                        "success": True,
+                    }
+                )
 
         # === Step 13: Logging ===
         if step % log_interval == 0 or step == steps - 1:
@@ -630,17 +733,24 @@ def run_training_loop(
             repetitions = [s.repetition for s in module_signals.values()]
             stabilities = [s.stability_C for s in module_signals.values()]
 
+            adam_stabilities = [s.stability_adam for s in module_signals.values()]
             metrics = {
                 **loss_metrics,
                 "write/r_count": write_metrics["r_count"],
                 "write/f_count": write_metrics["f_count"],
                 "write/p_count": write_metrics["p_count"],
+                "write/coords_opened": write_metrics["coords_opened"],
                 "signals/surprise_mean": sum(surprises) / max(len(surprises), 1),
                 "signals/repetition_mean": sum(repetitions) / max(len(repetitions), 1),
                 "signals/stability_C_mean": sum(stabilities) / max(len(stabilities), 1),
+                "signals/stability_adam_mean": (
+                    sum(adam_stabilities) / max(len(adam_stabilities), 1)
+                ),
                 "retrieval/buffer_size": r_store.size,
                 "consolidation/count": len(consolidated),
             }
+            if isinstance(router, MetadataRouter):
+                metrics["router/miss_count"] = router.miss_count
 
             pbar.set_postfix(
                 loss=f"{loss_metrics['loss/total']:.4f}",
@@ -681,6 +791,7 @@ def run_training_loop(
             and step > 0
             and (step % ckpt_cfg.save_every == 0 or step == steps - 1)
         ):
+            event_trace.flush()
             ckpt_manager.save(
                 step=step,
                 student=student,
@@ -689,6 +800,7 @@ def run_training_loop(
                 r_store=r_store,
                 consolidator=consolidator,
                 forgetting=forgetting_tracker,
+                ledger=ledger,
                 extra={"final_metrics": final_metrics},
             )
 
@@ -705,6 +817,7 @@ def run_training_loop(
     if _interrupted["flag"]:
         _emergency_save("SIGINT")
 
+    event_trace.close()
     logger.close()
     if _interrupted["flag"]:
         print(f"\nTraining interrupted at step {last_step}. Resume with checkpoint.resume_from=latest")

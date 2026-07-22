@@ -70,7 +70,10 @@ def test_r_action_leaves_module_untouched_through_step():
 
     for p, snap in zip(mod.params, snapshots):
         assert torch.equal(p.detach(), snap)
-        assert p not in optimizer.state or len(optimizer.state[p]) == 0
+        # State was eagerly initialized at registration and stays all-zero.
+        m, v = optimizer.get_state_for_param(p)
+        assert m is not None and torch.all(m == 0) and torch.all(v == 0)
+        assert float(optimizer.state[p]["coord_step"]) == 0.0
 
 
 def test_f_action_opens_top_k_only():
@@ -171,4 +174,6 @@ def test_unselected_module_invariant_through_masked_steps():
 
     for p, snap in zip(untouched.params, snapshots):
         assert torch.equal(p.detach(), snap)
-        assert p not in optimizer.state or len(optimizer.state[p]) == 0
+        m, v = optimizer.get_state_for_param(p)
+        assert m is not None and torch.all(m == 0) and torch.all(v == 0)
+        assert float(optimizer.state[p]["coord_step"]) == 0.0

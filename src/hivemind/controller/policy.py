@@ -8,7 +8,7 @@ Determines where knowledge should be stored for each selected module:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .config import PolicyConfig
 from .module_index import ModuleId
@@ -21,12 +21,14 @@ class StoreAction:
 
     module_id: ModuleId
     store: str  # "R", "F", or "P"
-    # Diagnostic fields for logging
+    # Diagnostic fields for the event trace
     surprise: float = 0.0
     repetition: float = 0.0
     stability_C: float = 0.0
     stability_V: float = 0.0
+    stability_adam: float = 0.0
     grad_norm: float = 0.0
+    repetition_components: dict[str, float] = field(default_factory=dict)
 
 
 class RFPPolicy:
@@ -75,7 +77,9 @@ class RFPPolicy:
                 repetition=sig.repetition,
                 stability_C=sig.stability_C,
                 stability_V=sig.stability_V,
+                stability_adam=sig.stability_adam,
                 grad_norm=sig.grad_norm,
+                repetition_components=dict(sig.repetition_components or {}),
             ))
 
         return actions

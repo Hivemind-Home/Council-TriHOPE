@@ -106,8 +106,26 @@ class MaskedAdamW(AdamW):
         them via :meth:`set_masks`. Unregistered parameters (shared embeddings,
         norms, lm_head, ...) stay FULLY_OPEN by default and follow the ordinary
         AdamW rule.
+
+        Per the paper ("controller-indexed optimizer state is initialized
+        before routed training"), state is eagerly initialized to zeros here so
+        signal computation reads ``v_{t-1} = 0`` (maximum surprise) for modules
+        that have never been opened, rather than finding no state at all.
         """
+        params = list(params)
         self._controller_params.update(params)
+
+        group_of: dict[nn.Parameter, dict[str, Any]] = {}
+        for group in self.param_groups:
+            for p in group["params"]:
+                group_of[p] = group
+        for p in params:
+            group = group_of.get(p)
+            if group is None:
+                continue
+            state = self.state[p]
+            if len(state) == 0:
+                self._init_state(state, p, group["amsgrad"])
 
     def set_masks(self, masks: dict[nn.Parameter, torch.Tensor | bool]) -> None:
         """Stage authorization masks for the next ``step()`` call.

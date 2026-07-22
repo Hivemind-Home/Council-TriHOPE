@@ -50,6 +50,7 @@ from .controller.consolidation import ConsolidationScheduler
 from .controller.signals import SignalComputer
 from .evaluation import ForgettingTracker
 from .stores.retrieval import RetrievalStore
+from .tracing import ModuleLedger
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ class CheckpointManager:
         r_store: RetrievalStore,
         consolidator: Optional[ConsolidationScheduler] = None,
         forgetting: Optional[ForgettingTracker] = None,
+        ledger: Optional[ModuleLedger] = None,
         extra: dict[str, Any] | None = None,
     ) -> Optional[Path]:
         if not self.cfg.enabled:
@@ -141,6 +143,8 @@ class CheckpointManager:
                 torch.save(consolidator.state_dict(), tmp_dir / "consolidation.pt")
             if forgetting is not None:
                 torch.save(forgetting.state_dict(), tmp_dir / "forgetting.pt")
+            if ledger is not None:
+                torch.save(ledger.state_dict(), tmp_dir / "ledger.pt")
 
             meta = {
                 "step": int(step),
@@ -218,6 +222,7 @@ class CheckpointManager:
         r_store: RetrievalStore,
         consolidator: Optional[ConsolidationScheduler] = None,
         forgetting: Optional[ForgettingTracker] = None,
+        ledger: Optional[ModuleLedger] = None,
         map_location: str | torch.device = "cpu",
     ) -> dict[str, Any]:
         # weights_only=False: our own checkpoints carry numpy arrays in
@@ -243,6 +248,9 @@ class CheckpointManager:
         forget_path = path / "forgetting.pt"
         if forgetting is not None and forget_path.exists():
             forgetting.load_state_dict(torch.load(forget_path, map_location="cpu", weights_only=False))
+        ledger_path = path / "ledger.pt"
+        if ledger is not None and ledger_path.exists():
+            ledger.load_state_dict(torch.load(ledger_path, map_location="cpu", weights_only=False))
 
         meta = json.loads((path / "meta.json").read_text())
         logger.info("checkpoint loaded: %s (step=%d)", path, meta["step"])
