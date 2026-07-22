@@ -139,13 +139,18 @@ def _bucket_to_int(bucket: Any, fallback: int) -> int:
     """Stable int id for a bucket string (non-negative, fits in python int).
 
     Controller repetition state keys are ints; the HF dataset gives strings.
-    We use python ``hash`` modded into a large-but-fixed space. Collisions
-    are rare and harmless — worst case two buckets share a repetition
-    slot, which just couples their statistics.
+    Uses blake2s (not python ``hash``, which is PYTHONHASHSEED-randomized
+    per process) so bucket ids — and the repetition state keyed on them —
+    survive restarts and resumes. Collisions are rare and harmless — worst
+    case two buckets share a repetition slot, which just couples their
+    statistics.
     """
     if bucket is None or bucket == "":
         return int(fallback)
-    return abs(hash(str(bucket))) % (2**31 - 1)
+    import hashlib
+
+    digest = hashlib.blake2s(str(bucket).encode("utf-8"), digest_size=4).digest()
+    return int.from_bytes(digest, "big") % (2**31 - 1)
 
 
 def _unpack_batch(raw: Any, device: torch.device) -> dict[str, Any]:
@@ -385,8 +390,16 @@ def run_training_loop(
     )
     ckpt_manager = CheckpointManager(ckpt_cfg)
 
-    # Data
-    dataloader = build_dataloader(OmegaConf.to_container(cfg.data, resolve=True), distributed)
+    # Data — the train loader uses a StatefulSampler so its (epoch, offset)
+    # cursor checkpoints alongside everything else (bit-exact resume).
+    data_cfg = OmegaConf.to_container(cfg.data, resolve=True)
+    data_cfg.setdefault("shuffle_seed", int(train_cfg.get("seed", 42)))
+    dataloader, data_sampler = build_dataloader(data_cfg, distributed, stateful=True)
+    if int(data_cfg.get("num_workers", 0)) > 0:
+        print(
+            "[hivemind] warning: num_workers > 0 breaks exact dataloader resume "
+            "(worker prefetch advances the sampler ahead of consumed batches)."
+        )
 
     # Per-domain validation loaders (HF path only; synthetic skips eval).
     eval_cfg_raw = cfg.get("eval", {}) or {}
@@ -441,10 +454,11 @@ def run_training_loop(
     # --- Training loop ---
     steps = train_cfg.get("steps", 100)
     log_interval = train_cfg.get("log_interval", 10)
-    data_iter = iter(dataloader)
     final_metrics: dict[str, float] = {}
 
-    # Resume if configured
+    # Resume if configured. Must happen BEFORE the data iterator is created:
+    # the load restores RNG state and the sampler cursor, and creating the
+    # iterator first would consume them out of order.
     start_step = 0
     resume_path = ckpt_manager.resolve_resume_path()
     if resume_path is not None:
@@ -457,6 +471,7 @@ def run_training_loop(
             consolidator=consolidator,
             forgetting=forgetting_tracker,
             ledger=ledger,
+            sampler=data_sampler,
             map_location=str(device),
         )
         start_step = int(meta.get("step", 0)) + 1
@@ -489,6 +504,8 @@ def run_training_loop(
         }
     )
 
+    data_iter = iter(dataloader)
+
     student.train()
     pbar = tqdm(range(start_step, steps), desc="Training", initial=start_step, total=steps)
 
@@ -513,6 +530,7 @@ def run_training_loop(
                 consolidator=consolidator,
                 forgetting=forgetting_tracker,
                 ledger=ledger,
+                sampler=data_sampler,
                 extra={"interrupted": reason},
             )
             print(f"[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
@@ -801,6 +819,7 @@ def run_training_loop(
                 consolidator=consolidator,
                 forgetting=forgetting_tracker,
                 ledger=ledger,
+                sampler=data_sampler,
                 extra={"final_metrics": final_metrics},
             )
 

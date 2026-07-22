@@ -48,6 +48,7 @@ import torch.nn as nn
 
 from .controller.consolidation import ConsolidationScheduler
 from .controller.signals import SignalComputer
+from .data.sampler import StatefulSampler
 from .evaluation import ForgettingTracker
 from .stores.retrieval import RetrievalStore
 from .tracing import ModuleLedger
@@ -122,6 +123,7 @@ class CheckpointManager:
         consolidator: Optional[ConsolidationScheduler] = None,
         forgetting: Optional[ForgettingTracker] = None,
         ledger: Optional[ModuleLedger] = None,
+        sampler: Optional[StatefulSampler] = None,
         extra: dict[str, Any] | None = None,
     ) -> Optional[Path]:
         if not self.cfg.enabled:
@@ -145,6 +147,8 @@ class CheckpointManager:
                 torch.save(forgetting.state_dict(), tmp_dir / "forgetting.pt")
             if ledger is not None:
                 torch.save(ledger.state_dict(), tmp_dir / "ledger.pt")
+            if sampler is not None:
+                torch.save(sampler.state_dict(), tmp_dir / "data.pt")
 
             meta = {
                 "step": int(step),
@@ -223,6 +227,7 @@ class CheckpointManager:
         consolidator: Optional[ConsolidationScheduler] = None,
         forgetting: Optional[ForgettingTracker] = None,
         ledger: Optional[ModuleLedger] = None,
+        sampler: Optional[StatefulSampler] = None,
         map_location: str | torch.device = "cpu",
     ) -> dict[str, Any]:
         # weights_only=False: our own checkpoints carry numpy arrays in
@@ -251,6 +256,9 @@ class CheckpointManager:
         ledger_path = path / "ledger.pt"
         if ledger is not None and ledger_path.exists():
             ledger.load_state_dict(torch.load(ledger_path, map_location="cpu", weights_only=False))
+        data_path = path / "data.pt"
+        if sampler is not None and data_path.exists():
+            sampler.load_state_dict(torch.load(data_path, map_location="cpu", weights_only=False))
 
         meta = json.loads((path / "meta.json").read_text())
         logger.info("checkpoint loaded: %s (step=%d)", path, meta["step"])

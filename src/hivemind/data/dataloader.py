@@ -62,12 +62,19 @@ def _build_hf(cfg: dict) -> tuple[Dataset, Any]:
 def build_dataloader(
     cfg: dict,
     distributed: bool = False,
-) -> DataLoader:
+    stateful: bool = False,
+):
     """Build a DataLoader from config.
 
     ``cfg["source"]`` in ``{"synthetic", "hf"}`` selects the path. Synthetic
     batches are plain ``torch.Tensor[B, T]``; HF batches are dicts — see
     ``DistillCollator`` for the schema.
+
+    With ``stateful=True`` (the training path) the loader is driven by a
+    :class:`StatefulSampler` whose (epoch, offset) cursor is checkpointable
+    for bit-exact mid-epoch resume, and the return value is
+    ``(loader, sampler)``. Evaluation loaders should keep the default so
+    every eval pass sees the same batches.
     """
     source = cfg.get("source", "synthetic")
     collate_fn = None
@@ -79,15 +86,32 @@ def build_dataloader(
     else:
         raise ValueError(f"Unknown data source: {source}")
 
-    sampler = DistributedSampler(dataset) if distributed else None
+    if distributed:
+        sampler = DistributedSampler(dataset)
+        stateful_sampler = None
+    elif stateful:
+        from .sampler import StatefulSampler
 
-    return DataLoader(
+        stateful_sampler = StatefulSampler(
+            data_len=len(dataset),  # type: ignore[arg-type]
+            seed=int(cfg.get("shuffle_seed", cfg.get("seed", 42))),
+            shuffle=bool(cfg.get("shuffle", True)),
+        )
+        sampler = stateful_sampler
+    else:
+        sampler = None
+        stateful_sampler = None
+
+    loader = DataLoader(
         dataset,
         batch_size=cfg.get("batch_size", 4),
-        shuffle=(sampler is None and cfg.get("shuffle", True)),
+        shuffle=(sampler is None and not distributed and cfg.get("shuffle", True)),
         num_workers=cfg.get("num_workers", 0),
         sampler=sampler,
         drop_last=cfg.get("drop_last", True),
         pin_memory=cfg.get("pin_memory", True),
         collate_fn=collate_fn,
     )
+    if stateful:
+        return loader, stateful_sampler
+    return loader
