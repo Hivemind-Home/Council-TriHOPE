@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .config import PolicyConfig
+from .config import AblationConfig, PolicyConfig
 from .module_index import ModuleId
 from .signals import ModuleSignals
 
@@ -34,26 +34,39 @@ class StoreAction:
 class RFPPolicy:
     """R/F/P routing policy based on surprise, repetition, and stability signals."""
 
-    def __init__(self, config: PolicyConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: PolicyConfig | None = None,
+        ablation: AblationConfig | None = None,
+    ) -> None:
         self.config = config or PolicyConfig()
+        self.ablation = ablation or AblationConfig()
 
     def decide(
         self,
         module_signals: dict[ModuleId, ModuleSignals],
+        teacher_confidence: float | None = None,
     ) -> list[StoreAction]:
         """Determine R/F/P routing for each selected module.
 
         Steps:
         1. Select Top-M modules by gradient norm.
         2. For each selected module, apply R/F/P policy.
+        3. Optionally gate on teacher confidence: a low-confidence teacher
+           should not be allowed to write permanent memory (``no_p``) or
+           parameters at all (``force_r``).
 
         Args:
             module_signals: {ModuleId: ModuleSignals} for all modules.
+            teacher_confidence: mean confidence of the supervising teacher
+                for this batch (``None`` when unavailable).
 
         Returns:
             List of StoreAction for selected modules.
         """
         cfg = self.config
+        ab = self.ablation
+        top_m = ab.top_m_override if ab.top_m_override is not None else cfg.top_m_modules
 
         # Step 1: Select Top-M modules by gradient norm
         sorted_modules = sorted(
@@ -61,7 +74,13 @@ class RFPPolicy:
             key=lambda s: s.grad_norm,
             reverse=True,
         )
-        selected = sorted_modules[: cfg.top_m_modules]
+        selected = sorted_modules[:top_m]
+
+        low_confidence = (
+            ab.use_teacher_confidence
+            and teacher_confidence is not None
+            and teacher_confidence < ab.confidence_threshold
+        )
 
         # Step 2: Apply R/F/P policy to each selected module
         actions: list[StoreAction] = []
@@ -70,6 +89,13 @@ class RFPPolicy:
                 continue  # skip modules with no gradient
 
             store = self._classify(sig)
+
+            # Step 3: teacher-confidence gate
+            if low_confidence:
+                if ab.confidence_gate == "force_r" and "R" not in ab.disable_stores:
+                    store = "R"
+                elif store == "P":
+                    store = "F"
             actions.append(StoreAction(
                 module_id=sig.module_id,
                 store=store,
@@ -92,17 +118,27 @@ class RFPPolicy:
         P: high repetition, high directional stability, low volatility → base weights
         """
         cfg = self.config
+        disabled_stores = self.ablation.disable_stores
         S = sig.surprise
         R = sig.repetition
         C = sig.stability_C
         V = sig.stability_V
 
         # P: recurring AND stable
-        if R >= cfg.repetition_medium and C >= cfg.stability_high_C and V <= cfg.stability_low_V:
+        if (
+            "P" not in disabled_stores
+            and R >= cfg.repetition_medium
+            and C >= cfg.stability_high_C
+            and V <= cfg.stability_low_V
+        ):
             return "P"
 
         # R: surprising but not recurring
-        if S >= cfg.surprise_high and R < cfg.repetition_low:
+        if (
+            "R" not in disabled_stores
+            and S >= cfg.surprise_high
+            and R < cfg.repetition_low
+        ):
             return "R"
 
         # F: default — recurring or moderate surprise, not stable enough for P

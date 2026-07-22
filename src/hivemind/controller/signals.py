@@ -34,11 +34,59 @@ class ModuleSignals:
 
 
 class SignalComputer:
-    """Computes all controller signals for all modules."""
+    """Computes all controller signals for all modules.
+
+    Honors ``config.ablation``: a disabled signal is not computed (its
+    tracker state does not update) and is pinned to its neutral value —
+    see :class:`~hivemind.controller.config.AblationConfig` for the
+    degraded-policy semantics of each neutral.
+    """
 
     def __init__(self, config: ControllerConfig, modules: list[ModuleInfo]) -> None:
         self.config = config
         self.modules = modules
+
+        ab = config.ablation
+        self._surprise_disabled = ab.is_disabled("surprise")
+        self._repetition_disabled = ab.is_disabled("repetition")
+        self._stability_c_disabled = ab.is_disabled("stability_C")
+        self._stability_v_disabled = ab.is_disabled("stability_V")
+
+        pol = config.policy
+        self._neutral_surprise = (
+            ab.neutral_surprise if ab.neutral_surprise is not None else pol.surprise_high
+        )
+        self._neutral_repetition = (
+            ab.neutral_repetition
+            if ab.neutral_repetition is not None
+            else pol.repetition_medium
+        )
+        self._neutral_c = (
+            ab.neutral_stability_C
+            if ab.neutral_stability_C is not None
+            else pol.stability_high_C
+        )
+        self._neutral_v = (
+            ab.neutral_stability_V
+            if ab.neutral_stability_V is not None
+            else pol.stability_low_V
+        )
+
+        # Disabled repetition components: zero their fusion weight; the
+        # remaining λs renormalize inside FusedRepetition.
+        rep_cfg = config.repetition
+        if any(
+            ab.is_disabled(f"repetition_{comp}") for comp in ("mom", "hash", "ret")
+        ):
+            from dataclasses import replace
+
+            rep_cfg = replace(
+                rep_cfg,
+                lambda_mom=0.0 if ab.is_disabled("repetition_mom") else rep_cfg.lambda_mom,
+                lambda_hash=0.0 if ab.is_disabled("repetition_hash") else rep_cfg.lambda_hash,
+                lambda_ret=0.0 if ab.is_disabled("repetition_ret") else rep_cfg.lambda_ret,
+            )
+        self._rep_cfg = rep_cfg
 
         # Per-module trackers
         self._surprise: dict[ModuleId, AdamSurprise] = {}
@@ -48,7 +96,7 @@ class SignalComputer:
         for m in modules:
             self._surprise[m.id] = AdamSurprise(config.surprise)
             self._stability[m.id] = StabilityTracker(config.stability)
-            self._repetition[m.id] = FusedRepetition(config.repetition)
+            self._repetition[m.id] = FusedRepetition(rep_cfg)
 
     def compute_all(
         self,
@@ -105,38 +153,55 @@ class SignalComputer:
                 v_cat = torch.cat(v_states)
 
                 # Surprise
-                surprise_tracker = self._surprise.get(mid)
-                if surprise_tracker is None:
-                    surprise_tracker = AdamSurprise(self.config.surprise)
-                    self._surprise[mid] = surprise_tracker
-                signals.surprise = surprise_tracker.compute(grad_cat, v_cat)
+                if self._surprise_disabled:
+                    signals.surprise = self._neutral_surprise
+                else:
+                    surprise_tracker = self._surprise.get(mid)
+                    if surprise_tracker is None:
+                        surprise_tracker = AdamSurprise(self.config.surprise)
+                        self._surprise[mid] = surprise_tracker
+                    signals.surprise = surprise_tracker.compute(grad_cat, v_cat)
 
                 # Stability
                 stability_tracker = self._stability.get(mid)
                 if stability_tracker is None:
                     stability_tracker = StabilityTracker(self.config.stability)
                     self._stability[mid] = stability_tracker
-                signals.stability_C = stability_tracker.compute_directional(grad_cat, m_cat)
+                if self._stability_c_disabled:
+                    signals.stability_C = self._neutral_c
+                else:
+                    signals.stability_C = stability_tracker.compute_directional(
+                        grad_cat, m_cat
+                    )
                 signals.stability_adam = stability_tracker.compute_adam_ratio(m_cat, v_cat)
-                signals.stability_V = stability_tracker.update_windowed_variance(
-                    signals.grad_norm
-                )
-
-                # Repetition
-                rep_tracker = self._repetition.get(mid)
-                if rep_tracker is None:
-                    rep_tracker = FusedRepetition(self.config.repetition)
-                    self._repetition[mid] = rep_tracker
-                signals.repetition, signals.repetition_components = rep_tracker.compute(
-                    grad_cat, m_cat, bucket_id, signals.surprise, embedding
-                )
-            else:
-                # No optimizer states yet (step 0) — use grad norm only
-                stability_tracker = self._stability.get(mid)
-                if stability_tracker:
+                if self._stability_v_disabled:
+                    signals.stability_V = self._neutral_v
+                else:
                     signals.stability_V = stability_tracker.update_windowed_variance(
                         signals.grad_norm
                     )
+
+                # Repetition
+                if self._repetition_disabled:
+                    signals.repetition = self._neutral_repetition
+                else:
+                    rep_tracker = self._repetition.get(mid)
+                    if rep_tracker is None:
+                        rep_tracker = FusedRepetition(self._rep_cfg)
+                        self._repetition[mid] = rep_tracker
+                    signals.repetition, signals.repetition_components = rep_tracker.compute(
+                        grad_cat, m_cat, bucket_id, signals.surprise, embedding
+                    )
+            else:
+                # No optimizer states yet (step 0) — use grad norm only
+                if self._stability_v_disabled:
+                    signals.stability_V = self._neutral_v
+                else:
+                    stability_tracker = self._stability.get(mid)
+                    if stability_tracker:
+                        signals.stability_V = stability_tracker.update_windowed_variance(
+                            signals.grad_norm
+                        )
 
             results[mid] = signals
 

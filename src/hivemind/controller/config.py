@@ -82,6 +82,94 @@ class WriterConfig:
     top_k_fraction: float = 0.5
 
 
+#: Canonical signal names accepted in ``AblationConfig.disable_signals``,
+#: mapping aliases (paper terminology) onto internal names.
+SIGNAL_ALIASES = {
+    "surprise": "surprise",
+    "repetition": "repetition",
+    "repetition_mom": "repetition_mom",
+    "repetition_hash": "repetition_hash",
+    "repetition_ret": "repetition_ret",
+    "stability_c": "stability_C",
+    "cosine": "stability_C",
+    "cosine_alignment": "stability_C",
+    "stability_v": "stability_V",
+    "volatility": "stability_V",
+    "teacher_confidence": "teacher_confidence",
+}
+
+
+@dataclass
+class AblationConfig:
+    """Per-signal ablation switches for the routing-signal study.
+
+    A disabled signal is *not computed* (its tracker state does not update)
+    and is pinned to a neutral value chosen so the policy degrades to the
+    sub-policy over the remaining signals:
+
+    - ``surprise`` disabled → pinned to ``policy.surprise_high``: the
+      R-branch ``S ≥ θ_S ∧ R < θ_R`` reduces to the pure recurrence test.
+    - ``repetition`` disabled → pinned to ``policy.repetition_medium``: the
+      P-branch's recurrence conjunct passes (stability alone decides P)
+      while the R-branch's ``R < θ_R`` fails — a controller that cannot
+      measure recurrence never claims "not recurring".
+    - ``stability_C`` / ``stability_V`` disabled → pinned to their passing
+      thresholds (P is decided by the remaining stability evidence).
+    - ``repetition_mom|hash|ret`` disabled → that component's λ-weight is
+      zeroed and the remaining λs renormalize.
+    - ``teacher_confidence`` disabled → forces ``use_teacher_confidence``
+      off regardless of its value.
+
+    ``disable_stores`` removes whole branches: ``R`` (no-retrieval
+    baseline — R-routed batches fall through to F) and ``P``
+    (no-consolidation baseline — P branch and the consolidation sweep are
+    both disabled).
+    """
+
+    disable_signals: list[str] = field(default_factory=list)
+    disable_stores: list[str] = field(default_factory=list)
+    top_m_override: int | None = None
+    # Neutral overrides; ``None`` resolves against the policy thresholds
+    # as documented above.
+    neutral_surprise: float | None = None
+    neutral_repetition: float | None = None
+    neutral_stability_C: float | None = None
+    neutral_stability_V: float | None = None
+    # Teacher-confidence gate on the policy (separate from the loss-level
+    # confidence weighting in DistillationConfig).
+    use_teacher_confidence: bool = False
+    confidence_threshold: float = 0.5
+    confidence_gate: str = "no_p"  # "no_p" (demote P→F) | "force_r"
+
+    def __post_init__(self) -> None:
+        canonical: list[str] = []
+        for name in self.disable_signals:
+            key = str(name).lower()
+            if key not in SIGNAL_ALIASES:
+                raise ValueError(
+                    f"Unknown signal '{name}' in ablation.disable_signals; "
+                    f"allowed: {sorted(set(SIGNAL_ALIASES))}"
+                )
+            canonical.append(SIGNAL_ALIASES[key])
+        self.disable_signals = canonical
+        for store in self.disable_stores:
+            if store not in ("R", "P"):
+                raise ValueError(
+                    f"Unknown store '{store}' in ablation.disable_stores; "
+                    "allowed: ['R', 'P']"
+                )
+        if self.confidence_gate not in ("no_p", "force_r"):
+            raise ValueError(
+                f"Unknown confidence_gate '{self.confidence_gate}'; "
+                "allowed: 'no_p' | 'force_r'"
+            )
+        if "teacher_confidence" in self.disable_signals:
+            self.use_teacher_confidence = False
+
+    def is_disabled(self, signal: str) -> bool:
+        return signal in self.disable_signals
+
+
 @dataclass
 class ControllerConfig:
     """Full controller configuration."""
@@ -92,3 +180,4 @@ class ControllerConfig:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     consolidation: ConsolidationConfig = field(default_factory=ConsolidationConfig)
     writer: WriterConfig = field(default_factory=WriterConfig)
+    ablation: AblationConfig = field(default_factory=AblationConfig)

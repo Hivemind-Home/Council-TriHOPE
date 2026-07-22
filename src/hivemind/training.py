@@ -21,6 +21,7 @@ from tqdm import tqdm
 from .checkpoint import CheckpointConfig, CheckpointManager
 from .config_utils import unwrap_config
 from .controller.config import (
+    AblationConfig,
     ConsolidationConfig,
     ControllerConfig,
     PolicyConfig,
@@ -216,6 +217,7 @@ def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
         policy=PolicyConfig(**_sub_config(ctrl, "policy")),
         consolidation=ConsolidationConfig(**_sub_config(ctrl, "consolidation")),
         writer=WriterConfig(**_sub_config(ctrl, "writer")),
+        ablation=AblationConfig(**_sub_config(ctrl, "ablation")),
     )
 
 
@@ -349,7 +351,8 @@ def run_training_loop(
     module_index = build_module_index(student)
     module_map = {m.id: m for m in module_index}
     signal_computer = SignalComputer(ctrl_config, module_index)
-    policy = RFPPolicy(ctrl_config.policy)
+    policy = RFPPolicy(ctrl_config.policy, ablation=ctrl_config.ablation)
+    p_store_disabled = "P" in ctrl_config.ablation.disable_stores
 
     if masked_updates:
         # Controller-indexed params (attn/ffn base + LoRA) default to closed;
@@ -486,8 +489,17 @@ def run_training_loop(
         {
             "type": "run_config",
             "start_step": start_step,
-            "top_m": ctrl_config.policy.top_m_modules,
+            "top_m": (
+                ctrl_config.ablation.top_m_override
+                if ctrl_config.ablation.top_m_override is not None
+                else ctrl_config.policy.top_m_modules
+            ),
             "top_k_fraction": ctrl_config.writer.top_k_fraction,
+            "ablation": {
+                "disable_signals": list(ctrl_config.ablation.disable_signals),
+                "disable_stores": list(ctrl_config.ablation.disable_stores),
+                "use_teacher_confidence": ctrl_config.ablation.use_teacher_confidence,
+            },
             "thresholds": {
                 "surprise_high": ctrl_config.policy.surprise_high,
                 "repetition_low": ctrl_config.policy.repetition_low,
@@ -643,7 +655,13 @@ def run_training_loop(
         )
 
         # === Step 9: R/F/P routing policy ===
-        actions = policy.decide(module_signals)
+        batch_conf = batch.get("teacher_confidence")
+        conf_mean = (
+            float(batch_conf.float().mean().item())
+            if isinstance(batch_conf, torch.Tensor) and batch_conf.numel() > 0
+            else None
+        )
+        actions = policy.decide(module_signals, teacher_confidence=conf_mean)
 
         # Resolve the teacher info for the representative (first) sample —
         # mirrors the choice already made for ``embedding`` and ``bucket_id``
@@ -720,7 +738,9 @@ def run_training_loop(
         # for the direct strategy).
         consolidator.record_batch(tokens)
         consolidated = []
-        if consolidator.should_check(step):
+        # ``disable_stores: [P]`` must also stop the periodic sweep — with an
+        # empty pending set the scheduler would otherwise merge unconditionally.
+        if not p_store_disabled and consolidator.should_check(step):
             consolidated = consolidator.consolidate(module_signals)
             for mid in consolidated:
                 ledger.record_consolidation(str(mid), step)
