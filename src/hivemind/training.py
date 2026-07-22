@@ -298,7 +298,13 @@ def run_training_loop(
         router = TeacherRouter()
 
     # Optimizer
-    optimizer = build_optimizer(student, OmegaConf.to_container(cfg.optim, resolve=True))
+    optim_cfg = OmegaConf.to_container(cfg.optim, resolve=True)
+    optimizer = build_optimizer(student, optim_cfg)
+    # Exact write masking (paper Theorem 1): controller-indexed params are
+    # default-closed and only update when an R/F/P action opens them.
+    # ``optim.masked: false`` is an escape hatch that leaves every param
+    # open — MaskedAdamW then reduces exactly to plain AdamW (Lemma 1).
+    masked_updates = bool(optim_cfg.get("masked", True))
 
     # Distillation config
     dist_cfg = cfg.get("distillation", {})
@@ -329,6 +335,13 @@ def run_training_loop(
     signal_computer = SignalComputer(ctrl_config, module_index)
     policy = RFPPolicy(ctrl_config.policy)
 
+    if masked_updates:
+        # Controller-indexed params (attn/ffn base + LoRA) default to closed;
+        # shared params (embeddings, norms, lm_head) stay ordinary-AdamW.
+        optimizer.register_controller_params(
+            p for m in module_index for p in m.params
+        )
+
     # Stores
     r_store = RetrievalStore(max_size=ctrl_config.repetition.buffer_size)
     f_store = FastStore(
@@ -337,7 +350,9 @@ def run_training_loop(
     )
     p_store = PermanentStore()
 
-    consolidator = ConsolidationScheduler(ctrl_config.consolidation, student, p_store)
+    consolidator = ConsolidationScheduler(
+        ctrl_config.consolidation, student, p_store, optimizer=optimizer
+    )
     writer = WriteExecutor(
         student,
         optimizer,
@@ -576,8 +591,8 @@ def run_training_loop(
         if meta and meta.get("teacher_output_text"):
             teacher_text_repr = str(meta["teacher_output_text"][0] or "")
 
-        # === Step 10: Execute writes ===
-        write_metrics = writer.execute(
+        # === Step 10: Execute writes (build open-authorization masks) ===
+        write_metrics, write_masks = writer.execute(
             actions=actions,
             module_map=module_map,
             step=step,
@@ -588,9 +603,17 @@ def run_training_loop(
             teacher_output_text=teacher_text_repr,
         )
 
-        # === Step 11: Optimizer step (updates remaining params) ===
-        scaler.step(optimizer)
-        scaler.update()
+        # === Step 11: Masked optimizer step ===
+        # Coordinates not opened by an action stay bit-identical (params,
+        # moments, weight decay, bias-correction clocks — Theorem 1).
+        if masked_updates:
+            optimizer.set_masks(write_masks)
+        try:
+            scaler.step(optimizer)
+            scaler.update()
+        finally:
+            # A GradScaler inf/nan skip must not leak masks into the next step.
+            optimizer.clear_masks()
 
         # === Step 12: Consolidation check ===
         # Record the batch for distill-based consolidation replay (no-op

@@ -26,28 +26,23 @@ class FastStore:
         self.top_k_granularity = top_k_granularity
         self.top_k_fraction = top_k_fraction
 
-    def apply_top_k_update(
+    def compute_top_k_masks(
         self,
         adapter: LoRAAdapter,
-        optimizer: torch.optim.Optimizer,
-    ) -> None:
-        """Apply Top-K masked gradient update to a LoRA module.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Compute Top-K write-authorization masks for a LoRA module.
 
-        Computes which rank components (or rows) have the highest gradient
-        energy, masks the rest, then leaves the optimizer step to the
-        outer loop.
+        Selects the rank components (or rows) with the highest gradient
+        energy. Returns ``(mask_A, mask_B)`` 0/1 tensors shaped like the
+        LoRA factors — the caller stages them on ``MaskedAdamW`` so masked
+        coordinates receive no update, moment change, or weight decay.
         """
         k = max(1, int(adapter.rank * self.top_k_fraction))
 
-        mask_A, mask_B = adapter.get_top_k_mask(
+        return adapter.get_top_k_mask(
             k=k,
             granularity=self.top_k_granularity,  # type: ignore[arg-type]
         )
-
-        if adapter.lora_a.grad is not None:
-            adapter.lora_a.grad.mul_(mask_A.float())
-        if adapter.lora_b.grad is not None:
-            adapter.lora_b.grad.mul_(mask_B.float())
 
     def get_lora_modules_for_block(
         self, model: nn.Module, layer_idx: int, block_type: str

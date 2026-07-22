@@ -92,3 +92,111 @@ def test_consolidation_resets_lora_after_merge():
     for m in model.modules():
         if isinstance(m, LoRALinear):
             assert torch.allclose(m.lora_B, torch.zeros_like(m.lora_B))
+
+
+def _model_with_trained_lora(target_modules=("q", "k", "v", "o")):
+    """Build a tiny student, run a few masked-AdamW steps so LoRA and
+    optimizer state are both nonzero, and return (model, optimizer)."""
+    from hivemind.optim.masked_adamw import MaskedAdamW
+
+    torch.manual_seed(7)
+    cfg = StudentConfig(
+        vocab_size=64, dim=32, num_layers=1, heads=4,
+        lora=LoRAConfig(rank=4, target_modules=list(target_modules)),
+    )
+    model = StudentModel(cfg)
+    optimizer = MaskedAdamW(model.parameters(), lr=1e-2, weight_decay=0.0)
+    for _ in range(3):
+        optimizer.zero_grad()
+        tokens = torch.randint(0, 64, (2, 8))
+        model(tokens).sum().backward()
+        optimizer.step()
+    return model, optimizer
+
+
+def test_merge_is_function_preserving():
+    """Theorem 2: logits are identical immediately before and after a merge."""
+    model, optimizer = _model_with_trained_lora()
+    scheduler = ConsolidationScheduler(
+        ConsolidationConfig(min_stability_C=0.0, min_repetition=0.0),
+        model, PermanentStore(), optimizer=optimizer,
+    )
+    model.eval()
+    probe = torch.randint(0, 64, (2, 10))
+    with torch.no_grad():
+        before = model(probe).clone()
+
+    mid = ModuleId(0, "attn", "F")
+    signals = {mid: ModuleSignals(module_id=mid, stability_C=0.9, repetition=0.9)}
+    consolidated = scheduler.consolidate(signals)
+    assert consolidated == [mid]
+
+    with torch.no_grad():
+        after = model(probe)
+    torch.testing.assert_close(before, after, rtol=0, atol=1e-6)
+
+
+def test_merge_resets_adapter_optimizer_state():
+    """Corollary 2: merged adapter's Adam moments and counters are zeroed."""
+    from hivemind.student.lora_adapter import iter_lora_adapters
+
+    model, optimizer = _model_with_trained_lora()
+    scheduler = ConsolidationScheduler(
+        ConsolidationConfig(min_stability_C=0.0, min_repetition=0.0),
+        model, PermanentStore(), optimizer=optimizer,
+    )
+
+    lora_params = [
+        p for _n, ad in iter_lora_adapters(model) for p in ad.lora_params
+    ]
+    # Sanity: training above actually built nonzero moments.
+    assert any(
+        optimizer.state.get(p) and optimizer.state[p]["exp_avg"].abs().sum() > 0
+        for p in lora_params
+    )
+
+    mid = ModuleId(0, "attn", "F")
+    signals = {mid: ModuleSignals(module_id=mid, stability_C=0.9, repetition=0.9)}
+    scheduler.consolidate(signals)
+
+    for p in lora_params:
+        state = optimizer.state.get(p)
+        if not state:
+            continue
+        assert torch.all(state["exp_avg"] == 0)
+        assert torch.all(state["exp_avg_sq"] == 0)
+        assert float(state["step"]) == 0.0
+        assert state["coord_step"].dim() == 0
+        assert float(state["coord_step"]) == 0.0
+
+
+def test_first_update_after_merge_uses_fresh_bias_correction():
+    """The next accepted adapter update behaves like a literal first step."""
+    from hivemind.student.lora_adapter import iter_lora_adapters
+
+    model, optimizer = _model_with_trained_lora(target_modules=("q",))
+    scheduler = ConsolidationScheduler(
+        ConsolidationConfig(min_stability_C=0.0, min_repetition=0.0),
+        model, PermanentStore(), optimizer=optimizer,
+    )
+    mid = ModuleId(0, "attn", "F")
+    signals = {mid: ModuleSignals(module_id=mid, stability_C=0.9, repetition=0.9)}
+    scheduler.consolidate(signals)
+
+    (_, adapter), = list(iter_lora_adapters(model))
+    p = adapter.lora_a
+    before = p.detach().clone()
+    grad = torch.randn_like(p)
+
+    # Reference: a fresh AdamW taking its first step on a copy.
+    import torch.nn as nn
+
+    q = nn.Parameter(before.clone())
+    ref = torch.optim.AdamW([q], lr=1e-2, weight_decay=0.0, foreach=False)
+    q.grad = grad.clone()
+    ref.step()
+
+    optimizer.zero_grad()
+    p.grad = grad.clone()
+    optimizer.step()
+    torch.testing.assert_close(p.detach(), q.detach(), rtol=1e-6, atol=1e-8)

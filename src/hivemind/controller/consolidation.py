@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..optim.masked_adamw import MaskedAdamW
 from ..stores.permanent import PermanentStore
 from ..student.lora_adapter import LoRAAdapter, get_adapter
 from .config import ConsolidationConfig
@@ -61,10 +62,16 @@ class ConsolidationScheduler:
         config: ConsolidationConfig,
         model: nn.Module,
         p_store: PermanentStore,
+        optimizer: Optional[MaskedAdamW] = None,
     ) -> None:
         self.config = config
         self.model = model
         self.p_store = p_store
+        # When provided, the merged adapter's optimizer state (moments,
+        # AMSGrad max, coordinate counters) is zeroed after every merge —
+        # paper Corollary 2: the reinitialized adapter must start from a
+        # fresh optimizer state with first-update bias correction.
+        self.optimizer = optimizer
         # Ring buffer of recent input_ids for distill-based consolidation.
         # Populated by ``record_batch`` each training step; bounded to
         # ``config.distill_replay_size``.
@@ -147,10 +154,25 @@ class ConsolidationScheduler:
                         self.model, mid.layer, mid.block_type
                     )
                 if merged > 0:
+                    self._reset_adapter_optimizer_state(mid)
                     consolidated.append(mid)
                     self._pending_p.discard(mid)
 
         return consolidated
+
+    def _reset_adapter_optimizer_state(self, mid: ModuleId) -> None:
+        """Zero optimizer state for the merged block's LoRA factors.
+
+        Single choke point for both merge strategies (Corollary 2): after
+        ``merge_lora_into_base`` reinitializes A and zeroes B, stale Adam
+        moments must not carry pre-merge momentum into the fresh adapter.
+        """
+        if self.optimizer is None:
+            return
+        lora_params = [
+            p for ad in self._get_lora_adapters(mid) for p in ad.lora_params
+        ]
+        self.optimizer.reset_state_for_params(lora_params)
 
     # -- strategies --------------------------------------------------------
 

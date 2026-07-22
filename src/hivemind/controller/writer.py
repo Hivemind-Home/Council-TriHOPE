@@ -1,19 +1,24 @@
-"""Write executor: applies R/F/P actions to the model and stores.
+"""Write executor: turns R/F/P actions into optimizer write-authorization masks.
 
-For each StoreAction:
-- R: zero the module's gradient, store in retrieval memory
-- F: apply masked Top-K AdamW on LoRA params only
-- P: allow base weight update or flag for consolidation
+Controller-indexed parameters are registered default-closed on MaskedAdamW,
+so the writer only ever *opens* coordinates:
+
+- R: no mask entry (module stays closed), store the observation in retrieval
+  memory instead.
+- F: open the Top-K LoRA rank components of the block's adapters.
+- P: open base weights fully; a P action on an F-type module opens the whole
+  adapter and flags the block for post-step consolidation (paper Algorithm 1).
+
+The masks are staged on the optimizer by the training loop; MaskedAdamW
+guarantees exact state isolation for everything left closed (Theorem 1).
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
-
-from typing import Optional
 
 from ..optim.masked_adamw import MaskedAdamW
 from ..stores.fast import FastStore
@@ -46,8 +51,7 @@ class WriteExecutor:
         self.config = config or WriterConfig()
         # Optional: when a P action targets an F-type module, register it
         # with the scheduler so the next consolidation period merges it
-        # (with current-signal re-validation). When ``None`` the writer
-        # behaves as before — consolidation does an unconditional sweep.
+        # (with current-signal re-validation).
         self.consolidator = consolidator
 
     def execute(
@@ -60,7 +64,7 @@ class WriteExecutor:
         teacher_id: int = 0,
         teacher_name: str = "",
         teacher_output_text: str = "",
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], dict[nn.Parameter, "torch.Tensor | bool"]]:
         """Execute all routing actions.
 
         Args:
@@ -76,14 +80,26 @@ class WriteExecutor:
                 the cheap stand-in for "teacher soft targets".
 
         Returns:
-            Metrics dict with write statistics.
+            ``(metrics, masks)``: write statistics (including a per-action
+            ``actions`` detail list for the event trace) and the
+            open-authorization masks to stage on the optimizer. Parameters
+            absent from ``masks`` stay at their default (closed for
+            controller-indexed params).
         """
-        metrics: dict[str, Any] = {"r_count": 0, "f_count": 0, "p_count": 0}
+        metrics: dict[str, Any] = {
+            "r_count": 0,
+            "f_count": 0,
+            "p_count": 0,
+            "coords_opened": 0,
+            "actions": [],
+        }
+        masks: dict[nn.Parameter, torch.Tensor | bool] = {}
 
         for action in actions:
             mod = module_map.get(action.module_id)
             if mod is None:
                 continue
+            coords_opened = 0
 
             if action.store == "R":
                 self._execute_r(
@@ -95,14 +111,23 @@ class WriteExecutor:
                 metrics["r_count"] += 1
 
             elif action.store == "F":
-                self._execute_f(mod)
+                coords_opened = self._execute_f(mod, masks)
                 metrics["f_count"] += 1
 
             elif action.store == "P":
-                self._execute_p(mod)
+                coords_opened = self._execute_p(mod, masks)
                 metrics["p_count"] += 1
 
-        return metrics
+            metrics["coords_opened"] += coords_opened
+            metrics["actions"].append(
+                {
+                    "module": str(action.module_id),
+                    "store": action.store,
+                    "coords_opened": coords_opened,
+                }
+            )
+
+        return metrics, masks
 
     def _execute_r(
         self,
@@ -114,13 +139,11 @@ class WriteExecutor:
         teacher_name: str = "",
         teacher_output_text: str = "",
     ) -> None:
-        """R-store action: zero gradients, store in retrieval memory."""
-        # Zero gradients — no weight update for this module
-        for p in mod.params:
-            if p.grad is not None:
-                p.grad.zero_()
+        """R-store action: no weight update, store in retrieval memory.
 
-        # Store in retrieval buffer with full Theory 101 §7 payload.
+        The module's parameters stay closed (default) — MaskedAdamW leaves
+        their weights, moments, and counters bit-identical.
+        """
         if embedding is not None:
             self.r_store.add(RetrievalEntry(
                 embedding=embedding.detach().cpu(),
@@ -131,38 +154,49 @@ class WriteExecutor:
                 teacher_output_text=str(teacher_output_text),
             ))
 
-    def _execute_f(self, mod: ModuleInfo) -> None:
-        """F-store action: apply Top-K masked update to LoRA params only.
+    def _execute_f(
+        self,
+        mod: ModuleInfo,
+        masks: dict[nn.Parameter, "torch.Tensor | bool"],
+    ) -> int:
+        """F-store action: open Top-K LoRA rank components.
 
-        For F-type modules (LoRA params), applies sparse Top-K masking.
-        For P-type modules routed to F, zeros gradients (base params don't
-        get fast updates).
+        For F-type modules (LoRA params), opens the selected components.
+        For P-type modules routed to F, opens nothing (base params don't
+        get fast updates). Returns the number of coordinates opened.
         """
-        if mod.id.param_type == "F":
-            adapters = self.f_store.get_lora_modules_for_block(
-                self.model, mod.id.layer, mod.id.block_type
-            )
-            for adapter in adapters:
-                self.f_store.apply_top_k_update(adapter, self.optimizer)
-        else:
-            # P-type module routed to F: zero base gradients (don't update base)
-            for p in mod.params:
-                if p.grad is not None:
-                    p.grad.zero_()
+        if mod.id.param_type != "F":
+            return 0
 
-    def _execute_p(self, mod: ModuleInfo) -> None:
-        """P-store action: allow base weight update (gradients flow normally).
+        opened = 0
+        adapters = self.f_store.get_lora_modules_for_block(
+            self.model, mod.id.layer, mod.id.block_type
+        )
+        for adapter in adapters:
+            mask_a, mask_b = self.f_store.compute_top_k_masks(adapter)
+            masks[adapter.lora_a] = mask_a
+            masks[adapter.lora_b] = mask_b
+            opened += int(mask_a.sum().item()) + int(mask_b.sum().item())
+        return opened
 
-        For P-type modules, gradients are left intact for the optimizer step.
-        For F-type modules routed to P, register the module with the
-        consolidation scheduler so the next merge cycle will pick it up
-        (re-validating current signals at merge time).
+    def _execute_p(
+        self,
+        mod: ModuleInfo,
+        masks: dict[nn.Parameter, "torch.Tensor | bool"],
+    ) -> int:
+        """P-store action: open the write surface fully.
+
+        For P-type modules, base weights are opened for the ordinary AdamW
+        update. For F-type modules routed to P, the whole adapter is opened
+        for one accepted step and the block is flagged for post-step
+        consolidation (paper: "opens the corresponding adapter, performs the
+        accepted step, and consolidates afterward").
         """
-        if mod.id.param_type == "F":
-            if self.consolidator is not None:
-                self.consolidator.flag_for_consolidation(mod.id)
-            # Allow normal LoRA update this step; consolidation happens
-            # later on schedule.
-        else:
-            # P-type module: gradients flow normally to optimizer
-            pass
+        opened = 0
+        for p in mod.params:
+            masks[p] = MaskedAdamW.FULLY_OPEN
+            opened += p.numel()
+
+        if mod.id.param_type == "F" and self.consolidator is not None:
+            self.consolidator.flag_for_consolidation(mod.id)
+        return opened
