@@ -394,10 +394,34 @@ def run_training_loop(
     ckpt_manager = CheckpointManager(ckpt_cfg)
 
     # Data — the train loader uses a StatefulSampler so its (epoch, offset)
-    # cursor checkpoints alongside everything else (bit-exact resume).
+    # cursor checkpoints alongside everything else (bit-exact resume). When a
+    # phased stream is configured, a deterministic StreamSchedule drives
+    # batching instead (resumable by step index).
+    from .data.stream import parse_stream_config
+
     data_cfg = OmegaConf.to_container(cfg.data, resolve=True)
     data_cfg.setdefault("shuffle_seed", int(train_cfg.get("seed", 42)))
-    dataloader, data_sampler = build_dataloader(data_cfg, distributed, stateful=True)
+    stream_raw = cfg.get("stream")
+    stream_cfg = parse_stream_config(
+        OmegaConf.to_container(stream_raw, resolve=True)
+        if stream_raw is not None
+        else None
+    )
+    stream_schedule = None
+    data_sampler = None
+    if stream_cfg.enabled:
+        dataloader, stream_schedule = build_dataloader(
+            data_cfg, distributed, stream=stream_cfg
+        )
+        cfg_steps = train_cfg.get("steps")
+        if cfg_steps not in (None, stream_schedule.total_steps):
+            raise ValueError(
+                f"train.steps={cfg_steps} conflicts with the stream's total of "
+                f"{stream_schedule.total_steps} steps; set train.steps: null "
+                "or make them equal."
+            )
+    else:
+        dataloader, data_sampler = build_dataloader(data_cfg, distributed, stateful=True)
     if int(data_cfg.get("num_workers", 0)) > 0:
         print(
             "[hivemind] warning: num_workers > 0 breaks exact dataloader resume "
@@ -415,11 +439,14 @@ def run_training_loop(
     )
     val_loaders: dict[str, Any] = {}
     if eval_config.enabled and data_source == "hf":
+        from .data.hf_loader import domain_names
+
         base_data = OmegaConf.to_container(cfg.data, resolve=True)
-        for domain in list(cfg.data.get("domains", [])):
+        domain_specs = list(base_data.get("domains", []))
+        for spec, name in zip(domain_specs, domain_names(domain_specs)):
             per_domain = dict(base_data)
             per_domain["split"] = eval_cfg_raw.get("split", "validation")
-            per_domain["domains"] = [domain]
+            per_domain["domains"] = [spec]
             per_domain["shuffle"] = False
             per_domain["drop_last"] = False
             per_domain["batch_size"] = int(eval_cfg_raw.get("batch_size", base_data.get("batch_size", 4)))
@@ -427,9 +454,9 @@ def run_training_loop(
                 eval_cfg_raw.get("max_rows_per_domain", per_domain.get("max_rows_per_domain") or 256)
             )
             try:
-                val_loaders[domain] = build_dataloader(per_domain, distributed=False)
+                val_loaders[name] = build_dataloader(per_domain, distributed=False)
             except RuntimeError as exc:
-                print(f"eval: skipping domain {domain}: {exc}")
+                print(f"eval: skipping domain {name}: {exc}")
     forgetting_tracker = ForgettingTracker() if eval_config.track_forgetting else None
 
     # Logger
@@ -455,7 +482,10 @@ def run_training_loop(
     )
 
     # --- Training loop ---
-    steps = train_cfg.get("steps", 100)
+    if stream_schedule is not None:
+        steps = stream_schedule.total_steps
+    else:
+        steps = train_cfg.get("steps", 100)
     log_interval = train_cfg.get("log_interval", 10)
     final_metrics: dict[str, float] = {}
 
@@ -478,6 +508,15 @@ def run_training_loop(
             map_location=str(device),
         )
         start_step = int(meta.get("step", 0)) + 1
+        if stream_schedule is not None:
+            saved_digest = (meta.get("extra") or {}).get("stream_digest")
+            if saved_digest and saved_digest != stream_schedule.config_digest():
+                raise RuntimeError(
+                    "Stream config changed since the checkpoint was written "
+                    f"(digest {saved_digest} != {stream_schedule.config_digest()}). "
+                    "Resuming would silently change the data order."
+                )
+            dataloader.batch_sampler.start_step = start_step
         event_trace.emit(
             {"type": "resume", "step": start_step, "from": str(resume_path)}
         )
@@ -543,7 +582,14 @@ def run_training_loop(
                 forgetting=forgetting_tracker,
                 ledger=ledger,
                 sampler=data_sampler,
-                extra={"interrupted": reason},
+                extra={
+                    "interrupted": reason,
+                    **(
+                        {"stream_digest": stream_schedule.config_digest()}
+                        if stream_schedule is not None
+                        else {}
+                    ),
+                },
             )
             print(f"[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
         except Exception as exc:  # noqa: BLE001 — best-effort on shutdown
@@ -563,11 +609,36 @@ def run_training_loop(
 
     _prev_handler = signal.signal(signal.SIGINT, _sigint_handler)
 
+    current_phase: str | None = (
+        stream_schedule.phase_at(start_step).name
+        if stream_schedule is not None and start_step < steps
+        else None
+    )
+
     for step in pbar:
+        # Stream phase bookkeeping (boundaries feed the trace + analysis).
+        if stream_schedule is not None:
+            phase_name = stream_schedule.phase_at(step).name
+            if phase_name != current_phase or step == start_step:
+                if phase_name != current_phase and current_phase is not None:
+                    event_trace.emit(
+                        {"type": "phase_end", "step": step - 1, "phase": current_phase}
+                    )
+                event_trace.emit(
+                    {"type": "phase_start", "step": step, "phase": phase_name}
+                )
+                current_phase = phase_name
+
         # Get batch
         try:
             raw = next(data_iter)
         except StopIteration:
+            if stream_schedule is not None:
+                # The stream is finite by construction; running past it means
+                # a step-accounting bug, not an epoch boundary.
+                raise RuntimeError(
+                    f"Stream exhausted at step {step} (< {steps})"
+                ) from None
             data_iter = iter(dataloader)
             raw = next(data_iter)
 
@@ -641,7 +712,14 @@ def run_training_loop(
         # Prefer the dataset-provided bucket when present (Theory 101 §4C);
         # fall back to the teacher index for the synthetic path.
         meta = batch.get("metadata")
-        if meta and meta.get("bucket_id"):
+        stream_bucket = (
+            stream_schedule.bucket_override(step) if stream_schedule is not None else None
+        )
+        if stream_bucket is not None:
+            # Novel-phase batches carry a unique synthetic bucket so the
+            # repetition signal sees them as isolated one-offs.
+            bucket_id = _bucket_to_int(stream_bucket, fallback=0)
+        elif meta and meta.get("bucket_id"):
             bucket_id = _bucket_to_int(meta["bucket_id"][0], fallback=0)
         else:
             bucket_id = teacher_indices[0].item() if teacher_indices.numel() > 0 else 0
@@ -787,6 +865,8 @@ def run_training_loop(
                 "retrieval/buffer_size": r_store.size,
                 "consolidation/count": len(consolidated),
             }
+            if current_phase is not None:
+                metrics["phase"] = current_phase
             if isinstance(router, MetadataRouter):
                 metrics["router/miss_count"] = router.miss_count
 
@@ -840,7 +920,14 @@ def run_training_loop(
                 forgetting=forgetting_tracker,
                 ledger=ledger,
                 sampler=data_sampler,
-                extra={"final_metrics": final_metrics},
+                extra={
+                    "final_metrics": final_metrics,
+                    **(
+                        {"stream_digest": stream_schedule.config_digest()}
+                        if stream_schedule is not None
+                        else {}
+                    ),
+                },
             )
 
         # Mark this step as fully complete (signals + writes + optimizer

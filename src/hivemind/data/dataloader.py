@@ -34,7 +34,7 @@ def _build_hf(cfg: dict) -> tuple[Dataset, Any]:
     from .tokenizer import build_tokenizer
 
     hf_cfg = HivemindHFConfig(
-        domains=list(cfg.get("domains", ["code"])),
+        domains=list(cfg.get("domains", ["code"])),  # strings or DomainSpec dicts
         repo_prefix=cfg.get("repo_prefix", "hivemind-research"),
         split=cfg.get("split", "train"),
         tokenizer_name=cfg["tokenizer"],
@@ -63,6 +63,7 @@ def build_dataloader(
     cfg: dict,
     distributed: bool = False,
     stateful: bool = False,
+    stream=None,
 ):
     """Build a DataLoader from config.
 
@@ -75,6 +76,13 @@ def build_dataloader(
     for bit-exact mid-epoch resume, and the return value is
     ``(loader, sampler)``. Evaluation loaders should keep the default so
     every eval pass sees the same batches.
+
+    With ``stream`` (an enabled :class:`~hivemind.data.stream.StreamConfig`),
+    batches follow the phased continual stream instead; the return value is
+    ``(loader, schedule)`` where ``schedule`` is the
+    :class:`~hivemind.data.stream.StreamSchedule`. Requires the hf source
+    (the schedule needs bucket/domain index accessors). Resume by setting
+    ``loader.batch_sampler.start_step`` before iterating.
     """
     source = cfg.get("source", "synthetic")
     collate_fn = None
@@ -85,6 +93,28 @@ def build_dataloader(
         dataset, collate_fn = _build_hf(cfg)
     else:
         raise ValueError(f"Unknown data source: {source}")
+
+    if stream is not None and getattr(stream, "enabled", False):
+        if source != "hf":
+            raise ValueError("stream schedules require data.source=hf")
+        if distributed:
+            raise ValueError("stream schedules are single-process only")
+        from .stream import StreamBatchSampler, StreamSchedule
+
+        schedule = StreamSchedule(
+            stream,
+            dataset,
+            batch_size=int(cfg.get("batch_size", 4)),
+            seed=int(cfg.get("shuffle_seed", cfg.get("seed", 42))),
+        )
+        loader = DataLoader(
+            dataset,
+            batch_sampler=StreamBatchSampler(schedule),
+            num_workers=cfg.get("num_workers", 0),
+            pin_memory=cfg.get("pin_memory", True),
+            collate_fn=collate_fn,
+        )
+        return loader, schedule
 
     if distributed:
         sampler = DistributedSampler(dataset)
