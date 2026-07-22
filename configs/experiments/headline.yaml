@@ -1,0 +1,33 @@
+# Group D — headline runs (Qwen3-1.7B, ~6 h each on A100 40GB / L40S).
+# trihope_live_kd is the one true logit-KD run (nf4 30B teachers; code+math
+# phases get live logits, general falls back to CE).
+#   python scripts/run_experiment.py configs/experiments/headline.yaml
+experiment: headline_v1
+base_config: stream_headline
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+runs:
+  - id: trihope
+    overrides: []
+  - id: full_ft
+    overrides:
+      - controller.enabled=false
+      - model.lora.rank=0
+      - train.trainable=all
+  - id: lora_only
+    overrides:
+      - controller.enabled=false
+      - train.trainable=lora
+  - id: no_retrieval
+    overrides:
+      - controller.ablation.disable_stores=[R]
+  - id: no_consolidation
+    overrides:
+      - controller.ablation.disable_stores=[P]
+  - id: trihope_live_kd
+    overrides:
+      - teachers.mode=live
+      - teachers.num_teachers=2
+      - distillation.lambda_ce=0.5
+      - data.batch_size=1

@@ -52,6 +52,30 @@ def smoke(config_name: str = typer.Option("pilot_smoke", help="Config name")) ->
 
 
 @app.command()
+def experiment(
+    manifest: Path = typer.Argument(..., help="Experiment manifest YAML"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the run matrix and exit"),
+    resume: bool = typer.Option(False, "--resume", help="Skip done runs, resume failed ones"),
+    only: str = typer.Option(None, "--only", help="Run only this spec id"),
+    max_hours: float = typer.Option(None, "--max-hours", help="Stop launching past this budget"),
+) -> None:
+    """Run an experiment matrix (see scripts/run_experiment.py)."""
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+    from run_experiment import main as run_main
+
+    argv = [str(manifest)]
+    if dry_run:
+        argv.append("--dry-run")
+    if resume:
+        argv.append("--resume")
+    if only:
+        argv.extend(["--only", only])
+    if max_hours is not None:
+        argv.extend(["--max-hours", str(max_hours)])
+    raise SystemExit(run_main(argv))
+
+
+@app.command()
 def train(config_name: str = typer.Option("pilot", help="Config name")) -> None:
     """Run training."""
     from hydra import compose, initialize_config_dir

@@ -1,0 +1,25 @@
+# Group A — baselines on the small-profile stream (paper Table 1 analogue).
+#   python scripts/run_experiment.py configs/experiments/baselines_small.yaml
+experiment: baselines_small_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337]                 # 1-seed validation pass first; rerun with [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+runs:
+  - id: trihope
+    overrides: []
+  - id: full_ft
+    overrides:
+      - controller.enabled=false
+      - model.lora.rank=0
+      - train.trainable=all
+  - id: lora_only
+    overrides:
+      - controller.enabled=false
+      - train.trainable=lora
+  - id: no_retrieval
+    overrides:
+      - controller.ablation.disable_stores=[R]
+  - id: no_consolidation
+    overrides:
+      - controller.ablation.disable_stores=[P]

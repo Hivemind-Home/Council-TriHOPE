@@ -1,0 +1,51 @@
+# Group C — permanent-memory (P-store) study. Lowered consolidation
+# thresholds + shortened period + recurrence-heavy stream so P fires often
+# enough to measure:
+#   (1) WHEN P fires        → events.jsonl decision/consolidation records
+#   (2) retention/efficiency → phase_eval retention deltas, steps-to-recover
+#   (3) adapter reuse        → p_study vs p_off_control AULC on math phase
+#   (4) irreversible damage  → forced merges during novel/unstable phases,
+#                              with pre_merge rollback checkpoints
+#
+# Stream phase map (stream_small): general_warm 0-799, code_recurrent
+# 800-2599, novel_inject 2600-2749, math_recurrent 2750-4549, code_revisit
+# 4550-5049, mixed_tail 5050-5999.
+#   python scripts/run_experiment.py configs/experiments/p_study_small.yaml
+experiment: p_study_small_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+runs:
+  - id: p_study
+    overrides:
+      - controller.consolidation.period=250
+      - controller.consolidation.min_stability_C=0.4
+      - controller.consolidation.min_repetition=0.4
+      - controller.consolidation.checkpoint_before_merge=true
+      - controller.policy.repetition_medium=0.35
+      - controller.policy.stability_high_C=0.35
+      - controller.policy.stability_low_V=0.5
+      - eval.on_consolidation=true
+  - id: p_off_control
+    # Same lowered routing thresholds, but the P branch is disabled — the
+    # adapter-reuse and retention control.
+    overrides:
+      - controller.ablation.disable_stores=[P]
+      - controller.policy.repetition_medium=0.35
+      - controller.policy.stability_high_C=0.35
+      - controller.policy.stability_low_V=0.5
+  - id: p_forced_bad
+    # Force-merge ALL adapters in the middle of the isolated-novel phase —
+    # maximally wrong timing. Pre-merge checkpoint saved for rollback.
+    overrides:
+      - controller.consolidation.checkpoint_before_merge=true
+      - controller.debug.force_consolidate_steps=[2675]
+      - eval.on_consolidation=true
+  - id: p_forced_plausible
+    # Force-merge early in math_recurrent — wrong-but-plausible timing
+    # (repetition rising but stability unproven).
+    overrides:
+      - controller.consolidation.checkpoint_before_merge=true
+      - controller.debug.force_consolidate_steps=[2950]
+      - eval.on_consolidation=true

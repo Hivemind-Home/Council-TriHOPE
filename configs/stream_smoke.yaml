@@ -1,0 +1,144 @@
+# CPU warm-up smoke for the phased-stream pipeline: tiny in-repo student,
+# REAL HF Layer-C data (math only — one download), cache-mode teachers
+# (CE on teacher_output_text), ~1-2 min on CPU.
+#
+#   python train.py --config-name stream_smoke
+#
+# Verifies end-to-end: Layer-C loading, stream phases (random → recurrent →
+# novel → revisit), routing decisions + event trace, consolidation flagging,
+# phase-boundary eval + retention tracking, checkpoint + resume.
+defaults: []
+
+model:
+  backbone: in_repo
+  vocab_size: 151936        # must match the tokenizer below
+  dim: 128
+  num_layers: 2
+  heads: 4
+  ffn_hidden_multiplier: 4
+  activation: silu
+  max_seq_len: 256
+  dropout: 0.0
+  gradient_checkpointing: false
+  lora:
+    rank: 4
+    alpha: 8.0
+    dropout: 0.0
+    target_modules: [q, k, v, o, up, gate, down]
+
+teachers:
+  mode: cache               # supervision = teacher_output_text (CE); no teacher model loaded
+  num_teachers: 1
+  prototype_seed_samples: 8
+  teacher_ids:
+    math: math_teacher
+
+distillation:
+  tau: 4.0
+  lambda_kd: 1.0            # inert without logit caches (row mask all-zero)
+  lambda_ce: 1.0
+  lambda_reg: 0.0
+  use_teacher_confidence: true
+  confidence_floor: 0.1
+  confidence_power: 1.0
+
+regularization:
+  weight_decay: 0.0
+  trust_region_weight: 0.0
+  anti_forgetting_weight: 0.0
+  lora_sparsity_weight: 0.0
+
+controller:
+  enabled: true
+  policy:
+    top_m_modules: 4
+    surprise_high: 2.0
+    repetition_low: 0.3
+    repetition_medium: 0.35   # loosened so P can fire inside 60 steps
+    stability_high_C: 0.3
+    stability_low_V: 0.6
+  consolidation:
+    period: 20
+    min_stability_C: 0.2
+    min_repetition: 0.3
+    merge_strategy: direct
+    checkpoint_before_merge: true
+  writer:
+    top_k_granularity: rank_components
+    top_k_fraction: 0.5
+
+data:
+  source: hf
+  router: metadata
+  domains:
+    - {name: math, layer_c: hivemind-research/math-layerC-200K}
+  split: train
+  tokenizer: Qwen/Qwen3-0.6B
+  max_seq_len: 256
+  teacher_logits_root: null
+  max_rows_per_domain: 2000
+  batch_size: 2
+  num_workers: 0
+  seed: 42
+
+stream:
+  enabled: true
+  seed: null                # falls back to train.seed
+  phases:
+    - {name: math_warm,      domain: math, steps: 10, mode: random}
+    - {name: math_recurrent, domain: math, steps: 30, mode: recurrent,
+       recurrence: {num_buckets: 4, samples_per_bucket: 8}}
+    - {name: novel_inject,   domain: math, steps: 5,  mode: novel}
+    - {name: math_revisit,   domain: math, steps: 10, mode: recurrent,
+       recurrence: {num_buckets: 4, samples_per_bucket: 8, reuse_from: math_recurrent}}
+
+train:
+  steps: null               # derived from the stream (55)
+  log_interval: 5
+  seed: 1337
+  device: cpu
+  trainable: all
+  mixed_precision:
+    enabled: false
+
+optim:
+  type: adamw
+  lr: 1.0e-3
+  betas: [0.9, 0.999]
+  weight_decay: 0.01
+  eps: 1.0e-8
+  masked: true
+
+checkpoint:
+  enabled: true
+  dir: checkpoints/stream_smoke
+  save_every: 25
+  keep_last: 2
+  keep_tagged: 2
+  resume_from: null
+
+eval:
+  enabled: true
+  interval: 25
+  max_batches: 4
+  split: validation
+  batch_size: 2
+  max_rows_per_domain: 32
+  track_forgetting: true
+  at_phase_boundaries: true
+  on_consolidation: true
+  exact_match:
+    enabled: true
+    domains: [math]
+    num_samples: 4
+    max_new_tokens: 8
+
+profiling:
+  enabled: true
+  sync_cuda: false
+
+logging:
+  enabled: true
+  backend: json
+  path: logs/stream_smoke_metrics.jsonl
+  events_path: logs/stream_smoke_events.jsonl

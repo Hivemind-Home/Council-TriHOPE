@@ -1,0 +1,29 @@
+# Group B — routing-signal ablations (one run per signal, plus Top-M / Top-K
+# sweeps). Screen at 1 seed; confirm movers at 3 seeds.
+#   python scripts/run_experiment.py configs/experiments/ablation_grid.yaml
+experiment: ablation_grid_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+runs:
+  - id: no_surprise
+    overrides: ["controller.ablation.disable_signals=[surprise]"]
+  - id: no_repetition
+    overrides: ["controller.ablation.disable_signals=[repetition]"]
+  - id: no_cosine
+    overrides: ["controller.ablation.disable_signals=[cosine]"]
+  - id: no_volatility
+    overrides: ["controller.ablation.disable_signals=[volatility]"]
+  - id: no_teacher_conf
+    overrides:
+      - controller.ablation.use_teacher_confidence=false
+      - distillation.use_teacher_confidence=false
+  - id: topm_2
+    overrides: ["++controller.ablation.top_m_override=2"]
+  - id: topm_all
+    overrides: ["++controller.ablation.top_m_override=999"]
+  - id: topk_25
+    overrides: [controller.writer.top_k_fraction=0.25]
+  - id: topk_100
+    overrides: [controller.writer.top_k_fraction=1.0]
