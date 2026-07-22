@@ -78,18 +78,19 @@ def compute_kd_loss(
     if row_mask is not None:
         pointwise = pointwise * row_mask.view(-1, 1).to(pointwise.dtype)
 
-    # Normalize by the count of contributing positions so KD magnitude
-    # is comparable across batches with different numbers of cached rows.
-    denom_parts: list[torch.Tensor] = []
+    # Normalize by the count of contributing POSITIONS, not by the row
+    # weight itself. row_mask as a binary cache hit/miss indicator must
+    # exclude missing rows from the average; row_mask as a continuous
+    # confidence weight must shrink the loss without re-normalizing it
+    # back. Using (row_mask > 0) as the inclusion indicator handles
+    # both cleanly.
     if active_mask is not None:
-        denom_parts.append(active_mask[:, 1:].to(pointwise.dtype))
+        denom = active_mask[:, 1:].to(pointwise.dtype)
     else:
-        denom_parts.append(torch.ones_like(pointwise))
+        denom = torch.ones_like(pointwise)
     if row_mask is not None:
-        denom_parts.append(row_mask.view(-1, 1).to(pointwise.dtype).expand_as(pointwise))
-    denom = denom_parts[0]
-    for d in denom_parts[1:]:
-        denom = denom * d
+        row_present = (row_mask > 0).to(pointwise.dtype).view(-1, 1).expand_as(pointwise)
+        denom = denom * row_present
     n = denom.sum().clamp_min(1.0)
 
     return tau * tau * pointwise.sum() / n

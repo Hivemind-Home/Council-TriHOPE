@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Multi-Teacher Knowledge Distillation with Tri-Store (R/F/P) Memory Routing"
 license = {text = "Apache-2.0"}
 authors = [
-  {name = "Hivemind Home", email = "jekono ekta mail"}
+  {name = "Hivemind Home"}
 ]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,12 @@ data = [
   "transformers>=4.44.0",
   "huggingface_hub>=0.24.0",
   "pyarrow>=15.0",
+  "accelerate>=0.30.0",
+  "bitsandbytes>=0.44.0",
+  # transformers>=5.x lazy-loads FP8 triton kernels via this package;
+  # without it FP8 checkpoints (e.g. Qwen3-30B-A3B-Thinking-2507-FP8)
+  # crash with `'NoneType' object has no attribute 'w8a8_fp8_matmul'`.
+  "kernels>=0.14.0",
 ]
 unsloth = [
   "unsloth>=2025.1.0",

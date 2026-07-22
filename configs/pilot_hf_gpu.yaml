@@ -1,23 +1,29 @@
-# Full HF-backed pilot: Qwen2.5-0.5B student + DeepSeek R1 cached
-# supervision for code/math. Needs GPU, `[data]` extras, and (for live
-# KD) a mounted `data.teacher_logits_root` of NPZ logits.
+# Full HF-backed pilot: Qwen3-1.7B student + live Qwen3-Coder-30B-A3B
+# (code) and Qwen3-30B-A3B-Thinking-2507 (math) teachers.
+#
+# Memory plan for a single H200 (140 GB):
+#   * student Qwen3-1.7B: weights+grads bf16 (~7 GB) + Adam fp32 m/v (~14 GB)
+#   * code teacher bnb nf4 (~15 GB)
+#   * math teacher bnb nf4 (~15 GB)  ← non-FP8 to skip deep-gemm download
+#   * activations at B=1, T=1024 with grad checkpointing
+#   ≈ 75 GB + activations, comfortable headroom.
 defaults: []
 
 model:
   backbone: hf
-  pretrained_name: Qwen/Qwen2.5-0.5B
+  pretrained_name: Qwen/Qwen3-1.7B  # non-FP8; FP8 variant breaks training
   dtype: bfloat16
   trust_remote_code: false
   hf_cache_dir: null
   vocab_size: 151936
   # The fields below are ignored when backbone=hf — kept here so the
   # controller / module_index helpers that read cfg.model still work.
-  dim: 896
-  num_layers: 24
-  heads: 14
+  dim: 2048
+  num_layers: 28
+  heads: 16
   ffn_hidden_multiplier: 4
   activation: silu
-  max_seq_len: 2048
+  max_seq_len: 1024
   dropout: 0.0
   gradient_checkpointing: true
   lora:
@@ -27,28 +33,38 @@ model:
     target_modules: [q, k, v, o, up, gate, down]
 
 teachers:
-  mode: cache
+  mode: live
   num_teachers: 2
   prototype_seed_samples: 100
   teacher_ids:
-    code: code_teacher_deepseek_r1
-    math: math_teacher_deepseek_r1_1p5b
-  pretrained: {}
+    code: qwen3_coder_30b_a3b
+    math: qwen3_30b_a3b_thinking_fp8
+  pretrained:
+    code:
+      name: Qwen/Qwen3-Coder-30B-A3B-Instruct
+      quantization: nf4        # bnb 4-bit nf4 (~15 GB vs ~30 GB int8)
+    math:
+      name: Qwen/Qwen3-30B-A3B-Thinking-2507  # bf16 sibling of the FP8 variant
+      quantization: nf4        # bnb 4-bit nf4 (~15 GB vs ~62 GB bf16);
+                                # avoids the deep-gemm / finegrained-fp8 pull
   dtype: bfloat16
   trust_remote_code: false
   hf_cache_dir: null
 
 distillation:
   tau: 4.0
-  lambda_kd: 0.0
-  lambda_ce: 1.0
+  lambda_kd: 1.0
+  lambda_ce: 0.5
   lambda_reg: 0.01
   use_teacher_confidence: true
   confidence_floor: 0.1
   confidence_power: 1.0
 
 regularization:
-  weight_decay: 0.01
+  # AdamW already applies decoupled weight decay via optim.weight_decay;
+  # adding ||θ||² as an explicit loss term double-counts it AND OOMs at
+  # 4B params (the per-param p.float() copy peaks at ~16 GB).
+  weight_decay: 0.0
   trust_region_weight: 0.001
   anti_forgetting_weight: 0.0
   lora_sparsity_weight: 0.0001
@@ -99,19 +115,19 @@ data:
   domains: [code, math]
   repo_prefix: hivemind-research
   split: train
-  tokenizer: Qwen/Qwen2.5-0.5B
-  max_seq_len: 2048
+  tokenizer: Qwen/Qwen3-1.7B  # same tokenizer family across Qwen3 (vocab 151936)
+  max_seq_len: 1024
   teacher_logits_root: null
   hf_cache_dir: null
   streaming: false
   max_rows_per_domain: null
-  batch_size: 2
+  batch_size: 1
   num_workers: 2
   seed: 42
   logits_cache_size: 512
 
 train:
-  steps: 50000
+  steps: 10000
   log_interval: 50
   seed: 1337
   device: cuda
@@ -129,8 +145,11 @@ optim:
 checkpoint:
   enabled: true
   dir: checkpoints/pilot_hf_gpu
-  save_every: 1000
+  save_every: 500          # save twice as often so an interrupt loses ≤500 steps
   keep_last: 3
+  # Override on the CLI to resume:
+  #   checkpoint.resume_from=latest   ← most recent step
+  #   checkpoint.resume_from=12000    ← specific step
   resume_from: null
 
 eval:
@@ -138,12 +157,20 @@ eval:
   interval: 500
   max_batches: 32
   split: validation
-  batch_size: 2
+  batch_size: 1
   max_rows_per_domain: 512
   track_forgetting: true
   lora_sparsity_threshold: 1.0e-4
 
 logging:
   enabled: true
+  # backend: "json" writes one JSON line per step to ``path`` (crash-safe,
+  # appended on resume). Switch to "wandb" + set id to resume the same
+  # wandb run after an interrupt.
   backend: json
-  path: logs/pilot_hf_gpu_metrics.json
+  path: logs/pilot_hf_gpu_metrics.jsonl
+  # --- wandb (only used when backend=wandb) ---
+  project: hivemind
+  run_name: pilot_hf_gpu
+  id: null              # set to a fixed id (e.g. "pilot-001") to make resume work
+  resume: allow         # allow | must | never

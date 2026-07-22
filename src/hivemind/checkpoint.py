@@ -220,8 +220,11 @@ class CheckpointManager:
         forgetting: Optional[ForgettingTracker] = None,
         map_location: str | torch.device = "cpu",
     ) -> dict[str, Any]:
-        base = torch.load(path / "base.pt", map_location=map_location)
-        lora = torch.load(path / "lora.pt", map_location=map_location)
+        # weights_only=False: our own checkpoints carry numpy arrays in
+        # controller/RNG state, which torch>=2.6's default unpickler rejects.
+        # Trust is fine here because we only load checkpoints we wrote.
+        base = torch.load(path / "base.pt", map_location=map_location, weights_only=False)
+        lora = torch.load(path / "lora.pt", map_location=map_location, weights_only=False)
         merged = {**base, **lora}
         missing, unexpected = student.load_state_dict(merged, strict=False)
         if missing:
@@ -229,17 +232,17 @@ class CheckpointManager:
         if unexpected:
             logger.warning("checkpoint unexpected keys: %s", list(unexpected)[:8])
 
-        optimizer.load_state_dict(torch.load(path / "optimizer.pt", map_location=map_location))
-        signal_computer.load_state_dict(torch.load(path / "controller.pt", map_location=map_location))
-        r_store.load_state_dict(torch.load(path / "stores.pt", map_location=map_location))
-        _restore_rng(torch.load(path / "rng.pt", map_location="cpu"))
+        optimizer.load_state_dict(torch.load(path / "optimizer.pt", map_location=map_location, weights_only=False))
+        signal_computer.load_state_dict(torch.load(path / "controller.pt", map_location=map_location, weights_only=False))
+        r_store.load_state_dict(torch.load(path / "stores.pt", map_location=map_location, weights_only=False))
+        _restore_rng(torch.load(path / "rng.pt", map_location="cpu", weights_only=False))
 
         cons_path = path / "consolidation.pt"
         if consolidator is not None and cons_path.exists():
-            consolidator.load_state_dict(torch.load(cons_path, map_location=map_location))
+            consolidator.load_state_dict(torch.load(cons_path, map_location=map_location, weights_only=False))
         forget_path = path / "forgetting.pt"
         if forgetting is not None and forget_path.exists():
-            forgetting.load_state_dict(torch.load(forget_path, map_location="cpu"))
+            forgetting.load_state_dict(torch.load(forget_path, map_location="cpu", weights_only=False))
 
         meta = json.loads((path / "meta.json").read_text())
         logger.info("checkpoint loaded: %s (step=%d)", path, meta["step"])

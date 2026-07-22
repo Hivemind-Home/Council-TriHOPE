@@ -70,11 +70,13 @@ def _install_fake_transformers(monkeypatch, vocab_size=128, hidden=32, n_layers=
             h = self.model.embed_tokens(input_ids)
             return _Output(self.lm_head(h))
 
+    _vocab, _hidden, _layers, _heads = vocab_size, hidden, n_layers, heads
+
     class _Config:
-        vocab_size = vocab_size
-        hidden_size = hidden
-        num_hidden_layers = n_layers
-        num_attention_heads = heads
+        vocab_size = _vocab
+        hidden_size = _hidden
+        num_hidden_layers = _layers
+        num_attention_heads = _heads
         max_position_embeddings = 64
 
     class _AutoConfig:

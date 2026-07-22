@@ -1,0 +1,8 @@
+# One prompt per line. Lines starting with '#' are ignored.
+Write a Python function that returns the n-th Fibonacci number.
+Solve for x: 3x + 5 = 20. Show your steps.
+Explain quicksort in one short paragraph.
+Compute the derivative of x^2 * sin(x).
+Debug this snippet: for i in range(len(xs)): print(xs[i+1]) — what is wrong?
+What is the time complexity of binary search and why?
+Find the integral of 1 / (1 + x^2) dx.

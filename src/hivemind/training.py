@@ -337,8 +337,16 @@ def run_training_loop(
     )
     p_store = PermanentStore()
 
-    writer = WriteExecutor(student, optimizer, r_store, f_store, p_store, ctrl_config.writer)
     consolidator = ConsolidationScheduler(ctrl_config.consolidation, student, p_store)
+    writer = WriteExecutor(
+        student,
+        optimizer,
+        r_store,
+        f_store,
+        p_store,
+        ctrl_config.writer,
+        consolidator=consolidator,
+    )
 
     # Checkpointing
     ckpt_cfg_raw = cfg.get("checkpoint", {}) or {}
@@ -420,6 +428,45 @@ def run_training_loop(
 
     student.train()
     pbar = tqdm(range(start_step, steps), desc="Training", initial=start_step, total=steps)
+
+    # Track the last completed step so a SIGINT (Ctrl+C) or unexpected
+    # exit can save a checkpoint at exactly where we stopped. The handler
+    # for SIGINT lets one Ctrl+C flush state and exit cleanly; a second
+    # one terminates immediately if the save itself hangs.
+    last_step = start_step - 1
+
+    def _emergency_save(reason: str) -> None:
+        if not ckpt_cfg.enabled or last_step < 0:
+            return
+        try:
+            print(f"\n[hivemind] {reason} — saving checkpoint at step={last_step}…")
+            ckpt_manager.save(
+                step=last_step,
+                student=student,
+                optimizer=optimizer,
+                signal_computer=signal_computer,
+                r_store=r_store,
+                consolidator=consolidator,
+                forgetting=forgetting_tracker,
+                extra={"interrupted": reason},
+            )
+            print(f"[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
+        except Exception as exc:  # noqa: BLE001 — best-effort on shutdown
+            print(f"[hivemind] emergency save failed: {exc}")
+
+    import signal
+
+    _interrupted = {"flag": False}
+
+    def _sigint_handler(_signum, _frame):
+        if _interrupted["flag"]:
+            # Second Ctrl+C — give up on graceful shutdown.
+            print("\n[hivemind] second interrupt — exiting hard.")
+            raise KeyboardInterrupt
+        _interrupted["flag"] = True
+        print("\n[hivemind] interrupt received — finishing current step then saving.")
+
+    _prev_handler = signal.signal(signal.SIGINT, _sigint_handler)
 
     for step in pbar:
         # Get batch
@@ -515,6 +562,20 @@ def run_training_loop(
         # === Step 9: R/F/P routing policy ===
         actions = policy.decide(module_signals)
 
+        # Resolve the teacher info for the representative (first) sample —
+        # mirrors the choice already made for ``embedding`` and ``bucket_id``
+        # above so the R-store entry is consistent. Theory 101 §7 lists
+        # teacher_id and teacher soft targets among the R payload.
+        teacher_idx_repr = (
+            int(teacher_indices[0].item()) if teacher_indices.numel() > 0 else 0
+        )
+        teacher_name_repr = ""
+        if 0 <= teacher_idx_repr < len(registry.teachers):
+            teacher_name_repr = str(registry.teachers[teacher_idx_repr].name)
+        teacher_text_repr = ""
+        if meta and meta.get("teacher_output_text"):
+            teacher_text_repr = str(meta["teacher_output_text"][0] or "")
+
         # === Step 10: Execute writes ===
         write_metrics = writer.execute(
             actions=actions,
@@ -522,6 +583,9 @@ def run_training_loop(
             step=step,
             embedding=embedding,
             bucket_id=bucket_id,
+            teacher_id=teacher_idx_repr,
+            teacher_name=teacher_name_repr,
+            teacher_output_text=teacher_text_repr,
         )
 
         # === Step 11: Optimizer step (updates remaining params) ===
@@ -605,6 +669,22 @@ def run_training_loop(
                 extra={"final_metrics": final_metrics},
             )
 
+        # Mark this step as fully complete (signals + writes + optimizer
+        # step + maybe checkpoint all finished) so the SIGINT handler's
+        # emergency save resumes from the right place.
+        last_step = step
+        if _interrupted["flag"]:
+            break
+
+    # Restore the prior signal handler before any more code runs.
+    signal.signal(signal.SIGINT, _prev_handler)
+
+    if _interrupted["flag"]:
+        _emergency_save("SIGINT")
+
     logger.close()
-    print(f"\nTraining complete. Final loss: {final_metrics.get('loss/total', 'N/A')}")
+    if _interrupted["flag"]:
+        print(f"\nTraining interrupted at step {last_step}. Resume with checkpoint.resume_from=latest")
+    else:
+        print(f"\nTraining complete. Final loss: {final_metrics.get('loss/total', 'N/A')}")
     return final_metrics

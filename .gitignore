@@ -51,6 +51,12 @@ data/shards/
 outputs/
 multirun/
 
+# Experiment runs
+runs/
+
+# Unsloth compiled kernels
+unsloth_compiled_cache/
+
 # Coverage
 .coverage
 htmlcov/

@@ -137,6 +137,7 @@ class DistillCollator:
             "domain": row.get("domain", ""),
             "bucket_id": row.get("bucket_id", ""),
             "teacher_id": row.get("teacher_id", ""),
+            "teacher_output_text": response if label_source == "teacher" else "",
             "teacher_confidence": confidence,
             "teacher_entropy": entropy,
         }
@@ -174,6 +175,7 @@ class DistillCollator:
             "bucket_id": [],
             "teacher_id": [],
             "label_source": [],
+            "teacher_output_text": [],
         }
         teacher_confidence = torch.zeros((B,), dtype=torch.float32)
         teacher_entropy = torch.zeros((B,), dtype=torch.float32)
@@ -205,6 +207,7 @@ class DistillCollator:
             meta["bucket_id"].append(row["bucket_id"])
             meta["teacher_id"].append(row["teacher_id"])
             meta["label_source"].append(row["label_source"])
+            meta["teacher_output_text"].append(row.get("teacher_output_text", ""))
             teacher_confidence[b_idx] = row["teacher_confidence"]
             teacher_entropy[b_idx] = row["teacher_entropy"]
 

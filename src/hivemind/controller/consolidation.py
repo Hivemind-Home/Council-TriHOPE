@@ -69,6 +69,23 @@ class ConsolidationScheduler:
         # Populated by ``record_batch`` each training step; bounded to
         # ``config.distill_replay_size``.
         self._replay: deque[torch.Tensor] = deque(maxlen=max(1, config.distill_replay_size))
+        # Modules the policy has flagged as ready for P (Theory 101 §8:
+        # "modules flagged ready for P"). Drained at each consolidation
+        # period and re-validated against current signals before merge.
+        self._pending_p: set[ModuleId] = set()
+
+    def flag_for_consolidation(self, mid: ModuleId) -> None:
+        """Register a module the policy wants consolidated.
+
+        Only F-type modules are merged into P; other ids are ignored so
+        callers can pass through whatever the policy emitted.
+        """
+        if mid.param_type == "F":
+            self._pending_p.add(mid)
+
+    @property
+    def pending_p(self) -> set[ModuleId]:
+        return set(self._pending_p)
 
     def record_batch(self, input_ids: torch.Tensor) -> None:
         """Capture a batch for potential distill-based consolidation."""
@@ -88,13 +105,36 @@ class ConsolidationScheduler:
     ) -> list[ModuleId]:
         """Consolidate qualifying F-modules into P-store.
 
-        A module qualifies if it's F-type, stable (C ≥ threshold), and
-        repeating (R ≥ threshold).
+        A module qualifies when:
+          1. It's F-type AND
+          2. Either the policy has flagged it via ``flag_for_consolidation``
+             OR no flagged set is in use (legacy unconditional sweep), AND
+          3. Current signals confirm it's stable (C ≥ min_stability_C) and
+             repeating (R ≥ min_repetition) — re-validated at merge time
+             so a stale flag from earlier doesn't trigger a bad merge.
+
+        Successfully merged modules are removed from the pending set; any
+        flagged module that no longer satisfies thresholds remains pending
+        for the next period (its signals may recover).
         """
         consolidated: list[ModuleId] = []
 
-        for mid, sig in module_signals.items():
+        # Decide which modules to consider this round. If the policy has
+        # been flagging modules, only re-validate those. Otherwise fall
+        # back to the unconditional sweep across all F-type modules
+        # (preserves prior behaviour for callers that don't use flags).
+        if self._pending_p:
+            candidates = list(self._pending_p)
+        else:
+            candidates = [mid for mid in module_signals if mid.param_type == "F"]
+
+        for mid in candidates:
             if mid.param_type != "F":
+                continue
+            sig = module_signals.get(mid)
+            if sig is None:
+                # No fresh signal for this module — keep it pending; we'll
+                # re-check next period.
                 continue
             if (
                 sig.repetition >= self.config.min_repetition
@@ -108,6 +148,7 @@ class ConsolidationScheduler:
                     )
                 if merged > 0:
                     consolidated.append(mid)
+                    self._pending_p.discard(mid)
 
         return consolidated
 
@@ -200,9 +241,20 @@ class ConsolidationScheduler:
     # -- serialisation ----------------------------------------------------
 
     def state_dict(self) -> dict:
-        return {"replay": [t.clone() for t in self._replay]}
+        return {
+            "replay": [t.clone() for t in self._replay],
+            "pending_p": [
+                {"layer": m.layer, "block_type": m.block_type, "param_type": m.param_type}
+                for m in self._pending_p
+            ],
+        }
 
     def load_state_dict(self, state: dict) -> None:
         self._replay.clear()
         for t in state.get("replay", []):
             self._replay.append(t)
+        self._pending_p.clear()
+        for raw in state.get("pending_p", []):
+            self._pending_p.add(
+                ModuleId(int(raw["layer"]), str(raw["block_type"]), str(raw["param_type"]))
+            )

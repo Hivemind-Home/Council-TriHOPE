@@ -1,11 +1,22 @@
-"""Logging utilities for training metrics."""
+"""Logging utilities for training metrics.
+
+Two backends:
+
+* ``JSONLogger`` — newline-delimited JSON written to disk one line per
+  ``log()`` call. Crash-safe: flushes after every step so an OOM/SIGKILL
+  loses at most one record. The file is appended to on resume so the
+  full training history accumulates across restarts.
+* ``_WandBLogger`` — thin wrapper around ``wandb.log``. Resume is
+  controlled via the ``id`` field in the config: pass the same id you
+  used originally and the new run continues the wandb metrics stream.
+"""
 
 from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 class BaseLogger(ABC):
@@ -25,22 +36,46 @@ class NullLogger(BaseLogger):
 
 
 class JSONLogger(BaseLogger):
+    """Newline-delimited JSON logger.
+
+    Each ``log()`` call writes one line and flushes the OS buffer. A
+    legacy ``.json`` extension is accepted; the format on disk is JSONL
+    regardless. The path is opened in append mode so resuming a run
+    keeps the prior step records instead of overwriting them.
+    """
+
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._entries: list[dict[str, Any]] = []
+        # Open append-binary; we'll write our own newlines as JSONL.
+        self._fh = open(self.path, "a", encoding="utf-8")
 
     def log(self, metrics: dict[str, Any], step: int) -> None:
         entry = {"step": step, **metrics}
-        self._entries.append(entry)
+        self._fh.write(json.dumps(entry, default=str) + "\n")
+        # Flush to OS buffers every step. Crash-safety > write throughput.
+        self._fh.flush()
 
     def close(self) -> None:
-        with open(self.path, "w") as f:
-            json.dump(self._entries, f, indent=2, default=str)
+        try:
+            self._fh.flush()
+            self._fh.close()
+        except Exception:
+            pass
 
 
 def init_logger(cfg: dict[str, Any]) -> BaseLogger:
-    """Initialize a logger from config."""
+    """Initialize a logger from config.
+
+    Recognised keys:
+      enabled: bool — turn logging on/off
+      backend: "json" | "wandb" | "null"
+      path:    JSONLogger output (default ``logs/metrics.json``)
+      project: wandb project name (default ``hivemind``)
+      run_name: wandb run display name (optional)
+      id:      wandb run id; pass the same id to resume an existing run
+      resume:  wandb resume mode — "allow" | "must" | "never" (default "allow")
+    """
     if not cfg.get("enabled", False):
         return NullLogger()
     backend = cfg.get("backend", "json")
@@ -49,11 +84,17 @@ def init_logger(cfg: dict[str, Any]) -> BaseLogger:
     if backend == "wandb":
         try:
             import wandb
-
-            wandb.init(project=cfg.get("project", "hivemind"), config=cfg)
-            return _WandBLogger()
         except ImportError:
+            # Fall back to JSON if wandb isn't installed in this env.
             return JSONLogger(cfg.get("path", "logs/metrics.json"))
+        wandb.init(
+            project=cfg.get("project", "hivemind"),
+            name=cfg.get("run_name"),
+            id=cfg.get("id"),
+            resume=cfg.get("resume", "allow"),
+            config=cfg,
+        )
+        return _WandBLogger()
     return NullLogger()
 
 

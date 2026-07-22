@@ -157,6 +157,6 @@ def batch_teacher_forward(
                 continue
             subset = tokens[selector]
             subset_logits = teachers[k].model(subset)
-            teacher_logits[selector] = subset_logits
+            teacher_logits[selector] = subset_logits.to(dtype=teacher_logits.dtype)
 
     return teacher_logits

@@ -10,7 +10,8 @@ Fused: R_t = λ₁·R_mom + λ₂·R_hash + λ₃·R_ret
 from __future__ import annotations
 
 import math
-from collections import defaultdict
+from collections import defaultdict, deque
+from typing import Deque
 
 import torch
 import torch.nn.functional as F
@@ -73,9 +74,15 @@ class BucketSurpriseRepetition:
         self.k = k
         self.lookback_delta = lookback_delta
 
-        # Per-bucket state
+        # Per-bucket state. ``_surprise_history`` is a bounded deque so a
+        # long run with many distinct buckets does not leak memory — only
+        # the last (lookback_delta + 1) values are needed for the trend
+        # comparison; we keep ~2x for headroom.
+        self._history_cap = max(2, 2 * lookback_delta + 2)
         self._surprise_ema: dict[int, float] = defaultdict(float)
-        self._surprise_history: dict[int, list[float]] = defaultdict(list)
+        self._surprise_history: dict[int, Deque[float]] = defaultdict(
+            lambda: deque(maxlen=self._history_cap)
+        )
         self._count: dict[int, int] = defaultdict(int)
 
     def update(self, bucket_id: int, surprise: float) -> float:
@@ -136,16 +143,20 @@ class BucketSurpriseRepetition:
         keep = self.lookback_delta + 1
         return {
             "_surprise_ema": dict(self._surprise_ema),
-            "_surprise_history": {k: list(v[-keep:]) for k, v in self._surprise_history.items()},
+            "_surprise_history": {
+                k: list(v)[-keep:] for k, v in self._surprise_history.items()
+            },
             "_count": dict(self._count),
         }
 
     def load_state_dict(self, state: dict) -> None:
-        from collections import defaultdict
         self._surprise_ema = defaultdict(float, state.get("_surprise_ema", {}))
-        self._surprise_history = defaultdict(list)
+        self._surprise_history = defaultdict(
+            lambda: deque(maxlen=self._history_cap)
+        )
         for k, v in state.get("_surprise_history", {}).items():
-            self._surprise_history[int(k) if isinstance(k, str) and k.lstrip("-").isdigit() else k] = list(v)
+            key = int(k) if isinstance(k, str) and k.lstrip("-").isdigit() else k
+            self._surprise_history[key] = deque(list(v), maxlen=self._history_cap)
         self._count = defaultdict(int, state.get("_count", {}))
 
 

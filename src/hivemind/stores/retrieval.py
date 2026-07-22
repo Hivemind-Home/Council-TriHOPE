@@ -17,12 +17,22 @@ import torch.nn.functional as F
 
 @dataclass
 class RetrievalEntry:
-    """A single entry in the retrieval store."""
+    """A single entry in the retrieval store.
+
+    Theory 101 §7 prescribes storing the embedding, bucket id, teacher
+    id, teacher soft targets, and metadata. We carry the embedding +
+    bookkeeping fields directly; ``teacher_output_text`` holds the
+    teacher's text response (the cheap, always-available proxy for
+    "soft targets"); per-token logits would be too large to keep in
+    memory and live in the on-disk teacher cache instead.
+    """
 
     embedding: torch.Tensor  # [d]
     teacher_id: int
     bucket_id: int
     step: int
+    teacher_name: str = ""
+    teacher_output_text: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -95,6 +105,8 @@ class RetrievalStore:
                     "teacher_id": int(e.teacher_id),
                     "bucket_id": int(e.bucket_id),
                     "step": int(e.step),
+                    "teacher_name": str(e.teacher_name),
+                    "teacher_output_text": str(e.teacher_output_text),
                     "metadata": dict(e.metadata),
                 }
                 for e in self._buffer
@@ -110,6 +122,8 @@ class RetrievalStore:
                     teacher_id=int(raw["teacher_id"]),
                     bucket_id=int(raw["bucket_id"]),
                     step=int(raw["step"]),
+                    teacher_name=str(raw.get("teacher_name", "")),
+                    teacher_output_text=str(raw.get("teacher_output_text", "")),
                     metadata=dict(raw.get("metadata", {})),
                 )
             )

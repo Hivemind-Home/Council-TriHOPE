@@ -36,11 +36,24 @@ class RegularizationConfig:
 
 
 def compute_weight_decay(params: Iterable[nn.Parameter]) -> torch.Tensor:
-    """L2 weight decay: ``||θ||²₂``."""
-    total = torch.tensor(0.0)
+    """L2 weight decay: ``||θ||²₂``.
+
+    Note: prefer the optimizer's decoupled ``weight_decay`` (AdamW) over
+    adding this as a loss term — it avoids materializing a fp32 copy of
+    every parameter (~16 GB peak for a 4B model). Kept here for ablations
+    that explicitly want the term in the loss.
+    """
+    total = torch.zeros((), dtype=torch.float32)
     for p in params:
-        if p.requires_grad:
-            total = total + p.float().pow(2).sum()
+        if not p.requires_grad:
+            continue
+        # Accumulate in native dtype, only the scalar reduction is upcast,
+        # so peak temp memory is one ``p.pow(2)`` (same dtype/size as p)
+        # instead of a full fp32 copy.
+        s = p.pow(2).sum()
+        if total.device != s.device:
+            total = total.to(s.device)
+        total = total + s.to(torch.float32)
     return total
 
 
