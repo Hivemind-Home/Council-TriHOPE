@@ -38,11 +38,18 @@ from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
 from .distillation import DistillationConfig, compute_distillation_objective
 from .embedding import SharedEmbedding
-from .evaluation import EvaluationConfig, ForgettingTracker, run_evaluation
+from .evaluation import (
+    EvaluationConfig,
+    ForgettingTracker,
+    PhaseEvalTracker,
+    exact_match_eval,
+    run_evaluation,
+)
 from .logging_utils import BaseLogger, init_logger
 from .optim.factory import build_optimizer
 from .optim.masked_adamw import MaskedAdamW
 from .regularization import RegularizationConfig, compute_total_regularization
+from .profiling import RunProfiler, write_run_summary
 from .stores.fast import FastStore
 from .stores.permanent import PermanentStore
 from .stores.retrieval import RetrievalStore
@@ -430,12 +437,19 @@ def run_training_loop(
 
     # Per-domain validation loaders (HF path only; synthetic skips eval).
     eval_cfg_raw = cfg.get("eval", {}) or {}
+    em_raw = eval_cfg_raw.get("exact_match", {}) or {}
     eval_config = EvaluationConfig(
         enabled=bool(eval_cfg_raw.get("enabled", False)),
         interval=int(eval_cfg_raw.get("interval", 500)),
         max_batches=int(eval_cfg_raw.get("max_batches", 32)),
         track_forgetting=bool(eval_cfg_raw.get("track_forgetting", True)),
         lora_sparsity_threshold=float(eval_cfg_raw.get("lora_sparsity_threshold", 1e-4)),
+        at_phase_boundaries=bool(eval_cfg_raw.get("at_phase_boundaries", True)),
+        on_consolidation=bool(eval_cfg_raw.get("on_consolidation", False)),
+        exact_match_enabled=bool(em_raw.get("enabled", False)),
+        exact_match_domains=list(em_raw.get("domains", ["math"])),
+        exact_match_samples=int(em_raw.get("num_samples", 64)),
+        exact_match_max_new_tokens=int(em_raw.get("max_new_tokens", 64)),
     )
     val_loaders: dict[str, Any] = {}
     if eval_config.enabled and data_source == "hf":
@@ -458,6 +472,29 @@ def run_training_loop(
             except RuntimeError as exc:
                 print(f"eval: skipping domain {name}: {exc}")
     forgetting_tracker = ForgettingTracker() if eval_config.track_forgetting else None
+    phase_tracker = PhaseEvalTracker() if eval_config.enabled else None
+
+    # Gold-label exact-match probes: fixed rows from the validation split.
+    em_probes: dict[str, Any] = {}
+    em_tokenizer = None
+    if eval_config.enabled and eval_config.exact_match_enabled and val_loaders:
+        from .evaluation import build_gold_probes
+
+        for name, loader in val_loaders.items():
+            if name not in eval_config.exact_match_domains:
+                continue
+            probes = build_gold_probes(
+                loader.dataset,
+                [name],
+                num_samples=eval_config.exact_match_samples,
+                seed=int(train_cfg.get("seed", 42)),
+            )
+            em_probes.update(probes)
+            if em_tokenizer is None:
+                em_tokenizer = getattr(loader.collate_fn, "tokenizer", None)
+        if em_probes and em_tokenizer is None:
+            print("eval: exact_match enabled but no tokenizer found; disabling.")
+            em_probes = {}
 
     # Logger
     log_cfg = OmegaConf.to_container(cfg.get("logging", {}), resolve=True) or {}
@@ -471,6 +508,28 @@ def run_training_loop(
         log_cfg.get("events_path", "logs/events.jsonl"), enabled=trace_enabled
     )
     ledger = ModuleLedger()
+
+    # Profiling (memory + wall-clock; the paper reports both).
+    prof_raw = cfg.get("profiling", None)
+    prof_cfg = (
+        OmegaConf.to_container(prof_raw, resolve=True)
+        if OmegaConf.is_config(prof_raw)
+        else dict(prof_raw or {})
+    )
+    profiler = RunProfiler(
+        device=device,
+        enabled=bool(prof_cfg.get("enabled", True)),
+        sync_cuda=bool(prof_cfg.get("sync_cuda", False)),
+        ema_beta=float(prof_cfg.get("ema_beta", 0.98)),
+    )
+    # run_summary.json destination: explicit run.dir, else next to the
+    # metrics file when logging is on, else skipped entirely.
+    run_raw = cfg.get("run", None)
+    run_dir = run_raw.get("dir") if run_raw is not None else None
+    if run_dir is None and log_cfg.get("enabled"):
+        from pathlib import Path as _Path
+
+        run_dir = str(_Path(str(log_cfg.get("path", "logs/metrics.jsonl"))).parent)
 
     # Mixed precision
     mp_cfg = train_cfg.get("mixed_precision", {})
@@ -505,6 +564,7 @@ def run_training_loop(
             forgetting=forgetting_tracker,
             ledger=ledger,
             sampler=data_sampler,
+            phase_eval=phase_tracker,
             map_location=str(device),
         )
         start_step = int(meta.get("step", 0)) + 1
@@ -582,6 +642,7 @@ def run_training_loop(
                 forgetting=forgetting_tracker,
                 ledger=ledger,
                 sampler=data_sampler,
+                phase_eval=phase_tracker,
                 extra={
                     "interrupted": reason,
                     **(
@@ -616,6 +677,8 @@ def run_training_loop(
     )
 
     for step in pbar:
+        profiler.step_start()
+
         # Stream phase bookkeeping (boundaries feed the trace + analysis).
         if stream_schedule is not None:
             phase_name = stream_schedule.phase_at(step).name
@@ -624,23 +687,30 @@ def run_training_loop(
                     event_trace.emit(
                         {"type": "phase_end", "step": step - 1, "phase": current_phase}
                     )
+                    mem = profiler.on_phase_end(current_phase)
+                    if mem:
+                        event_trace.emit(
+                            {"type": "phase_memory", "step": step - 1, **mem}
+                        )
                 event_trace.emit(
                     {"type": "phase_start", "step": step, "phase": phase_name}
                 )
+                profiler.on_phase_start(phase_name)
                 current_phase = phase_name
 
         # Get batch
-        try:
-            raw = next(data_iter)
-        except StopIteration:
-            if stream_schedule is not None:
-                # The stream is finite by construction; running past it means
-                # a step-accounting bug, not an epoch boundary.
-                raise RuntimeError(
-                    f"Stream exhausted at step {step} (< {steps})"
-                ) from None
-            data_iter = iter(dataloader)
-            raw = next(data_iter)
+        with profiler.timer.section("data"):
+            try:
+                raw = next(data_iter)
+            except StopIteration:
+                if stream_schedule is not None:
+                    # The stream is finite by construction; running past it
+                    # means a step-accounting bug, not an epoch boundary.
+                    raise RuntimeError(
+                        f"Stream exhausted at step {step} (< {steps})"
+                    ) from None
+                data_iter = iter(dataloader)
+                raw = next(data_iter)
 
         batch = _unpack_batch(raw, device)
         tokens = batch["input_ids"]  # [B, T]
@@ -664,19 +734,20 @@ def run_training_loop(
         # === Step 3: Teacher forward (cache fast-path if batch carries logits) ===
         cached_logits = batch.get("teacher_logits")
         cached_mask = batch.get("teacher_logits_mask")
-        teacher_logits = batch_teacher_forward(
-            tokens,
-            teacher_indices,
-            registry.teachers,
-            cfg.model.vocab_size,
-            cached_logits=cached_logits,
-            cached_logits_mask=cached_mask,
-        )
+        with profiler.timer.section("teacher"):
+            teacher_logits = batch_teacher_forward(
+                tokens,
+                teacher_indices,
+                registry.teachers,
+                cfg.model.vocab_size,
+                cached_logits=cached_logits,
+                cached_logits_mask=cached_mask,
+            )
 
         # === Step 4-6: Student forward + loss + backward ===
         optimizer.zero_grad()
 
-        with autocast_ctx:
+        with profiler.timer.section("forward"), autocast_ctx:
             student_logits = student(tokens)  # [B, T, V]
 
             # Regularization (incl. dropout-based consistency penalty if enabled)
@@ -705,8 +776,9 @@ def run_training_loop(
             )
 
         # Backward
-        scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
+        with profiler.timer.section("backward"):
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
 
         # === Step 7-8: Compute controller signals ===
         # Prefer the dataset-provided bucket when present (Theory 101 §4C);
@@ -725,14 +797,17 @@ def run_training_loop(
             bucket_id = teacher_indices[0].item() if teacher_indices.numel() > 0 else 0
         embedding = h_t[0] if h_t.numel() > 0 else None
 
-        module_signals = signal_computer.compute_all(
-            optimizer=optimizer,
-            modules=module_index,
-            bucket_id=bucket_id,
-            embedding=embedding,
-        )
+        with profiler.timer.section("signals"):
+            module_signals = signal_computer.compute_all(
+                optimizer=optimizer,
+                modules=module_index,
+                bucket_id=bucket_id,
+                embedding=embedding,
+            )
 
         # === Step 9: R/F/P routing policy ===
+        policy_section = profiler.timer.section("policy_write")
+        policy_section.__enter__()
         batch_conf = batch.get("teacher_confidence")
         conf_mean = (
             float(batch_conf.float().mean().item())
@@ -799,21 +874,27 @@ def run_training_loop(
                 }
             )
 
+        policy_section.__exit__(None, None, None)
+
         # === Step 11: Masked optimizer step ===
         # Coordinates not opened by an action stay bit-identical (params,
         # moments, weight decay, bias-correction clocks — Theorem 1).
-        if masked_updates:
-            optimizer.set_masks(write_masks)
-        try:
-            scaler.step(optimizer)
-            scaler.update()
-        finally:
-            # A GradScaler inf/nan skip must not leak masks into the next step.
-            optimizer.clear_masks()
+        with profiler.timer.section("optimizer"):
+            if masked_updates:
+                optimizer.set_masks(write_masks)
+            try:
+                scaler.step(optimizer)
+                scaler.update()
+            finally:
+                # A GradScaler inf/nan skip must not leak masks into the
+                # next step.
+                optimizer.clear_masks()
 
         # === Step 12: Consolidation check ===
         # Record the batch for distill-based consolidation replay (no-op
         # for the direct strategy).
+        consolidation_section = profiler.timer.section("consolidation")
+        consolidation_section.__enter__()
         consolidator.record_batch(tokens)
         consolidated = []
         # ``disable_stores: [P]`` must also stop the periodic sweep — with an
@@ -841,6 +922,7 @@ def run_training_loop(
                         "success": True,
                     }
                 )
+        consolidation_section.__exit__(None, None, None)
 
         # === Step 13: Logging ===
         if step % log_interval == 0 or step == steps - 1:
@@ -865,6 +947,7 @@ def run_training_loop(
                 "retrieval/buffer_size": r_store.size,
                 "consolidation/count": len(consolidated),
             }
+            metrics.update(profiler.step_metrics())
             if current_phase is not None:
                 metrics["phase"] = current_phase
             if isinstance(router, MetadataRouter):
@@ -879,13 +962,25 @@ def run_training_loop(
             logger.log(metrics, step)
             final_metrics = metrics
 
-        # Evaluation
+        # Evaluation — interval, phase-boundary, and post-merge triggers.
+        boundary_phase = None
+        if stream_schedule is not None and eval_config.at_phase_boundaries:
+            next_differs = (
+                step + 1 < steps
+                and stream_schedule.phase_at(step + 1).name != current_phase
+            )
+            if next_differs or step == steps - 1:
+                boundary_phase = stream_schedule.phase_at(step)
+        interval_due = (
+            eval_config.interval > 0
+            and step > 0
+            and (step % eval_config.interval == 0 or step == steps - 1)
+        )
+        consolidation_due = bool(consolidated) and eval_config.on_consolidation
         if (
             eval_config.enabled
             and val_loaders
-            and eval_config.interval > 0
-            and step > 0
-            and (step % eval_config.interval == 0 or step == steps - 1)
+            and (interval_due or boundary_phase is not None or consolidation_due)
         ):
             eval_metrics = run_evaluation(
                 student=student,
@@ -896,6 +991,59 @@ def run_training_loop(
                 r_store=r_store,
                 probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
             )
+
+            # Gold exact-match probes only at phase boundaries (generation
+            # is expensive).
+            if em_probes and em_tokenizer is not None and boundary_phase is not None:
+                for name, probe in em_probes.items():
+                    eval_metrics[f"eval/{name}/exact_match"] = exact_match_eval(
+                        student,
+                        em_tokenizer,
+                        probe,
+                        device,
+                        max_new_tokens=eval_config.exact_match_max_new_tokens,
+                    )
+
+            # Phase-resolved retention accounting (the paper's forgetting
+            # numbers segment by phase, not just first-seen baselines).
+            if boundary_phase is not None and phase_tracker is not None:
+                phase_domains = (
+                    list(boundary_phase.domains)
+                    if boundary_phase.domains
+                    else ([boundary_phase.domain] if boundary_phase.domain else [])
+                )
+                domain_loss = {
+                    d: eval_metrics[f"eval/{d}/loss"]
+                    for d in val_loaders
+                    if f"eval/{d}/loss" in eval_metrics
+                }
+                domain_em = {
+                    d: eval_metrics[f"eval/{d}/exact_match"]
+                    for d in val_loaders
+                    if f"eval/{d}/exact_match" in eval_metrics
+                }
+                deltas = phase_tracker.record(
+                    phase=boundary_phase.name,
+                    step=step,
+                    phase_domains=phase_domains,
+                    domain_loss=domain_loss,
+                    domain_em=domain_em or None,
+                )
+                for d, delta in deltas.items():
+                    eval_metrics[f"eval/{d}/retention_delta"] = delta
+                event_trace.emit(
+                    {
+                        "type": "phase_eval",
+                        "step": step,
+                        "phase": boundary_phase.name,
+                        "loss": domain_loss,
+                        "em": domain_em,
+                        "retention_delta": deltas,
+                    }
+                )
+
+            if consolidation_due:
+                eval_metrics["eval/trigger"] = "consolidation"
             logger.log(eval_metrics, step)
             # Surface key eval numbers on the progress bar
             macro = eval_metrics.get("eval/macro_loss")
@@ -920,6 +1068,7 @@ def run_training_loop(
                 forgetting=forgetting_tracker,
                 ledger=ledger,
                 sampler=data_sampler,
+                phase_eval=phase_tracker,
                 extra={
                     "final_metrics": final_metrics,
                     **(
@@ -933,6 +1082,7 @@ def run_training_loop(
         # Mark this step as fully complete (signals + writes + optimizer
         # step + maybe checkpoint all finished) so the SIGINT handler's
         # emergency save resumes from the right place.
+        profiler.step_end(tokens_in_step=int(tokens.numel()))
         last_step = step
         if _interrupted["flag"]:
             break
@@ -942,6 +1092,23 @@ def run_training_loop(
 
     if _interrupted["flag"]:
         _emergency_save("SIGINT")
+
+    if current_phase is not None:
+        profiler.on_phase_end(current_phase)
+    if run_dir is not None:
+        write_run_summary(
+            run_dir,
+            profiler=profiler,
+            final_metrics=final_metrics,
+            retention=phase_tracker.retention_table() if phase_tracker else None,
+            ledger_totals=ledger.totals(),
+            interrupted=bool(_interrupted["flag"]),
+            extra=(
+                {"stream_digest": stream_schedule.config_digest()}
+                if stream_schedule is not None
+                else None
+            ),
+        )
 
     event_trace.close()
     logger.close()

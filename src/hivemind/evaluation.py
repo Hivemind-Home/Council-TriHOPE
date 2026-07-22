@@ -41,6 +41,13 @@ class EvaluationConfig:
     max_batches: int = 32        # cap per-domain batches for speed
     track_forgetting: bool = True
     lora_sparsity_threshold: float = 1e-4
+    at_phase_boundaries: bool = True   # eval at the last step of each stream phase
+    on_consolidation: bool = False     # eval right after any F→P merge
+    # Gold-label exact-match probes (generation; phase boundaries only).
+    exact_match_enabled: bool = False
+    exact_match_domains: list[str] = field(default_factory=lambda: ["math"])
+    exact_match_samples: int = 64
+    exact_match_max_new_tokens: int = 64
 
 
 @dataclass
@@ -61,6 +68,81 @@ class DomainMetrics:
     def perplexity(self) -> float:
         loss = self.mean_loss
         return math.exp(min(20.0, loss))  # cap to prevent overflow
+
+
+class PhaseEvalTracker:
+    """Per-(domain, phase-boundary) eval history and retention deltas.
+
+    Retention delta for domain ``d`` = current eval loss on ``d`` minus the
+    loss measured at the end of the phase that *trained* ``d`` (its
+    "own-phase" loss). Positive = the model got worse on ``d`` after moving
+    on — the phase-resolved forgetting number the paper reports.
+    """
+
+    def __init__(self) -> None:
+        self._own_phase_loss: dict[str, float] = {}
+        self._own_phase_em: dict[str, float] = {}
+        self._history: list[dict[str, Any]] = []
+
+    def record(
+        self,
+        *,
+        phase: str,
+        step: int,
+        phase_domains: list[str],
+        domain_loss: dict[str, float],
+        domain_em: Optional[dict[str, float]] = None,
+    ) -> dict[str, float]:
+        """Record a phase-boundary eval; returns per-domain retention deltas.
+
+        ``phase_domains`` are the domains trained during the phase that just
+        ended — their own-phase baselines are refreshed AFTER deltas are
+        computed against the previous baselines.
+        """
+        domain_em = domain_em or {}
+        deltas: dict[str, float] = {}
+        for d, loss in domain_loss.items():
+            if d in self._own_phase_loss and d not in phase_domains:
+                deltas[d] = loss - self._own_phase_loss[d]
+        for d in phase_domains:
+            if d in domain_loss:
+                self._own_phase_loss[d] = domain_loss[d]
+            if d in domain_em:
+                self._own_phase_em[d] = domain_em[d]
+        self._history.append(
+            {
+                "phase": phase,
+                "step": int(step),
+                "loss": dict(domain_loss),
+                "em": dict(domain_em),
+                "retention_delta": dict(deltas),
+            }
+        )
+        return deltas
+
+    @property
+    def history(self) -> list[dict[str, Any]]:
+        return list(self._history)
+
+    def retention_table(self) -> dict[str, Any]:
+        """Summary for run_summary.json / paper tables."""
+        return {
+            "own_phase_loss": dict(self._own_phase_loss),
+            "own_phase_em": dict(self._own_phase_em),
+            "history": self.history,
+        }
+
+    def state_dict(self) -> dict:
+        return {
+            "own_phase_loss": dict(self._own_phase_loss),
+            "own_phase_em": dict(self._own_phase_em),
+            "history": list(self._history),
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        self._own_phase_loss = dict(state.get("own_phase_loss", {}))
+        self._own_phase_em = dict(state.get("own_phase_em", {}))
+        self._history = list(state.get("history", []))
 
 
 class ForgettingTracker:
@@ -222,3 +304,107 @@ def run_evaluation(
 
     student.train()
     return out
+
+
+# -- gold-label exact match (generation probes) ------------------------------
+
+
+@dataclass
+class GoldProbeSet:
+    """A fixed, seed-deterministic set of gold-labeled rows for one domain."""
+
+    domain: str
+    rows: list[dict[str, Any]]
+
+
+def build_gold_probes(
+    dataset: Any,  # HivemindHFDataset (needs gold_indices / __getitem__)
+    domains: list[str],
+    num_samples: int,
+    seed: int,
+) -> dict[str, GoldProbeSet]:
+    """Pick a fixed probe set per domain from rows with ``has_gold_label``."""
+    import numpy as np
+
+    probes: dict[str, GoldProbeSet] = {}
+    for domain in domains:
+        try:
+            gold = list(dataset.gold_indices(domain))
+        except (KeyError, AttributeError):
+            continue
+        if not gold:
+            continue
+        rng = np.random.default_rng(seed + len(domain))
+        if len(gold) > num_samples:
+            gold = [int(i) for i in rng.choice(gold, size=num_samples, replace=False)]
+        rows = [dataset[i] for i in gold]
+        rows = [r for r in rows if r.get("target_text")]
+        if rows:
+            probes[domain] = GoldProbeSet(domain=domain, rows=rows)
+    return probes
+
+
+def normalize_answer(text: str) -> str:
+    """Normalize a model/gold answer for exact-match comparison.
+
+    Prefers ``\\boxed{...}`` content, then the last number in the text,
+    else the lowercased stripped string.
+    """
+    import re
+
+    text = (text or "").strip()
+    boxed = re.search(r"\\boxed\{([^}]*)\}", text)
+    if boxed:
+        text = boxed.group(1).strip()
+    numbers = re.findall(r"-?\d+(?:\.\d+)?", text.replace(",", ""))
+    if numbers:
+        num = numbers[-1]
+        return num.rstrip("0").rstrip(".") if "." in num else num
+    return " ".join(text.lower().split())
+
+
+@torch.no_grad()
+def exact_match_eval(
+    student: nn.Module,
+    tokenizer: Any,
+    probes: GoldProbeSet,
+    device: torch.device,
+    max_new_tokens: int = 64,
+    max_prompt_tokens: int = 512,
+) -> float:
+    """Greedy-decode each probe prompt and exact-match against target_text.
+
+    Uses the plain ``student(tokens) -> logits`` interface so it works for
+    every backbone (in-repo, HF, unsloth). One prompt at a time — probes run
+    only at phase boundaries, so throughput is acceptable.
+    """
+    student.eval()
+    eos_id = getattr(tokenizer, "eos_token_id", None)
+    correct = 0
+
+    for row in probes.rows:
+        prompt_ids = tokenizer(
+            row["input_text"],
+            truncation=True,
+            max_length=max_prompt_tokens,
+            return_tensors="pt",
+        )["input_ids"].to(device)
+
+        generated: list[int] = []
+        tokens = prompt_ids
+        for _ in range(max_new_tokens):
+            logits = student(tokens)
+            next_id = int(logits[0, -1].argmax().item())
+            if eos_id is not None and next_id == eos_id:
+                break
+            generated.append(next_id)
+            tokens = torch.cat(
+                [tokens, torch.tensor([[next_id]], device=device)], dim=1
+            )
+
+        answer = tokenizer.decode(generated, skip_special_tokens=True)
+        if normalize_answer(answer) == normalize_answer(row["target_text"]):
+            correct += 1
+
+    student.train()
+    return correct / max(1, len(probes.rows))

@@ -49,7 +49,7 @@ import torch.nn as nn
 from .controller.consolidation import ConsolidationScheduler
 from .controller.signals import SignalComputer
 from .data.sampler import StatefulSampler
-from .evaluation import ForgettingTracker
+from .evaluation import ForgettingTracker, PhaseEvalTracker
 from .stores.retrieval import RetrievalStore
 from .tracing import ModuleLedger
 
@@ -124,6 +124,7 @@ class CheckpointManager:
         forgetting: Optional[ForgettingTracker] = None,
         ledger: Optional[ModuleLedger] = None,
         sampler: Optional[StatefulSampler] = None,
+        phase_eval: Optional[PhaseEvalTracker] = None,
         extra: dict[str, Any] | None = None,
     ) -> Optional[Path]:
         if not self.cfg.enabled:
@@ -149,6 +150,8 @@ class CheckpointManager:
                 torch.save(ledger.state_dict(), tmp_dir / "ledger.pt")
             if sampler is not None:
                 torch.save(sampler.state_dict(), tmp_dir / "data.pt")
+            if phase_eval is not None:
+                torch.save(phase_eval.state_dict(), tmp_dir / "phase_eval.pt")
 
             meta = {
                 "step": int(step),
@@ -228,6 +231,7 @@ class CheckpointManager:
         forgetting: Optional[ForgettingTracker] = None,
         ledger: Optional[ModuleLedger] = None,
         sampler: Optional[StatefulSampler] = None,
+        phase_eval: Optional[PhaseEvalTracker] = None,
         map_location: str | torch.device = "cpu",
     ) -> dict[str, Any]:
         # weights_only=False: our own checkpoints carry numpy arrays in
@@ -259,6 +263,9 @@ class CheckpointManager:
         data_path = path / "data.pt"
         if sampler is not None and data_path.exists():
             sampler.load_state_dict(torch.load(data_path, map_location="cpu", weights_only=False))
+        phase_eval_path = path / "phase_eval.pt"
+        if phase_eval is not None and phase_eval_path.exists():
+            phase_eval.load_state_dict(torch.load(phase_eval_path, map_location="cpu", weights_only=False))
 
         meta = json.loads((path / "meta.json").read_text())
         logger.info("checkpoint loaded: %s (step=%d)", path, meta["step"])
