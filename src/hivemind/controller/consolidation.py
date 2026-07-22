@@ -174,6 +174,44 @@ class ConsolidationScheduler:
         ]
         self.optimizer.reset_state_for_params(lora_params)
 
+    def all_f_modules(self) -> list[ModuleId]:
+        """Every F-type module that actually has LoRA adapters."""
+        out: list[ModuleId] = []
+        num_layers = len(self.model.blocks)  # type: ignore[attr-defined]
+        for layer in range(num_layers):
+            for block_type in ("attn", "ffn"):
+                mid = ModuleId(layer, block_type, "F")
+                if self._get_lora_adapters(mid):
+                    out.append(mid)
+        return out
+
+    def force_consolidate(
+        self, module_ids: Optional[Iterable[ModuleId]] = None
+    ) -> list[ModuleId]:
+        """Merge modules NOW, bypassing threshold re-validation.
+
+        Debug/experiment path for the incorrect-consolidation study: merges
+        the given F-modules (default: all of them) regardless of signals.
+        Optimizer state is still reset (Corollary 2), so the merge itself
+        remains mechanically correct — only the *timing* is wrong.
+        """
+        targets = list(module_ids) if module_ids is not None else self.all_f_modules()
+        merged_ids: list[ModuleId] = []
+        for mid in targets:
+            if mid.param_type != "F":
+                continue
+            if self.config.merge_strategy == "distill":
+                merged = self._consolidate_distill(mid)
+            else:
+                merged = self.p_store.merge_lora_for_block(
+                    self.model, mid.layer, mid.block_type
+                )
+            if merged > 0:
+                self._reset_adapter_optimizer_state(mid)
+                self._pending_p.discard(mid)
+                merged_ids.append(mid)
+        return merged_ids
+
     # -- strategies --------------------------------------------------------
 
     def _get_lora_adapters(self, mid: ModuleId) -> list[LoRAAdapter]:

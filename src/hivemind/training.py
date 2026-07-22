@@ -24,6 +24,7 @@ from .controller.config import (
     AblationConfig,
     ConsolidationConfig,
     ControllerConfig,
+    DebugConfig,
     PolicyConfig,
     RepetitionConfig,
     StabilityConfig,
@@ -86,11 +87,22 @@ def _build_student(cfg: DictConfig, device: torch.device) -> nn.Module:
       family) and injects LoRA in-place on the target projections.
     """
     model_cfg = cfg.model
+    lora_rank = int(model_cfg.lora.get("rank", 8))
     lora_cfg = LoRAConfig(
-        rank=model_cfg.lora.get("rank", 8),
+        rank=max(1, lora_rank),
         alpha=model_cfg.lora.get("alpha", 16.0),
         dropout=model_cfg.lora.get("dropout", 0.0),
-        target_modules=list(model_cfg.lora.get("target_modules", ["q", "k", "v", "o", "up", "gate", "down"])),
+        # rank <= 0 disables LoRA entirely (full-FT baseline: no adapters,
+        # no F-store — plain base model).
+        target_modules=(
+            []
+            if lora_rank <= 0
+            else list(
+                model_cfg.lora.get(
+                    "target_modules", ["q", "k", "v", "o", "up", "gate", "down"]
+                )
+            )
+        ),
     )
 
     backbone = str(model_cfg.get("backbone", "in_repo"))
@@ -217,7 +229,11 @@ def _sub_config(node: Any, key: str) -> dict[str, Any]:
 def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
     """Build controller config from hydra config."""
     ctrl = cfg.get("controller", None)
+    enabled = True
+    if ctrl is not None:
+        enabled = bool(ctrl.get("enabled", True))
     return ControllerConfig(
+        enabled=enabled,
         surprise=SurpriseConfig(**_sub_config(ctrl, "surprise")),
         stability=StabilityConfig(**_sub_config(ctrl, "stability")),
         repetition=RepetitionConfig(**_sub_config(ctrl, "repetition")),
@@ -225,6 +241,7 @@ def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
         consolidation=ConsolidationConfig(**_sub_config(ctrl, "consolidation")),
         writer=WriterConfig(**_sub_config(ctrl, "writer")),
         ablation=AblationConfig(**_sub_config(ctrl, "ablation")),
+        debug=DebugConfig(**_sub_config(ctrl, "debug")),
     )
 
 
@@ -322,6 +339,18 @@ def run_training_loop(
     else:
         router = TeacherRouter()
 
+    # Baseline trainability: "all" (default) or "lora" (freeze base+shared —
+    # the plain-LoRA baseline). Must run before the optimizer is built.
+    trainable = str(train_cfg.get("trainable", "all"))
+    if trainable == "lora":
+        groups = student.get_param_groups()
+        for p in groups.get("P", []):
+            p.requires_grad = False
+        for p in groups.get("shared", []):
+            p.requires_grad = False
+    elif trainable != "all":
+        raise ValueError(f"train.trainable must be 'all' or 'lora', got {trainable!r}")
+
     # Optimizer
     optim_cfg = OmegaConf.to_container(cfg.optim, resolve=True)
     optimizer = build_optimizer(student, optim_cfg)
@@ -329,6 +358,7 @@ def run_training_loop(
     # default-closed and only update when an R/F/P action opens them.
     # ``optim.masked: false`` is an escape hatch that leaves every param
     # open — MaskedAdamW then reduces exactly to plain AdamW (Lemma 1).
+    # A disabled controller implies unmasked (baseline) behavior.
     masked_updates = bool(optim_cfg.get("masked", True))
 
     # Distillation config
@@ -358,8 +388,15 @@ def run_training_loop(
     module_index = build_module_index(student)
     module_map = {m.id: m for m in module_index}
     signal_computer = SignalComputer(ctrl_config, module_index)
-    policy = RFPPolicy(ctrl_config.policy, ablation=ctrl_config.ablation)
+    policy = RFPPolicy(
+        ctrl_config.policy,
+        ablation=ctrl_config.ablation,
+        override=ctrl_config.debug.policy_override,
+    )
+    controller_enabled = ctrl_config.enabled
+    masked_updates = masked_updates and controller_enabled
     p_store_disabled = "P" in ctrl_config.ablation.disable_stores
+    force_steps = set(ctrl_config.debug.force_consolidate_steps)
 
     if masked_updates:
         # Controller-indexed params (attn/ffn base + LoRA) default to closed;
@@ -396,6 +433,7 @@ def run_training_loop(
         dir=str(ckpt_cfg_raw.get("dir", "checkpoints")),
         save_every=int(ckpt_cfg_raw.get("save_every", 1000)),
         keep_last=int(ckpt_cfg_raw.get("keep_last", 3)),
+        keep_tagged=int(ckpt_cfg_raw.get("keep_tagged", 4)),
         resume_from=ckpt_cfg_raw.get("resume_from"),
     )
     ckpt_manager = CheckpointManager(ckpt_cfg)
@@ -656,6 +694,37 @@ def run_training_loop(
         except Exception as exc:  # noqa: BLE001 — best-effort on shutdown
             print(f"[hivemind] emergency save failed: {exc}")
 
+    def _pre_merge_save(at_step: int) -> None:
+        """Tagged rollback checkpoint taken right before a merge.
+
+        Resuming from it continues at ``at_step + 1`` WITHOUT the merge —
+        i.e. the counterfactual run in which the promotion never happened.
+        """
+        if not ckpt_cfg.enabled:
+            return
+        event_trace.flush()
+        ckpt_manager.save(
+            step=at_step,
+            student=student,
+            optimizer=optimizer,
+            signal_computer=signal_computer,
+            r_store=r_store,
+            consolidator=consolidator,
+            forgetting=forgetting_tracker,
+            ledger=ledger,
+            sampler=data_sampler,
+            phase_eval=phase_tracker,
+            tag="pre_merge",
+            extra={
+                "reason": "pre_merge",
+                **(
+                    {"stream_digest": stream_schedule.config_digest()}
+                    if stream_schedule is not None
+                    else {}
+                ),
+            },
+        )
+
     import signal
 
     _interrupted = {"flag": False}
@@ -798,11 +867,15 @@ def run_training_loop(
         embedding = h_t[0] if h_t.numel() > 0 else None
 
         with profiler.timer.section("signals"):
-            module_signals = signal_computer.compute_all(
-                optimizer=optimizer,
-                modules=module_index,
-                bucket_id=bucket_id,
-                embedding=embedding,
+            module_signals = (
+                signal_computer.compute_all(
+                    optimizer=optimizer,
+                    modules=module_index,
+                    bucket_id=bucket_id,
+                    embedding=embedding,
+                )
+                if controller_enabled
+                else {}
             )
 
         # === Step 9: R/F/P routing policy ===
@@ -814,7 +887,11 @@ def run_training_loop(
             if isinstance(batch_conf, torch.Tensor) and batch_conf.numel() > 0
             else None
         )
-        actions = policy.decide(module_signals, teacher_confidence=conf_mean)
+        actions = (
+            policy.decide(module_signals, teacher_confidence=conf_mean)
+            if controller_enabled
+            else []
+        )
 
         # Resolve the teacher info for the representative (first) sample —
         # mirrors the choice already made for ``embedding`` and ``bucket_id``
@@ -897,11 +974,9 @@ def run_training_loop(
         consolidation_section.__enter__()
         consolidator.record_batch(tokens)
         consolidated = []
-        # ``disable_stores: [P]`` must also stop the periodic sweep — with an
-        # empty pending set the scheduler would otherwise merge unconditionally.
-        if not p_store_disabled and consolidator.should_check(step):
-            consolidated = consolidator.consolidate(module_signals)
-            for mid in consolidated:
+
+        def _trace_merges(mids: list[ModuleId], forced: bool) -> None:
+            for mid in mids:
                 ledger.record_consolidation(str(mid), step)
                 sig = module_signals.get(mid)
                 event_trace.emit(
@@ -918,10 +993,34 @@ def run_training_loop(
                             if sig is not None
                             else {}
                         ),
-                        "forced": False,
+                        "forced": forced,
                         "success": True,
                     }
                 )
+
+        # ``disable_stores: [P]`` must also stop the periodic sweep — with an
+        # empty pending set the scheduler would otherwise merge unconditionally.
+        if (
+            controller_enabled
+            and not p_store_disabled
+            and consolidator.should_check(step)
+        ):
+            if (
+                ctrl_config.consolidation.checkpoint_before_merge
+                and consolidator.pending_p
+            ):
+                _pre_merge_save(step)
+            consolidated = consolidator.consolidate(module_signals)
+            _trace_merges(consolidated, forced=False)
+
+        # Forced (deliberately mistimed) consolidation — the incorrect-
+        # consolidation experiment. Bypasses all threshold validation.
+        if controller_enabled and step in force_steps:
+            if ctrl_config.consolidation.checkpoint_before_merge:
+                _pre_merge_save(step)
+            forced_merged = consolidator.force_consolidate()
+            _trace_merges(forced_merged, forced=True)
+            consolidated = consolidated + forced_merged
         consolidation_section.__exit__(None, None, None)
 
         # === Step 13: Logging ===

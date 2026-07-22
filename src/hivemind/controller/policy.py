@@ -38,9 +38,14 @@ class RFPPolicy:
         self,
         config: PolicyConfig | None = None,
         ablation: AblationConfig | None = None,
+        override: str | None = None,
     ) -> None:
         self.config = config or PolicyConfig()
         self.ablation = ablation or AblationConfig()
+        # Debug short-circuit: "always_p" | "always_f" | "always_r" replaces
+        # classification (and skips the confidence gate) — diagnostics fields
+        # are still populated so the trace stays informative.
+        self.override = override
 
     def decide(
         self,
@@ -88,14 +93,17 @@ class RFPPolicy:
             if sig.grad_norm == 0.0:
                 continue  # skip modules with no gradient
 
-            store = self._classify(sig)
+            if self.override is not None:
+                store = self.override.removeprefix("always_").upper()
+            else:
+                store = self._classify(sig)
 
-            # Step 3: teacher-confidence gate
-            if low_confidence:
-                if ab.confidence_gate == "force_r" and "R" not in ab.disable_stores:
-                    store = "R"
-                elif store == "P":
-                    store = "F"
+                # Step 3: teacher-confidence gate
+                if low_confidence:
+                    if ab.confidence_gate == "force_r" and "R" not in ab.disable_stores:
+                        store = "R"
+                    elif store == "P":
+                        store = "F"
             actions.append(StoreAction(
                 module_id=sig.module_id,
                 store=store,

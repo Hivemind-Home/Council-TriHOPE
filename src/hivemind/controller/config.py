@@ -72,6 +72,9 @@ class ConsolidationConfig:
     distill_lr: float = 1.0e-4
     distill_tau: float = 2.0
     distill_replay_size: int = 16
+    # Save a tagged rollback checkpoint immediately before any merge
+    # (needed by the incorrect-consolidation / rollback experiments).
+    checkpoint_before_merge: bool = False
 
 
 @dataclass
@@ -171,9 +174,32 @@ class AblationConfig:
 
 
 @dataclass
+class DebugConfig:
+    """Experiment-harness debug controls (incorrect-consolidation study).
+
+    ``force_consolidate_steps`` merges ALL F-modules at the given steps,
+    bypassing threshold re-validation — the "consolidate at the wrong time"
+    probe. ``policy_override`` short-circuits classification entirely.
+    Combine with ``consolidation.checkpoint_before_merge`` for rollback.
+    """
+
+    force_consolidate_steps: list[int] = field(default_factory=list)
+    policy_override: str | None = None  # None | always_p | always_f | always_r
+
+    def __post_init__(self) -> None:
+        if self.policy_override not in (None, "always_p", "always_f", "always_r"):
+            raise ValueError(
+                f"Unknown policy_override '{self.policy_override}'; "
+                "allowed: always_p | always_f | always_r"
+            )
+        self.force_consolidate_steps = [int(s) for s in self.force_consolidate_steps]
+
+
+@dataclass
 class ControllerConfig:
     """Full controller configuration."""
 
+    enabled: bool = True
     surprise: SurpriseConfig = field(default_factory=SurpriseConfig)
     stability: StabilityConfig = field(default_factory=StabilityConfig)
     repetition: RepetitionConfig = field(default_factory=RepetitionConfig)
@@ -181,3 +207,4 @@ class ControllerConfig:
     consolidation: ConsolidationConfig = field(default_factory=ConsolidationConfig)
     writer: WriterConfig = field(default_factory=WriterConfig)
     ablation: AblationConfig = field(default_factory=AblationConfig)
+    debug: DebugConfig = field(default_factory=DebugConfig)

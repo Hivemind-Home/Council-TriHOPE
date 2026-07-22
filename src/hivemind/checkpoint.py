@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import shutil
 import time
 from dataclasses import dataclass
@@ -62,7 +63,11 @@ class CheckpointConfig:
     dir: str = "checkpoints"
     save_every: int = 1000
     keep_last: int = 3
+    keep_tagged: int = 4  # cap for tagged (e.g. pre_merge rollback) dirs
     resume_from: Optional[str] = None  # "latest" | "{step}" | absolute path
+
+
+_UNTAGGED_RE = re.compile(r"^step_\d+$")
 
 
 def _split_student_state(model: nn.Module) -> tuple[dict, dict]:
@@ -125,13 +130,19 @@ class CheckpointManager:
         ledger: Optional[ModuleLedger] = None,
         sampler: Optional[StatefulSampler] = None,
         phase_eval: Optional[PhaseEvalTracker] = None,
+        tag: Optional[str] = None,
         extra: dict[str, Any] | None = None,
     ) -> Optional[Path]:
+        """Save a checkpoint; ``tag`` (e.g. ``"pre_merge"``) creates a
+        separately-pruned rollback directory that ``latest`` never resolves
+        to — resume from it explicitly via ``checkpoint.resume_from=<path>``.
+        """
         if not self.cfg.enabled:
             return None
 
-        step_dir = self.root / f"step_{step:08d}"
-        tmp_dir = self.root / f"_tmp_{step:08d}_{int(time.time())}"
+        suffix = f"_{tag}" if tag else ""
+        step_dir = self.root / f"step_{step:08d}{suffix}"
+        tmp_dir = self.root / f"_tmp_{step:08d}{suffix}_{int(time.time())}"
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -156,6 +167,7 @@ class CheckpointManager:
             meta = {
                 "step": int(step),
                 "timestamp": time.time(),
+                "tag": tag,
                 "extra": extra or {},
             }
             (tmp_dir / "meta.json").write_text(json.dumps(meta, indent=2))
@@ -166,14 +178,16 @@ class CheckpointManager:
             tmp_dir.rename(step_dir)
 
             # Update "latest" symlink (best effort — symlinks are unreliable
-            # on some filesystems so we also scan directory names on load)
-            latest = self.root / "latest"
-            try:
-                if latest.is_symlink() or latest.exists():
-                    latest.unlink()
-                latest.symlink_to(step_dir.name)
-            except OSError:
-                pass
+            # on some filesystems so we also scan directory names on load).
+            # Tagged rollback checkpoints never become "latest".
+            if tag is None:
+                latest = self.root / "latest"
+                try:
+                    if latest.is_symlink() or latest.exists():
+                        latest.unlink()
+                    latest.symlink_to(step_dir.name)
+                except OSError:
+                    pass
 
             self._prune()
             logger.info("checkpoint saved: %s", step_dir)
@@ -183,13 +197,17 @@ class CheckpointManager:
             raise
 
     def _prune(self) -> None:
-        if self.cfg.keep_last <= 0:
-            return
-        step_dirs = sorted(
-            [p for p in self.root.iterdir() if p.is_dir() and p.name.startswith("step_")]
-        )
-        for old in step_dirs[: -self.cfg.keep_last]:
-            shutil.rmtree(old, ignore_errors=True)
+        all_dirs = [
+            p for p in self.root.iterdir() if p.is_dir() and p.name.startswith("step_")
+        ]
+        untagged = sorted(p for p in all_dirs if _UNTAGGED_RE.match(p.name))
+        tagged = sorted(p for p in all_dirs if not _UNTAGGED_RE.match(p.name))
+        if self.cfg.keep_last > 0:
+            for old in untagged[: -self.cfg.keep_last]:
+                shutil.rmtree(old, ignore_errors=True)
+        if self.cfg.keep_tagged > 0:
+            for old in tagged[: -self.cfg.keep_tagged]:
+                shutil.rmtree(old, ignore_errors=True)
 
     # -- load ---------------------------------------------------------------
 
@@ -215,7 +233,9 @@ class CheckpointManager:
         if latest.is_symlink() and latest.exists():
             return latest.resolve()
         step_dirs = sorted(
-            [p for p in self.root.iterdir() if p.is_dir() and p.name.startswith("step_")]
+            p
+            for p in self.root.iterdir()
+            if p.is_dir() and _UNTAGGED_RE.match(p.name)
         )
         return step_dirs[-1] if step_dirs else None
 
