@@ -44,6 +44,11 @@ unsloth = [
   "peft>=0.13.0",
   "bitsandbytes>=0.44.0",
 ]
+analysis = [
+  "pandas>=2.0",
+  "matplotlib>=3.8",
+  "tabulate>=0.9",   # pandas.DataFrame.to_markdown
+]
 dev = [
   "pytest>=7.4",
   "pytest-cov>=4.1",
