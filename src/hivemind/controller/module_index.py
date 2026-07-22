@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import torch
 import torch.nn as nn
 
 from ..student.lora_adapter import get_adapter

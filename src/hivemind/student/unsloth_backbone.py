@@ -27,7 +27,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from ._hf_common import ArchSpec, ProjView, detect_arch, getattr_path
+from ._hf_common import ProjView, detect_arch, getattr_path
 from .config import LoRAConfig, StudentConfig
 
 

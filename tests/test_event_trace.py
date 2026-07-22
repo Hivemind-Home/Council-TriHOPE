@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import torch
 from omegaconf import OmegaConf
 
 from hivemind.tracing import EventTrace, ModuleLedger
 from hivemind.training import run_training_loop
-
-import torch
 
 
 class TestEventTrace:
@@ -34,7 +33,7 @@ class TestEventTrace:
         t2.emit({"type": "resume", "step": 1})
         t2.close()
         lines = path.read_text().strip().splitlines()
-        assert [json.loads(l)["type"] for l in lines] == ["x", "resume"]
+        assert [json.loads(ln)["type"] for ln in lines] == ["x", "resume"]
 
     def test_disabled_writes_nothing(self, tmp_path: Path) -> None:
         path = tmp_path / "events.jsonl"
@@ -114,7 +113,9 @@ class TestTraceEndToEnd:
 
         events_file = tmp_path / "events.jsonl"
         assert events_file.exists()
-        events = [json.loads(l) for l in events_file.read_text().strip().splitlines()]
+        events = [
+            json.loads(ln) for ln in events_file.read_text().strip().splitlines()
+        ]
         types = {e["type"] for e in events}
         assert "run_config" in types
         assert "decision" in types

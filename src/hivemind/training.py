@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import random
 from contextlib import nullcontext
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import torch
@@ -19,7 +19,6 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from .checkpoint import CheckpointConfig, CheckpointManager
-from .config_utils import unwrap_config
 from .controller.config import (
     AblationConfig,
     ConsolidationConfig,
@@ -32,7 +31,7 @@ from .controller.config import (
     WriterConfig,
 )
 from .controller.consolidation import ConsolidationScheduler
-from .controller.module_index import ModuleId, ModuleInfo, build_module_index
+from .controller.module_index import ModuleId, build_module_index
 from .controller.policy import RFPPolicy
 from .controller.signals import SignalComputer
 from .controller.writer import WriteExecutor
@@ -46,18 +45,16 @@ from .evaluation import (
     exact_match_eval,
     run_evaluation,
 )
-from .logging_utils import BaseLogger, init_logger
+from .logging_utils import init_logger
 from .optim.factory import build_optimizer
-from .optim.masked_adamw import MaskedAdamW
-from .regularization import RegularizationConfig, compute_total_regularization
 from .profiling import RunProfiler, write_run_summary
+from .regularization import RegularizationConfig, compute_total_regularization
 from .stores.fast import FastStore
 from .stores.permanent import PermanentStore
 from .stores.retrieval import RetrievalStore
-from .tracing import EventTrace, ModuleLedger
 from .student.config import LoRAConfig, StudentConfig
-from .student.model import StudentModel
 from .student.hf_backbone import HFStudent
+from .student.model import StudentModel
 from .student.unsloth_backbone import UnslothStudent
 from .teacher_hf import create_hf_live_teachers, parse_hf_teacher_specs
 from .teacher_registry import (
@@ -66,6 +63,7 @@ from .teacher_registry import (
     create_synthetic_teachers,
 )
 from .teacher_router import MetadataRouter, TeacherRouter, batch_teacher_forward
+from .tracing import EventTrace, ModuleLedger
 
 
 def _seed_everything(seed: int) -> None:
@@ -501,9 +499,13 @@ def run_training_loop(
             per_domain["domains"] = [spec]
             per_domain["shuffle"] = False
             per_domain["drop_last"] = False
-            per_domain["batch_size"] = int(eval_cfg_raw.get("batch_size", base_data.get("batch_size", 4)))
+            per_domain["batch_size"] = int(
+                eval_cfg_raw.get("batch_size", base_data.get("batch_size", 4))
+            )
             per_domain["max_rows_per_domain"] = int(
-                eval_cfg_raw.get("max_rows_per_domain", per_domain.get("max_rows_per_domain") or 256)
+                eval_cfg_raw.get(
+                    "max_rows_per_domain", per_domain.get("max_rows_per_domain") or 256
+                )
             )
             try:
                 val_loaders[name] = build_dataloader(per_domain, distributed=False)
@@ -690,7 +692,7 @@ def run_training_loop(
                     ),
                 },
             )
-            print(f"[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
+            print("[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
         except Exception as exc:  # noqa: BLE001 — best-effort on shutdown
             print(f"[hivemind] emergency save failed: {exc}")
 
@@ -1212,7 +1214,10 @@ def run_training_loop(
     event_trace.close()
     logger.close()
     if _interrupted["flag"]:
-        print(f"\nTraining interrupted at step {last_step}. Resume with checkpoint.resume_from=latest")
+        print(
+            f"\nTraining interrupted at step {last_step}. "
+            "Resume with checkpoint.resume_from=latest"
+        )
     else:
         print(f"\nTraining complete. Final loss: {final_metrics.get('loss/total', 'N/A')}")
     return final_metrics

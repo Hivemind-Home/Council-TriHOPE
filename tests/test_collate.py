@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
-import torch
 
 from hivemind.data.collate import IGNORE_INDEX, DistillCollator
 from hivemind.data.teacher_cache import TeacherLogitsCache
@@ -38,7 +36,7 @@ def test_labels_mask_prompt_and_pad(whitespace_tokenizer, hf_sample_rows):
 
     labels = batch["labels"]
     attn = batch["attention_mask"]
-    input_ids = batch["input_ids"]
+    _ = batch["input_ids"]
 
     for b in range(labels.shape[0]):
         # Every -100 position is either a prompt token or pad; never a

@@ -2,8 +2,8 @@
 
 import torch
 
-from hivemind.controller.surprise import AdamSurprise
 from hivemind.controller.config import SurpriseConfig
+from hivemind.controller.surprise import AdamSurprise
 
 
 def test_surprise_known_values():

@@ -166,7 +166,9 @@ class DistillCollator:
         labels = torch.full((B, T), IGNORE_INDEX, dtype=torch.long)
 
         V = self.vocab_size
-        teacher_logits = torch.zeros((B, T, V), dtype=torch.float32) if V > 0 else torch.zeros((B, T, 1))
+        teacher_logits = (
+            torch.zeros((B, T, V), dtype=torch.float32) if V > 0 else torch.zeros((B, T, 1))
+        )
         teacher_logits_mask = torch.zeros((B,), dtype=torch.float32)
 
         sample_ids: list[str] = []

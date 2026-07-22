@@ -41,7 +41,9 @@ def test_save_and_load_roundtrip(tmp_path):
     for tr in sig._stability.values():
         tr.update_windowed_variance(1.5)
 
-    mgr = CheckpointManager(CheckpointConfig(enabled=True, dir=str(tmp_path / "ckpt"), save_every=1, keep_last=2))
+    mgr = CheckpointManager(
+        CheckpointConfig(enabled=True, dir=str(tmp_path / "ckpt"), save_every=1, keep_last=2)
+    )
     mgr.save(step=5, student=student, optimizer=opt, signal_computer=sig, r_store=r, extra={"k": 1})
 
     # New stack, restore, compare
@@ -85,5 +87,7 @@ def test_keep_last_prunes(tmp_path):
     for s in range(1, 5):
         mgr.save(step=s, student=student, optimizer=opt, signal_computer=sig, r_store=r)
 
-    step_dirs = sorted([p.name for p in (tmp_path / "ckpt").iterdir() if p.name.startswith("step_")])
+    step_dirs = sorted(
+        p.name for p in (tmp_path / "ckpt").iterdir() if p.name.startswith("step_")
+    )
     assert step_dirs == ["step_00000003", "step_00000004"]

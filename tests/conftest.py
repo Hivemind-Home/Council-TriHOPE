@@ -31,7 +31,9 @@ def tiny_student_config():
         heads=4,
         ffn_hidden_multiplier=4,
         max_seq_len=32,
-        lora=LoRAConfig(rank=4, alpha=8.0, target_modules=["q", "k", "v", "o", "up", "gate", "down"]),
+        lora=LoRAConfig(
+            rank=4, alpha=8.0, target_modules=["q", "k", "v", "o", "up", "gate", "down"]
+        ),
     )
 
 
@@ -92,7 +94,10 @@ def hf_sample_rows():
             "input_text": f"write a function that computes the factorial of {i}",
             "target_text": f"def fact(n):\n    return 1 if n <= 1 else n * fact(n-1)  # {i}",
             "teacher_id": "code_teacher_deepseek_r1",
-            "teacher_output_text": f"Here is a factorial solution iteration {i}: for k in range n multiply accumulator",
+            "teacher_output_text": (
+                f"Here is a factorial solution iteration {i}: "
+                "for k in range n multiply accumulator"
+            ),
             "teacher_logits_path": f"code/train/code-{i:03d}_code.npz",
             "domain": "code",
             "bucket_id": "code_competitive_programming_medium",
@@ -104,7 +109,10 @@ def hf_sample_rows():
             "input_text": f"solve for x: 2x + {i} = {2 * i + 4}",
             "target_text": f"x = {(2 * i + 4 - i) // 2}",
             "teacher_id": "math_teacher_deepseek_r1_1p5b",
-            "teacher_output_text": f"Subtract {i} from both sides then divide by two to find x equals {(2 * i + 4 - i) // 2}",
+            "teacher_output_text": (
+                f"Subtract {i} from both sides then divide by two "
+                f"to find x equals {(2 * i + 4 - i) // 2}"
+            ),
             "teacher_logits_path": f"math/train/math-{i:03d}_math.npz",
             "domain": "math",
             "bucket_id": "math_algebra_easy",

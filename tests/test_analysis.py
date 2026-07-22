@@ -36,7 +36,8 @@ def _make_run(root: Path, spec: str, seed: int, forced_step: int | None = None) 
             "phase": "warm" if step < 50 else "recurrent",
         }
         if step % 20 == 0:
-            rec["eval/macro_loss"] = 2.5 - step * 0.005 + (0.5 if forced_step and step >= forced_step else 0.0)
+            damaged = 0.5 if forced_step and step >= forced_step else 0.0
+            rec["eval/macro_loss"] = 2.5 - step * 0.005 + damaged
             rec["eval/math/loss"] = 2.4 - step * 0.005
         metrics.append(rec)
     _write_jsonl(run_dir / "metrics.jsonl", metrics)

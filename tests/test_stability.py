@@ -2,8 +2,8 @@
 
 import torch
 
-from hivemind.controller.stability import StabilityTracker
 from hivemind.controller.config import StabilityConfig
+from hivemind.controller.stability import StabilityTracker
 
 
 def test_directional_parallel_vectors():

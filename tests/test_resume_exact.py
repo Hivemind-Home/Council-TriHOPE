@@ -148,8 +148,8 @@ class TestBitExactResume:
         # The resumed run's second-half events continue where the first left
         # off (a `resume` marker separates the segments).
         events = [
-            json.loads(l)
-            for l in (part_dir / "events.jsonl").read_text().strip().splitlines()
+            json.loads(ln)
+            for ln in (part_dir / "events.jsonl").read_text().strip().splitlines()
         ]
         assert any(e["type"] == "resume" and e["step"] == n for e in events)
 

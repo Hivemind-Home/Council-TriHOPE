@@ -132,7 +132,11 @@ def test_param_groups_split(monkeypatch):
     assert len(groups["F"]) > 0
     assert len(groups["P"]) > 0
     # Every param appears in exactly one group
-    ids = {id(p) for p in groups["F"]} | {id(p) for p in groups["P"]} | {id(p) for p in groups["shared"]}
+    ids = (
+        {id(p) for p in groups["F"]}
+        | {id(p) for p in groups["P"]}
+        | {id(p) for p in groups["shared"]}
+    )
     all_ids = {id(p) for p in student.parameters()}
     assert ids == all_ids
 

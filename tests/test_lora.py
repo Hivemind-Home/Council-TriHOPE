@@ -22,7 +22,7 @@ def test_lora_forward_includes_base_and_delta():
     x = torch.randn(2, 16, 32)
 
     base_out = lora.base(x)
-    full_out = lora(x)
+    _ = lora(x)
 
     # After init, B is zeros so delta should be ~0
     # But A is Kaiming, so let's set B nonzero

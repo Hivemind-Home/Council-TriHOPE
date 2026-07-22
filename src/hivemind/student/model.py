@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterator
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .attention import CausalSelfAttention
 from .config import StudentConfig

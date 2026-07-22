@@ -32,7 +32,10 @@ def fake_loader(monkeypatch, hf_sample_rows):
             for r in hf_sample_rows if r["domain"] == "code"
         ]),
         "hivemind-research/code-layerB-final": _FakeHFDataset([
-            {k: r[k] for k in ("sample_id", "teacher_id", "teacher_output_text", "teacher_logits_path")}
+            {
+                k: r[k]
+                for k in ("sample_id", "teacher_id", "teacher_output_text", "teacher_logits_path")
+            }
             for r in hf_sample_rows if r["domain"] == "code"
         ]),
     }

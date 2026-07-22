@@ -12,7 +12,7 @@ import argparse
 from pathlib import Path
 
 from . import figures, tables
-from .loaders import RunData, load_experiment
+from .loaders import load_experiment
 
 
 def generate_report(exp_dir: Path, out_dir: Path) -> Path:

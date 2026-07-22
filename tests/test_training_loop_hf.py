@@ -8,8 +8,6 @@ everywhere (the day-one default).
 
 from __future__ import annotations
 
-from functools import partial
-
 import torch
 from torch.utils.data import DataLoader
 
@@ -75,7 +73,7 @@ def test_hf_batch_runs_full_step(whitespace_tokenizer, hf_sample_rows):
     ctrl = ControllerConfig()
     module_index = build_module_index(student)
     signals = SignalComputer(ctrl, module_index)
-    policy = RFPPolicy(ctrl.policy)
+    RFPPolicy(ctrl.policy)
     dist_cfg = DistillationConfig(tau=4.0, lambda_kd=0.0, lambda_ce=1.0, lambda_reg=0.0)
 
     student.train()
@@ -117,7 +115,7 @@ def test_hf_batch_runs_full_step(whitespace_tokenizer, hf_sample_rows):
         assert torch.isfinite(loss)
 
     assert len(losses) == 3
-    assert all(l > 0 for l in losses)
+    assert all(loss > 0 for loss in losses)
 
 
 def test_unpack_synthetic_path_preserves_legacy_contract():

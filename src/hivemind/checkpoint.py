@@ -266,17 +266,27 @@ class CheckpointManager:
         if unexpected:
             logger.warning("checkpoint unexpected keys: %s", list(unexpected)[:8])
 
-        optimizer.load_state_dict(torch.load(path / "optimizer.pt", map_location=map_location, weights_only=False))
-        signal_computer.load_state_dict(torch.load(path / "controller.pt", map_location=map_location, weights_only=False))
-        r_store.load_state_dict(torch.load(path / "stores.pt", map_location=map_location, weights_only=False))
+        optimizer.load_state_dict(
+            torch.load(path / "optimizer.pt", map_location=map_location, weights_only=False)
+        )
+        signal_computer.load_state_dict(
+            torch.load(path / "controller.pt", map_location=map_location, weights_only=False)
+        )
+        r_store.load_state_dict(
+            torch.load(path / "stores.pt", map_location=map_location, weights_only=False)
+        )
         _restore_rng(torch.load(path / "rng.pt", map_location="cpu", weights_only=False))
 
         cons_path = path / "consolidation.pt"
         if consolidator is not None and cons_path.exists():
-            consolidator.load_state_dict(torch.load(cons_path, map_location=map_location, weights_only=False))
+            consolidator.load_state_dict(
+                torch.load(cons_path, map_location=map_location, weights_only=False)
+            )
         forget_path = path / "forgetting.pt"
         if forgetting is not None and forget_path.exists():
-            forgetting.load_state_dict(torch.load(forget_path, map_location="cpu", weights_only=False))
+            forgetting.load_state_dict(
+                torch.load(forget_path, map_location="cpu", weights_only=False)
+            )
         ledger_path = path / "ledger.pt"
         if ledger is not None and ledger_path.exists():
             ledger.load_state_dict(torch.load(ledger_path, map_location="cpu", weights_only=False))
@@ -285,7 +295,9 @@ class CheckpointManager:
             sampler.load_state_dict(torch.load(data_path, map_location="cpu", weights_only=False))
         phase_eval_path = path / "phase_eval.pt"
         if phase_eval is not None and phase_eval_path.exists():
-            phase_eval.load_state_dict(torch.load(phase_eval_path, map_location="cpu", weights_only=False))
+            phase_eval.load_state_dict(
+                torch.load(phase_eval_path, map_location="cpu", weights_only=False)
+            )
 
         meta = json.loads((path / "meta.json").read_text())
         logger.info("checkpoint loaded: %s (step=%d)", path, meta["step"])

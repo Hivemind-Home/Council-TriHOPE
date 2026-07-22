@@ -33,15 +33,13 @@ def doctor(json_output: bool = typer.Option(False, "--json", help="JSON output")
 @app.command()
 def smoke(config_name: str = typer.Option("pilot_smoke", help="Config name")) -> None:
     """Run a quick smoke test."""
-    import hydra
-    from omegaconf import DictConfig
+
+    # Use hydra compose API for programmatic access
+    from hydra import compose, initialize_config_dir
 
     from .config_utils import unwrap_config
     from .device import resolve_device
     from .training import run_training_loop
-
-    # Use hydra compose API for programmatic access
-    from hydra import compose, initialize_config_dir
 
     config_dir = str(Path(__file__).parent.parent.parent / "configs")
     with initialize_config_dir(config_dir=config_dir, version_base=None):

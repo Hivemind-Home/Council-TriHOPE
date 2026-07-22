@@ -195,7 +195,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print the matrix and exit")
     parser.add_argument("--resume", action="store_true", help="skip done runs, resume failed ones")
     parser.add_argument("--only", type=str, default=None, help="run only this spec id")
-    parser.add_argument("--max-hours", type=float, default=None, help="stop launching past this budget")
+    parser.add_argument(
+        "--max-hours", type=float, default=None, help="stop launching past this budget"
+    )
     args = parser.parse_args(argv)
 
     manifest = load_manifest(args.manifest)

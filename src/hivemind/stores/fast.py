@@ -7,8 +7,6 @@ code paths handle both our in-repo ``LoRALinear`` and PEFT's
 
 from __future__ import annotations
 
-from typing import Literal
-
 import torch
 import torch.nn as nn
 

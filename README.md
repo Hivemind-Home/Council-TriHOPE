@@ -108,7 +108,47 @@ pip install -e ".[dev,data,unsloth]"
 
 # Tests (CPU only — every external dep is monkeypatched)
 pytest tests/ -v
+
+# Warm-up smoke on REAL HF Layer-C data (CPU, ~4 min): phased stream,
+# R/F/P routing, event trace, phase-boundary eval, checkpoint + resume
+python train.py --config-name stream_smoke
 ```
+
+## Running experiments
+
+The paper's experiment matrix (baselines, per-signal ablations, the
+permanent-memory study, headline 1.7B runs) is driven by manifests in
+`configs/experiments/` — see **[docs/experiments.md](docs/experiments.md)**
+for the full reproducibility guide.
+
+```bash
+pip install -e ".[data,analysis]"
+
+# Group A: TriHOPE vs full-FT / LoRA-only / no-retrieval / no-consolidation
+python scripts/run_experiment.py configs/experiments/baselines_small.yaml
+
+# Group C: when does P fire, does it help retention, is a bad merge fatal?
+python scripts/run_experiment.py configs/experiments/p_study_small.yaml
+
+# Group B: ablate every routing signal + Top-M / Top-K
+python scripts/run_experiment.py configs/experiments/ablation_grid.yaml
+
+# Group D: headline Qwen3-1.7B runs (+ one live logit-KD run)
+python scripts/run_experiment.py configs/experiments/headline.yaml
+
+# Tables + figures (Table 1/2 analogues, ablation deltas, P timelines, ...)
+python -m analysis.run_report runs/baselines_small_v1
+```
+
+Every run leaves a full audit trail of *when and why parameters changed*:
+`events.jsonl` (per-module routing decisions with all signal values,
+consolidation events with pre-merge signals, phase boundaries),
+`run_summary.json` (memory/time/retention), and a checkpointed per-module
+write ledger. Runs are resumable **bit-exactly** — an interrupted+resumed
+run reproduces the uninterrupted run's losses to the last bit
+(`tests/test_resume_exact.py`), and the paper's formal claims (Theorems
+1-2, Corollaries, all-open AdamW reduction) are enforced directly by the
+test suite (`tests/test_masked_adamw.py`, `tests/test_consolidation.py`).
 
 ## Backbones
 

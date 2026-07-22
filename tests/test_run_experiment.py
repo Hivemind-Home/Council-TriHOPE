@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -49,7 +48,7 @@ class TestExpandMatrix:
         assert r.spec_id == "no_surprise"
         assert r.seed == 1
         assert "controller.ablation.disable_signals=[surprise]" in r.overrides
-        assert f"++train.seed=1" in r.overrides
+        assert "++train.seed=1" in r.overrides
         assert any(o.startswith("++checkpoint.dir=") for o in r.overrides)
         assert any(o.startswith("++logging.events_path=") for o in r.overrides)
         assert any(o.startswith("++run.dir=") for o in r.overrides)

@@ -2,7 +2,6 @@
 
 import torch
 
-from hivemind.student.config import LoRAConfig, StudentConfig
 from hivemind.student.model import StudentModel
 
 

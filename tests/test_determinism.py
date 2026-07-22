@@ -2,14 +2,14 @@
 
 import torch
 
+from hivemind.data import SyntheticTeacherSeedData
+from hivemind.distillation import DistillationConfig, compute_distillation_objective
+from hivemind.embedding import SharedEmbedding
+from hivemind.optim.masked_adamw import MaskedAdamW
 from hivemind.student.config import LoRAConfig, StudentConfig
 from hivemind.student.model import StudentModel
-from hivemind.embedding import SharedEmbedding
 from hivemind.teacher_registry import TeacherRegistry, create_synthetic_teachers
 from hivemind.teacher_router import TeacherRouter, batch_teacher_forward
-from hivemind.distillation import DistillationConfig, compute_distillation_objective
-from hivemind.optim.masked_adamw import MaskedAdamW
-from hivemind.data import SyntheticTeacherSeedData
 
 
 def _run_n_steps(seed: int, n: int = 3) -> list[float]:

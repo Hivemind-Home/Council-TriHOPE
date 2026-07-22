@@ -41,7 +41,9 @@ class TestAllOpenReduction:
     def test_matches_torch_adamw(self, amsgrad: bool) -> None:
         ours_params = _make_params(seed=1)
         ref_params = _make_params(seed=1)
-        ours = MaskedAdamW(ours_params, lr=LR, betas=BETAS, eps=EPS, weight_decay=WD, amsgrad=amsgrad)
+        ours = MaskedAdamW(
+            ours_params, lr=LR, betas=BETAS, eps=EPS, weight_decay=WD, amsgrad=amsgrad
+        )
         ref = torch.optim.AdamW(
             ref_params, lr=LR, betas=BETAS, eps=EPS, weight_decay=WD, amsgrad=amsgrad, foreach=False
         )

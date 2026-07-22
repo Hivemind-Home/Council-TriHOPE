@@ -135,14 +135,14 @@ class TestConfidenceGate:
 class TestNeutralValues:
     """Disabled signals pin to neutrals that degrade the policy sensibly."""
 
-    def _computer(self, disable: list[str]) -> "SignalComputerHarness":
-        from hivemind.controller.signals import SignalComputer
+    def _computer(self, disable: list[str]):
+        import torch
+
         from hivemind.controller.module_index import build_module_index
+        from hivemind.controller.signals import SignalComputer
         from hivemind.optim.masked_adamw import MaskedAdamW
         from hivemind.student.config import LoRAConfig, StudentConfig
         from hivemind.student.model import StudentModel
-
-        import torch
 
         torch.manual_seed(0)
         model = StudentModel(
@@ -195,7 +195,6 @@ class TestNeutralValues:
 
 class TestComponentRenormalization:
     def test_disabled_component_zeroed_and_renormalized(self) -> None:
-        import torch
 
         from hivemind.controller.config import RepetitionConfig
         from hivemind.controller.module_index import build_module_index

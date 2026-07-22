@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import torch
-import torch.nn as nn
 
 from ..optim.masked_adamw import MaskedAdamW
 from .config import ControllerConfig

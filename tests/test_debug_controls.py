@@ -118,9 +118,9 @@ class TestForceConsolidate:
 class TestTaggedCheckpoints:
     def test_tagged_dirs_separate_from_latest_and_prune(self, tmp_path) -> None:
         from hivemind.checkpoint import CheckpointConfig, CheckpointManager
-        from hivemind.controller.signals import SignalComputer
         from hivemind.controller.config import ControllerConfig
         from hivemind.controller.module_index import build_module_index
+        from hivemind.controller.signals import SignalComputer
         from hivemind.stores.retrieval import RetrievalStore
 
         model = _model()

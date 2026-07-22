@@ -2,18 +2,18 @@
 
 import torch
 
-from hivemind.student.config import LoRAConfig, StudentConfig
-from hivemind.student.model import StudentModel
-from hivemind.embedding import SharedEmbedding
-from hivemind.teacher_registry import TeacherRegistry, create_synthetic_teachers
-from hivemind.teacher_router import TeacherRouter, batch_teacher_forward
-from hivemind.distillation import DistillationConfig, compute_distillation_objective
-from hivemind.optim.masked_adamw import MaskedAdamW
 from hivemind.controller.config import ControllerConfig
 from hivemind.controller.module_index import build_module_index
-from hivemind.controller.signals import SignalComputer
 from hivemind.controller.policy import RFPPolicy
+from hivemind.controller.signals import SignalComputer
 from hivemind.data import SyntheticTeacherSeedData
+from hivemind.distillation import DistillationConfig, compute_distillation_objective
+from hivemind.embedding import SharedEmbedding
+from hivemind.optim.masked_adamw import MaskedAdamW
+from hivemind.student.config import LoRAConfig, StudentConfig
+from hivemind.student.model import StudentModel
+from hivemind.teacher_registry import TeacherRegistry, create_synthetic_teachers
+from hivemind.teacher_router import TeacherRouter, batch_teacher_forward
 
 
 def test_three_step_smoke():
@@ -24,7 +24,9 @@ def test_three_step_smoke():
     config = StudentConfig(
         vocab_size=64, dim=32, num_layers=2, heads=4,
         max_seq_len=16,
-        lora=LoRAConfig(rank=4, alpha=8.0, target_modules=["q", "k", "v", "o", "up", "gate", "down"]),
+        lora=LoRAConfig(
+            rank=4, alpha=8.0, target_modules=["q", "k", "v", "o", "up", "gate", "down"]
+        ),
     )
     student = StudentModel(config)
 
@@ -80,7 +82,7 @@ def test_three_step_smoke():
         )
 
         # Policy
-        actions = policy.decide(module_signals)
+        policy.decide(module_signals)
 
         # Step
         optimizer.step()
@@ -90,7 +92,7 @@ def test_three_step_smoke():
 
     # Verify we got 3 finite losses
     assert len(losses) == 3
-    assert all(l > 0 for l in losses)
+    assert all(loss > 0 for loss in losses)
 
 
 def test_metrics_keys():

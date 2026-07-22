@@ -44,7 +44,10 @@ class TestPhaseEvalTracker:
     def test_revisit_refreshes_baseline(self) -> None:
         tr = PhaseEvalTracker()
         tr.record(phase="p1", step=1, phase_domains=["code"], domain_loss={"code": 2.0})
-        tr.record(phase="p2", step=2, phase_domains=["math"], domain_loss={"code": 2.5, "math": 1.0})
+        tr.record(
+            phase="p2", step=2, phase_domains=["math"],
+            domain_loss={"code": 2.5, "math": 1.0},
+        )
         # Revisit code: baseline refreshes to the new end-of-phase loss.
         tr.record(phase="p3", step=3, phase_domains=["code"], domain_loss={"code": 1.8})
         d = tr.record(phase="p4", step=4, phase_domains=["math"], domain_loss={"code": 2.0})

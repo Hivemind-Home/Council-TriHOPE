@@ -2,7 +2,7 @@
 
 import torch
 
-from hivemind.teacher_router import TeacherRouter, RouterConfig
+from hivemind.teacher_router import RouterConfig, TeacherRouter
 
 
 def test_route_picks_closest_teacher():

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import torch
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 
 from .synthetic import SyntheticDataConfig, SyntheticTextDataset
