@@ -268,6 +268,16 @@ You may only use the teacher model’s output as supervision.
 
 ## Why this matters in distillation
 
+> **Implementation status (2026-08-07).** This section describes the intent;
+> the shipped default does NOT branch on `has_gold_label`. Two reasons.
+> First, every row in all four published Layer-C corpora has a non-empty
+> `target_text`, so a "gold if available" rule would fire on ~100% of code
+> and 78% of medical — that is a different experiment, not a detail.
+> Second, distillation runs should distil. The behaviour is available as
+> `data.gold_policy=gold_when_available` and is measured by the `gold_ce`
+> run in `configs/experiments/baselines_small.yaml`. See
+> `docs/experiments.md`.
+
 Because your loss can be different:
 
 ### If has_gold_label = true

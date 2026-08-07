@@ -150,7 +150,13 @@ def adapter_reuse_aulc(
     runs: list[RunData], phase: str = "math_recurrent"
 ) -> pd.DataFrame:
     """Area-under-training-loss-curve on ``phase`` per spec — the freed-adapter
-    speed-of-learning comparison (P-on vs P-off after a consolidation)."""
+    speed-of-learning comparison (P-on vs P-off after a consolidation).
+
+    The default is the first recurrent phase *after* the code phases, i.e.
+    the first one that can benefit from adapters those consolidations
+    freed. It is stream-dependent: pass ``phase`` explicitly if the phase
+    order in configs/stream_*.yaml changes.
+    """
     rows = []
     for run in runs:
         curve = _loss_curve(run, phase)
