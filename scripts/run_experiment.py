@@ -333,8 +333,16 @@ def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
     free_gpus: list[int] = list(range(n))
     lock = __import__("threading").Lock()
 
+    budget_start = time.time()
+
     def _work(item):
         run, resume_this = item
+        # --max-hours was only honoured by the sequential loop, so a
+        # --parallel-gpus session ignored the budget entirely.
+        if args.max_hours is not None:
+            if (time.time() - budget_start) / 3600 > args.max_hours:
+                print(f"Budget of {args.max_hours}h exhausted — skipping {run.run_id}")
+                return run, 0
         with lock:
             gpu = free_gpus.pop()
         try:

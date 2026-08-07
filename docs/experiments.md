@@ -2,7 +2,11 @@
 
 This document describes every experiment behind the paper's empirical
 claims: what question it answers, the exact command, and the artifacts it
-produces. All experiments are driven by manifest files in
+produces.
+
+> **Looking for commands?** [docs/running.md](running.md) is the full
+> operational reference — setup, preflight, smoke tests, single- and
+> multi-GPU, resume, the config map, every knob, and troubleshooting. All experiments are driven by manifest files in
 `configs/experiments/` and executed by `scripts/run_experiment.py`.
 
 ## Setup

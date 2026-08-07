@@ -272,6 +272,18 @@ class DistContext:
 
         d = embedding.numel() if embedding is not None else 0
         device = self._coll_device()
+        # A collective whose buffer size differs across ranks HANGS rather
+        # than raising, so agree on the size first. It is invariant today
+        # (d is the model dim, and the collator refuses a zero-row batch),
+        # but that safety rests on a chain of invariants in four modules —
+        # cheap insurance against turning a future change into a deadlock.
+        agreed = self.all_reduce_max_int(d)
+        if agreed != d:
+            raise RuntimeError(
+                f"rank {self.rank}: controller embedding has {d} elements but "
+                f"another rank has {agreed}. The ranks would deadlock on the "
+                "next collective."
+            )
         buf = torch.zeros(d + 3, dtype=torch.float64, device=device)
         if self.is_main:
             buf[0] = float(bucket_id)

@@ -1080,6 +1080,13 @@ def run_training_loop(
         # collective makes them global, and the replication invariant in
         # hivemind.distributed then holds by induction. Placed after
         # scaler.unscale_ so DDP's own reduction has completed.
+        #
+        # Fidelity note: bucket_id/embedding come from rank 0's first row,
+        # which is the global batch's first row only when the collator kept
+        # it. DistillCollator silently drops malformed rows, so a drop on
+        # rank 0 shifts which row is representative. Harmless — recurrent
+        # batches are bucket-pure, and random/mixed batches have no
+        # privileged row — but it is a real difference from single-GPU.
         bucket_id, embedding, conf_mean = dist.sync_controller_inputs(
             bucket_id=bucket_id,
             embedding=embedding,

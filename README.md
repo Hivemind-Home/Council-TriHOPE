@@ -118,7 +118,7 @@ python train.py --config-name stream_smoke
 
 The paper's experiment matrix (baselines, per-signal ablations, the
 permanent-memory study, headline 1.7B runs) is driven by manifests in
-`configs/experiments/` — see **[docs/experiments.md](docs/experiments.md)**
+`configs/experiments/` — see **[docs/experiments.md](docs/experiments.md)** for what each experiment answers, and **[docs/running.md](docs/running.md)** for every command (preflight, smoke, single-GPU, multi-GPU, resume, analysis)
 for the full reproducibility guide.
 
 ```bash
