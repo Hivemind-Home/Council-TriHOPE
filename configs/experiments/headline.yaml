@@ -1,6 +1,8 @@
 # Group D — headline runs (Qwen3-1.7B, ~6 h each on A100 40GB / L40S).
-# trihope_live_kd is the one true logit-KD run (nf4 30B teachers; code+math
-# phases get live logits, general falls back to CE).
+# trihope_live_kd is the one true logit-KD run. All four domains declare a
+# live teacher in stream_headline.yaml (~12 GB total, vocab 151936) — an
+# undeclared domain would not be registered and its samples would fall
+# through to teacher index 0, distilling through the wrong expert.
 #   python scripts/run_experiment.py configs/experiments/headline.yaml
 experiment: headline_v1
 base_config: stream_headline
@@ -28,6 +30,6 @@ runs:
   - id: trihope_live_kd
     overrides:
       - teachers.mode=live
-      - teachers.num_teachers=2
+      - teachers.num_teachers=4
       - distillation.lambda_ce=0.5
       - data.batch_size=1

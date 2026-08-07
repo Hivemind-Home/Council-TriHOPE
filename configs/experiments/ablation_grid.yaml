@@ -16,9 +16,16 @@ runs:
   - id: no_volatility
     overrides: ["controller.ablation.disable_signals=[volatility]"]
   - id: no_teacher_conf
+    # Was a no-op by construction until the C3/C5 fixes: the 0.3 policy gate
+    # cannot fire on general/code/math (p10 confidence is 0.75+ in all
+    # three), and distillation.use_teacher_confidence only scaled the KD
+    # mask, which is all-zero without logit caches. It now bites because
+    # medical is a recurrent phase (mean confidence 0.596, 5.6% of rows
+    # below the gate) and ce_confidence_weighting scales CE.
     overrides:
       - controller.ablation.use_teacher_confidence=false
       - distillation.use_teacher_confidence=false
+      - distillation.ce_confidence_weighting=false
   - id: topm_2
     overrides: ["++controller.ablation.top_m_override=2"]
   - id: topm_all

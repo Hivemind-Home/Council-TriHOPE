@@ -23,3 +23,10 @@ runs:
   - id: no_consolidation
     overrides:
       - controller.ablation.disable_stores=[P]
+  - id: gold_ce
+    # Supervise on the dataset's own target_text wherever has_gold_label is
+    # set, instead of always distilling the teacher trace. That flag is 100%
+    # true on code and 78% on medical, so this is a genuinely different
+    # objective — reported as an ablation rather than made the default.
+    overrides:
+      - data.gold_policy=gold_when_available
