@@ -95,8 +95,16 @@ class _NovelCursor:
     scan is O(pool) per novel batch, and at headline scale (160k rows,
     ~1160 novel batches across the stream) it costs ~10^8 membership tests
     of pure startup latency before step 0. Shuffling once and walking a
-    cursor gives the same guarantee — each row used at most once, globally,
-    across every phase sharing the ``used`` set — in O(pool) total.
+    cursor gives the same guarantee — each row is handed out as *novel* at
+    most once, globally, across every phase sharing the ``used`` set — in
+    O(pool) total.
+
+    Note the exact scope: a row claimed as novel is never re-issued as
+    novel, but ``_iid_batches`` draws ordinary background batches from the
+    same pool without consulting ``used``, so it can reappear as background
+    later in the phase. That is deliberate — the novelty probe is the unique
+    ``bucket_override``, and background draws carry the domain's real
+    bucket id.
     """
 
     def __init__(

@@ -295,8 +295,16 @@ class DistContext:
         Hashes ``payload`` and compares the digest via MIN and MAX
         all-reduces (16 bytes viewed as two int64s), so no pickling or
         gathering is involved. The failure this catches — replicas quietly
-        opening different coordinates and drifting apart — produces no error
-        of its own, which is exactly why it needs an explicit check.
+        drifting apart — produces no error of its own, which is exactly why
+        it needs an explicit check.
+
+        Scope, stated precisely: the caller's payload carries the per-module
+        *store* and *coordinate count*, not the coordinate identities. Two
+        ranks opening different coordinates with the same count would slip
+        past tier 1. That is not reachable while masks derive from the
+        all-reduced ``p.grad`` (identical on every rank), and tier 2's
+        index-weighted checksum over ``coord_step`` closes it anyway — but
+        the two tiers are complementary, not redundant.
         """
         if not self.enabled or not self.cfg.assert_rank_consistency:
             return

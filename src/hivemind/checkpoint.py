@@ -252,6 +252,14 @@ class CheckpointManager:
         spec = self.cfg.resume_from
         if not spec:
             return None
+        if not self.root.exists():
+            # checkpoint.enabled=false never creates the root, so _latest()
+            # would raise FileNotFoundError from iterdir() instead of saying
+            # what is actually wrong.
+            raise FileNotFoundError(
+                f"checkpoint.resume_from={spec!r} but {self.root} does not exist. "
+                "Set checkpoint.enabled=true, or point resume_from at a real path."
+            )
         if spec == "latest":
             return self._latest()
         # Direct step number

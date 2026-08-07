@@ -347,3 +347,27 @@ def test_run_summary_json_is_still_written(tmp_path):
     write_run_summary(str(tmp_path), profiler=prof, final_metrics={"loss/total": 1.0})
     data = json.loads((tmp_path / "run_summary.json").read_text())
     assert "loss/total" in json.dumps(data)
+
+
+class TestResumeWithoutACheckpointRoot:
+    """checkpoint.enabled=false never creates the root, so _latest()'s
+    iterdir() raised a bare FileNotFoundError naming nothing useful."""
+
+    def test_message_names_the_actual_problem(self, tmp_path):
+        from hivemind.checkpoint import CheckpointConfig, CheckpointManager
+
+        mgr = CheckpointManager(
+            CheckpointConfig(
+                enabled=False, dir=str(tmp_path / "nope"), resume_from="latest"
+            )
+        )
+        with pytest.raises(FileNotFoundError, match="checkpoint.enabled=true"):
+            mgr.resolve_resume_path()
+
+    def test_no_resume_requested_is_still_none(self, tmp_path):
+        from hivemind.checkpoint import CheckpointConfig, CheckpointManager
+
+        mgr = CheckpointManager(
+            CheckpointConfig(enabled=False, dir=str(tmp_path / "nope"))
+        )
+        assert mgr.resolve_resume_path() is None
