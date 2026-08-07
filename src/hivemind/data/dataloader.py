@@ -42,6 +42,9 @@ def _build_hf(cfg: dict) -> tuple[Dataset, Any]:
         cache_dir=cfg.get("hf_cache_dir"),
         streaming=bool(cfg.get("streaming", False)),
         max_rows_per_domain=cfg.get("max_rows_per_domain"),
+        strict_load=bool(cfg.get("strict_load", True)),
+        shuffle_before_cap=bool(cfg.get("shuffle_before_cap", True)),
+        shuffle_seed=int(cfg.get("shuffle_seed", cfg.get("seed", 42))),
     )
 
     tokenizer = build_tokenizer(hf_cfg.tokenizer_name)

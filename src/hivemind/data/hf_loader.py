@@ -32,6 +32,15 @@ from torch.utils.data import Dataset
 logger = logging.getLogger(__name__)
 
 
+class DatasetLoadError(RuntimeError):
+    """A domain's repo could not be loaded.
+
+    Raised instead of silently skipping the domain when
+    ``HivemindHFConfig.strict_load`` is set (the default). A missing domain
+    changes the experiment; it must never be a warning.
+    """
+
+
 @dataclass
 class DomainSpec:
     """Where one domain's data lives on the HF hub.
@@ -40,6 +49,16 @@ class DomainSpec:
     it fails to load), ``layer_a`` × ``layer_b`` are joined on ``sample_id``.
     ``max_rows`` caps this domain individually, overriding the global
     ``max_rows_per_domain``.
+
+    ``bucket_columns`` overrides the shipped ``bucket_id`` column with a key
+    synthesized by joining those columns with ``_``. This exists because some
+    published Layer-C tables have a degenerate ``bucket_id``: the code corpus
+    assigns a single ``subdomain`` to every row, so
+    ``{domain}_{subdomain}_{difficulty}`` yields only 3 distinct buckets —
+    too few for a recurrent stream phase that needs 8. Setting
+    ``bucket_columns: [subdomain, difficulty, source]`` there recovers 12
+    genuine problem-style clusters. Leave ``None`` to use ``bucket_id`` as
+    published.
     """
 
     name: str
@@ -47,6 +66,7 @@ class DomainSpec:
     layer_a: Optional[str] = None
     layer_b: Optional[str] = None
     max_rows: Optional[int] = None
+    bucket_columns: Optional[list[str]] = None
 
 
 def normalize_domain_specs(
@@ -72,15 +92,21 @@ def normalize_domain_specs(
                 )
             )
         elif isinstance(entry, dict):
-            unknown = set(entry) - {f.name for f in DomainSpec.__dataclass_fields__.values()}
+            allowed = {f.name for f in DomainSpec.__dataclass_fields__.values()}
+            unknown = set(entry) - allowed
             if unknown:
                 raise ValueError(
                     f"Unknown DomainSpec keys {sorted(unknown)} in {entry!r}; "
-                    f"allowed: name, layer_c, layer_a, layer_b, max_rows"
+                    f"allowed: {', '.join(sorted(allowed))}"
                 )
             if "name" not in entry:
                 raise ValueError(f"Domain spec dict requires 'name': {entry!r}")
-            specs.append(DomainSpec(**entry))
+            kwargs = dict(entry)
+            if kwargs.get("bucket_columns") is not None:
+                # OmegaConf hands us a ListConfig; normalize so downstream
+                # equality/serialization (the stream digest) is plain data.
+                kwargs["bucket_columns"] = [str(c) for c in kwargs["bucket_columns"]]
+            specs.append(DomainSpec(**kwargs))
         else:
             raise TypeError(f"Unsupported domain spec: {entry!r}")
     return specs
@@ -112,6 +138,13 @@ class HivemindHFConfig:
     mirrors the ``teacher_logits_path`` strings stored in Layer B/C. Leaving
     it ``None`` disables logit-KD — the collator returns
     ``teacher_logits_mask`` all zeros and the objective falls back to CE.
+
+    ``strict_load`` (default) turns any load failure into a
+    :class:`DatasetLoadError` instead of a warning + a silently missing
+    domain. ``shuffle_before_cap`` (default) shuffles a split before applying
+    ``max_rows_per_domain``, so the cap samples the whole corpus rather than
+    whatever happens to sit at the head of the parquet — which otherwise
+    silently starves the bucket cardinality a recurrent phase depends on.
     """
 
     domains: list[Any] = field(default_factory=lambda: ["code"])
@@ -123,6 +156,9 @@ class HivemindHFConfig:
     cache_dir: Optional[str] = None
     streaming: bool = False
     max_rows_per_domain: Optional[int] = None
+    strict_load: bool = True
+    shuffle_before_cap: bool = True
+    shuffle_seed: int = 42
 
 
 _LAYER_A_REQUIRED = {"sample_id", "input_text"}
@@ -133,16 +169,29 @@ _LAYER_C_REQUIRED = {"sample_id", "input_text", "teacher_id", "teacher_output_te
 class _Segment:
     """One domain's backing store: an Arrow dataset or a list of dicts."""
 
-    def __init__(self, name: str, backing: Any, length: int, arrow: bool) -> None:
+    def __init__(
+        self,
+        name: str,
+        backing: Any,
+        length: int,
+        arrow: bool,
+        bucket_columns: Optional[list[str]] = None,
+    ) -> None:
         self.name = name
         self.backing = backing
         self.length = length
         self.arrow = arrow
+        self.bucket_columns = bucket_columns
 
     def row(self, local_idx: int) -> dict[str, Any]:
         row = dict(self.backing[local_idx])
         row.setdefault("domain", self.name)
         return row
+
+    def has_column(self, key: str) -> bool:
+        if self.arrow:
+            return key in self.backing.column_names
+        return any(key in r for r in self.backing)
 
     def column(self, key: str) -> list[Any]:
         if self.arrow:
@@ -150,6 +199,26 @@ class _Segment:
                 return [None] * self.length
             return list(self.backing[key])
         return [r.get(key) for r in self.backing]
+
+    def bucket_keys(self) -> list[Any]:
+        """The per-row bucket key: ``bucket_id``, or a synthesized composite.
+
+        A composite is only as good as the columns it names, so a missing one
+        would silently collapse every row into one bucket — which surfaces
+        much later as an unrelated "not enough buckets" error from the stream
+        scheduler. Fail here instead.
+        """
+        if not self.bucket_columns:
+            return self.column("bucket_id")
+        missing = [c for c in self.bucket_columns if not self.has_column(c)]
+        if missing:
+            raise ValueError(
+                f"Domain '{self.name}': bucket_columns names column(s) "
+                f"{missing} that the dataset does not have. Available: "
+                f"{sorted(self.backing.column_names) if self.arrow else 'n/a'}"
+            )
+        cols = [self.column(c) for c in self.bucket_columns]
+        return ["_".join(str(v) for v in row) for row in zip(*cols)]
 
 
 class HivemindHFDataset(Dataset):
@@ -207,20 +276,45 @@ class HivemindHFDataset(Dataset):
             return int(self.cfg.max_rows_per_domain)
         return None
 
+    def _apply_cap(self, ds: Any, spec: DomainSpec) -> Any:
+        """Cap a split to ``max_rows``, sampling the whole corpus by default.
+
+        ``select(range(cap))`` alone takes the *head* of the parquet. That is
+        fine when the file is already shuffled and catastrophic when it is
+        not, because the bucket cardinality the stream scheduler requires is
+        computed from the capped rows. ``Dataset.shuffle`` on a memory-mapped
+        table only builds an indices mapping, so this costs no data copy.
+        """
+        cap = self._cap(spec)
+        if cap is None or not hasattr(ds, "select") or len(ds) <= cap:
+            return ds
+        if self.cfg.shuffle_before_cap and hasattr(ds, "shuffle"):
+            ds = ds.shuffle(seed=self.cfg.shuffle_seed)
+        return ds.select(range(cap))
+
     def _load_domain(self, spec: DomainSpec) -> None:
         if spec.layer_c:
             ds = self._try_load(spec.layer_c)
             if ds is not None:
                 self._check_schema(ds, _LAYER_C_REQUIRED, spec.layer_c)
-                cap = self._cap(spec)
-                if cap is not None and hasattr(ds, "select") and len(ds) > cap:
-                    ds = ds.select(range(cap))
-                self._segments.append(_Segment(spec.name, ds, len(ds), arrow=True))
+                ds = self._apply_cap(ds, spec)
+                self._segments.append(
+                    _Segment(
+                        spec.name, ds, len(ds), arrow=True,
+                        bucket_columns=spec.bucket_columns,
+                    )
+                )
                 logger.info(
                     "Domain %s: %d rows from Layer C %s (%s)",
                     spec.name, len(ds), spec.layer_c, self.cfg.split,
                 )
                 return
+            if self.cfg.strict_load:
+                raise DatasetLoadError(
+                    f"Domain '{spec.name}': Layer C repo {spec.layer_c!r} could not be "
+                    f"loaded for split {self.cfg.split!r}. Set data.strict_load=false "
+                    "to fall back to the A+B join instead of failing."
+                )
             logger.warning(
                 "Domain %s: Layer C %s unavailable; falling back to A+B join.",
                 spec.name, spec.layer_c,
@@ -233,6 +327,12 @@ class HivemindHFDataset(Dataset):
 
         layer_b = self._try_load(repo_b)
         if layer_b is None:
+            if self.cfg.strict_load:
+                raise DatasetLoadError(
+                    f"Domain '{spec.name}': Layer B repo {repo_b!r} could not be loaded "
+                    f"for split {self.cfg.split!r}. Set data.strict_load=false to skip "
+                    "the domain instead of failing."
+                )
             logger.warning("Domain %s: Layer B missing at %s; skipping.", spec.name, repo_b)
             return
         self._check_schema(layer_b, _LAYER_B_REQUIRED, repo_b)
@@ -240,6 +340,12 @@ class HivemindHFDataset(Dataset):
 
         layer_a = self._try_load(repo_a)
         if layer_a is None:
+            if self.cfg.strict_load:
+                raise DatasetLoadError(
+                    f"Domain '{spec.name}': Layer A repo {repo_a!r} could not be loaded "
+                    f"for split {self.cfg.split!r}. Set data.strict_load=false to skip "
+                    "the domain instead of failing."
+                )
             logger.warning(
                 "Domain %s: Layer A missing at %s; rows without input_text will be "
                 "skipped until it is published.",
@@ -266,7 +372,12 @@ class HivemindHFDataset(Dataset):
                 break
 
         if rows:
-            self._segments.append(_Segment(spec.name, rows, len(rows), arrow=False))
+            self._segments.append(
+                _Segment(
+                    spec.name, rows, len(rows), arrow=False,
+                    bucket_columns=spec.bucket_columns,
+                )
+            )
         logger.info(
             "Domain %s: %d rows joined (A=%d, B=%d)",
             spec.name, len(rows), len(layer_a), len(layer_b),
@@ -284,7 +395,12 @@ class HivemindHFDataset(Dataset):
             )
         except FileNotFoundError:
             return None
-        except Exception as exc:  # noqa: BLE001 — HF raises many subclasses we want to tolerate
+        except Exception as exc:  # noqa: BLE001 — HF raises many subclasses
+            if self.cfg.strict_load:
+                raise DatasetLoadError(
+                    f"load_dataset({repo!r}, split={self.cfg.split!r}) failed: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
             logger.warning("load_dataset(%s) failed: %s", repo, exc)
             return None
 
@@ -292,13 +408,21 @@ class HivemindHFDataset(Dataset):
         cols: Optional[list[str]] = None
         if hasattr(ds, "column_names") and ds.column_names is not None:
             cols = list(ds.column_names)
-        if cols is not None:
-            missing = required - set(cols)
-            if missing:
-                raise ValueError(
-                    f"{repo}: missing required columns {sorted(missing)}. "
-                    f"Got {sorted(cols)}."
-                )
+        if cols is None:
+            # An IterableDataset (streaming=true) exposes no column_names, so
+            # the schema would go unchecked and every downstream KeyError
+            # would look like a data bug. Refuse rather than guess.
+            raise ValueError(
+                f"{repo}: cannot read column names (streaming datasets are not "
+                "supported — the loader indexes rows positionally). Set "
+                "data.streaming=false."
+            )
+        missing = required - set(cols)
+        if missing:
+            raise ValueError(
+                f"{repo}: missing required columns {sorted(missing)}. "
+                f"Got {sorted(cols)}."
+            )
 
     # -- Dataset protocol --------------------------------------------------
 
@@ -334,11 +458,15 @@ class HivemindHFDataset(Dataset):
         return range(start, start + seg.length)
 
     def indices_by_bucket(self, name: str) -> dict[str, list[int]]:
-        """Global indices grouped by ``bucket_id``, lazily built and cached."""
+        """Global indices grouped by bucket key, lazily built and cached.
+
+        The key is the published ``bucket_id`` unless the domain declares
+        ``bucket_columns``, in which case it is those columns joined.
+        """
         if name not in self._bucket_cache:
             seg, start = self._segment_for(name)
             buckets: dict[str, list[int]] = {}
-            for local_i, bucket in enumerate(seg.column("bucket_id")):
+            for local_i, bucket in enumerate(seg.bucket_keys()):
                 key = str(bucket) if bucket else f"{name}__nobucket"
                 buckets.setdefault(key, []).append(start + local_i)
             self._bucket_cache[name] = buckets

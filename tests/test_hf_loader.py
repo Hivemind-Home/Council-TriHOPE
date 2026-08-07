@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from hivemind.data.hf_loader import HivemindHFConfig, HivemindHFDataset
+from hivemind.data.hf_loader import (
+    DatasetLoadError,
+    HivemindHFConfig,
+    HivemindHFDataset,
+    normalize_domain_specs,
+)
 
 
 class _FakeHFDataset(list):
@@ -70,11 +75,23 @@ def test_loads_and_joins_layers(fake_loader):
     assert row["domain"] == "code"
 
 
+def test_missing_repo_raises_under_strict_load(fake_loader):
+    """The default must name the repo that failed, not silently drop it."""
+    cfg = HivemindHFConfig(
+        domains=["math"],  # math-layerB isn't in the fake repos
+        tokenizer_name="whitespace",
+        max_seq_len=32,
+    )
+    with pytest.raises(DatasetLoadError, match="math-layerB-final"):
+        HivemindHFDataset(cfg)
+
+
 def test_missing_layer_a_skips_domain(fake_loader, caplog):
     cfg = HivemindHFConfig(
         domains=["math"],  # math-layerA isn't in the fake repos → skipped
         tokenizer_name="whitespace",
         max_seq_len=32,
+        strict_load=False,
     )
     with pytest.raises(RuntimeError, match="no usable rows"):
         HivemindHFDataset(cfg)
@@ -107,6 +124,10 @@ class _FakeArrowDataset(_FakeHFDataset):
 
 
 def _layer_c_rows(domain: str, n: int):
+    # ``subdomain`` is deliberately constant, mirroring the published code
+    # corpus where every row shares one subdomain and ``bucket_id`` therefore
+    # collapses to difficulty alone. That is what ``bucket_columns`` exists
+    # to work around.
     return [
         {
             "sample_id": f"{domain}-{i}",
@@ -114,6 +135,9 @@ def _layer_c_rows(domain: str, n: int):
             "target_text": f"answer {i}",
             "has_gold_label": i % 2 == 0,
             "domain": domain,
+            "subdomain": "core",
+            "difficulty": ["easy", "medium", "hard"][i % 3],
+            "source": f"src{i % 2}",
             "bucket_id": f"{domain}_bucket_{i % 3}",
             "teacher_id": f"{domain}_teacher",
             "teacher_output_text": f"teacher says {i}",
@@ -242,3 +266,156 @@ def test_string_and_dict_specs_mix(fake_loader, fake_layer_c, monkeypatch):
     )
     assert ds.domains == ["code", "math"]
     assert len(ds) == 5 + 6
+
+
+# -- bucket_columns: composite bucket keys -----------------------------------
+
+
+class TestBucketColumns:
+    """A degenerate published ``bucket_id`` must be overridable from config.
+
+    The code Layer-C corpus assigns one subdomain to every row, so its
+    ``bucket_id`` yields only 3 distinct values — fewer than a recurrent
+    stream phase requires. ``bucket_columns`` synthesizes a finer key.
+    """
+
+    def test_default_uses_published_bucket_id(self, fake_layer_c):
+        ds = HivemindHFDataset(_spec_cfg())
+        assert set(ds.indices_by_bucket("code")) == {
+            "code_bucket_0", "code_bucket_1", "code_bucket_2"
+        }
+
+    def test_composite_key_increases_cardinality(self, fake_layer_c):
+        ds = HivemindHFDataset(
+            _spec_cfg(
+                domains=[{
+                    "name": "code",
+                    "layer_c": "hivemind-research/code-layerC-200k",
+                    "bucket_columns": ["subdomain", "difficulty", "source"],
+                }]
+            )
+        )
+        buckets = ds.indices_by_bucket("code")
+        assert set(buckets) == {
+            "core_easy_src0", "core_easy_src1",
+            "core_medium_src0", "core_medium_src1",
+            "core_hard_src0", "core_hard_src1",
+        }
+        # Every row is still assigned exactly once.
+        assert sorted(i for lst in buckets.values() for i in lst) == list(range(9))
+
+    def test_missing_column_raises_instead_of_collapsing(self, fake_layer_c):
+        """Otherwise every row keys to 'None' and one bucket looks legitimate."""
+        ds = HivemindHFDataset(
+            _spec_cfg(
+                domains=[{
+                    "name": "code",
+                    "layer_c": "hivemind-research/code-layerC-200k",
+                    "bucket_columns": ["subdomain", "nonexistent_column"],
+                }]
+            )
+        )
+        with pytest.raises(ValueError, match="nonexistent_column"):
+            ds.indices_by_bucket("code")
+
+    def test_normalize_accepts_and_stringifies_bucket_columns(self):
+        specs = normalize_domain_specs(
+            [{"name": "code", "layer_c": "org/repo", "bucket_columns": ["a", "b"]}]
+        )
+        assert specs[0].bucket_columns == ["a", "b"]
+
+    def test_other_domains_keep_their_published_buckets(self, fake_layer_c):
+        ds = HivemindHFDataset(
+            _spec_cfg(
+                domains=[
+                    {
+                        "name": "code",
+                        "layer_c": "hivemind-research/code-layerC-200k",
+                        "bucket_columns": ["subdomain", "difficulty", "source"],
+                    },
+                    {"name": "math", "layer_c": "hivemind-research/math-layerC-200K"},
+                ]
+            )
+        )
+        assert len(ds.indices_by_bucket("code")) == 6
+        assert set(ds.indices_by_bucket("math")) == {
+            "math_bucket_0", "math_bucket_1", "math_bucket_2"
+        }
+
+
+# -- shuffle_before_cap ------------------------------------------------------
+
+
+class _ShufflableArrow(_FakeArrowDataset):
+    def shuffle(self, seed=0):
+        rows = list(self)
+        # Deterministic, seed-dependent, and definitely not the identity.
+        rows = rows[seed % max(1, len(rows)):] + rows[: seed % max(1, len(rows))]
+        return _ShufflableArrow(rows)
+
+    def select(self, indices):
+        return _ShufflableArrow([list.__getitem__(self, i) for i in indices])
+
+
+class TestShuffleBeforeCap:
+    """Capping the head of an unshuffled parquet starves bucket cardinality."""
+
+    @pytest.fixture
+    def shufflable(self, monkeypatch):
+        import sys
+        import types
+
+        repos = {"org/head-sorted": {"train": _ShufflableArrow(_layer_c_rows("code", 9))}}
+
+        def fake_load_dataset(repo, split, cache_dir=None, streaming=False):
+            if repo not in repos or split not in repos[repo]:
+                raise FileNotFoundError(f"{repo}:{split}")
+            return repos[repo][split]
+
+        mod = types.ModuleType("datasets")
+        mod.load_dataset = fake_load_dataset
+        monkeypatch.setitem(sys.modules, "datasets", mod)
+        return repos
+
+    def _ids(self, **kwargs):
+        ds = HivemindHFDataset(
+            _spec_cfg(
+                domains=[{"name": "code", "layer_c": "org/head-sorted"}],
+                max_rows_per_domain=3,
+                **kwargs,
+            )
+        )
+        return [ds[i]["sample_id"] for i in range(len(ds))]
+
+    def test_disabled_takes_the_head(self, shufflable):
+        assert self._ids(shuffle_before_cap=False) == ["code-0", "code-1", "code-2"]
+
+    def test_enabled_samples_elsewhere(self, shufflable):
+        ids = self._ids(shuffle_before_cap=True, shuffle_seed=4)
+        assert len(ids) == 3
+        assert ids != ["code-0", "code-1", "code-2"]
+
+    def test_enabled_is_deterministic_in_the_seed(self, shufflable):
+        assert self._ids(shuffle_before_cap=True, shuffle_seed=4) == self._ids(
+            shuffle_before_cap=True, shuffle_seed=4
+        )
+
+
+def test_streaming_dataset_without_columns_is_rejected(monkeypatch):
+    """The loader indexes rows positionally, so an IterableDataset cannot work."""
+    import sys
+    import types
+
+    class _NoColumns(list):
+        column_names = None
+
+    mod = types.ModuleType("datasets")
+    mod.load_dataset = lambda repo, split, cache_dir=None, streaming=False: _NoColumns(
+        _layer_c_rows("code", 3)
+    )
+    monkeypatch.setitem(sys.modules, "datasets", mod)
+
+    with pytest.raises(ValueError, match="streaming"):
+        HivemindHFDataset(
+            _spec_cfg(domains=[{"name": "code", "layer_c": "org/streamed"}])
+        )
