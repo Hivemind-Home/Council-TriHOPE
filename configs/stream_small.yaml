@@ -5,10 +5,19 @@
 #   python train.py --config-name stream_small
 #
 # Student: Qwen3-0.6B (same tokenizer/vocab family as the 1.7B headline).
-# Teachers: cache mode — supervision is CE on Layer-C teacher_output_text
-# weighted by teacher_confidence; no teacher model is loaded.
-# Stream: general warm → code recurrent → isolated novel → math recurrent →
-# code revisit → mixed tail (6000 steps).
+# Teachers: cache mode — supervision is CE on Layer-C teacher_output_text;
+# no teacher model is loaded.
+# Stream (6000 steps): general warm → code recurrent → isolated novel →
+# math recurrent → medical recurrent → code revisit → mixed tail.
+#
+#   phase              mode       domain   steps   [start, end]
+#   general_warm       random     general    500   [   0,  499]
+#   code_recurrent     recurrent  code      1500   [ 500, 1999]
+#   novel_inject       novel      general    150   [2000, 2149]
+#   math_recurrent     recurrent  math      1500   [2150, 3649]
+#   medical_recurrent  recurrent  medical   1300   [3650, 4949]
+#   code_revisit       recurrent  code       450   [4950, 5399]
+#   mixed_tail         mixed      all 4      600   [5400, 5999]
 defaults: []
 
 model:
@@ -35,12 +44,15 @@ model:
 
 teachers:
   mode: cache
-  num_teachers: 3
+  num_teachers: 4
   prototype_seed_samples: 100
+  # These MUST equal the teacher_id values in the Layer-C tables, otherwise
+  # MetadataRouter's name lookup misses on every row.
   teacher_ids:
-    general: general_teacher
-    code: code_teacher
-    math: math_teacher
+    general: general_teacher_deepseek_r1_distill_llama_70b
+    code: code_teacher_deepseek_r1
+    math: math_teacher_deepseek_r1_distill_qwen_1p5b
+    medical: medical_teacher_qwen2p5_1p5b_instruct_clean
 
 distillation:
   tau: 4.0
@@ -107,10 +119,18 @@ controller:
 data:
   source: hf
   router: metadata
+  strict_load: true         # a missing domain must fail, not warn
+  shuffle_before_cap: true  # sample the corpus, not the head of the parquet
   domains:
     - {name: general, layer_c: hivemind-research/general-layerC-200k}
-    - {name: code,    layer_c: hivemind-research/code-layerC-200k}
+    # code's published bucket_id has only 3 distinct values (one subdomain ×
+    # 3 difficulties), too few for num_buckets: 8. `source` is a genuine
+    # problem-style cluster (codeforces / atcoder / codechef / ...) and the
+    # composite key yields 12 buckets, all with ≥16 rows at this cap.
+    - {name: code,    layer_c: hivemind-research/code-layerC-200k,
+       bucket_columns: [subdomain, difficulty, source]}
     - {name: math,    layer_c: hivemind-research/math-layerC-200K}
+    - {name: medical, layer_c: hivemind-research/medical-layerC-200k}
   split: train
   tokenizer: Qwen/Qwen3-0.6B
   max_seq_len: 512
@@ -125,19 +145,29 @@ stream:
   enabled: true
   seed: null
   phases:
-    - {name: general_warm,   domain: general, steps: 800,  mode: random}
-    - {name: code_recurrent, domain: code,    steps: 1800, mode: recurrent,
+    - {name: general_warm,      domain: general, steps: 500,  mode: random}
+    - {name: code_recurrent,    domain: code,    steps: 1500, mode: recurrent,
        recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
-                    novel_fraction: 0.5}}
-    - {name: novel_inject,   domain: general, steps: 150,  mode: novel}
-    - {name: math_recurrent, domain: math,    steps: 1800, mode: recurrent,
+                    novel_fraction: 0.5,
+                    exclude_chosen_buckets_from_background: true}}
+    - {name: novel_inject,      domain: general, steps: 150,  mode: novel}
+    - {name: math_recurrent,    domain: math,    steps: 1500, mode: recurrent,
        recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
-                    novel_fraction: 0.5}}
-    - {name: code_revisit,   domain: code,    steps: 500,  mode: recurrent,
+                    novel_fraction: 0.5,
+                    exclude_chosen_buckets_from_background: true}}
+    # Medical is the only domain whose teacher_confidence reaches the 0.3
+    # gate (mean 0.596 vs 0.82-0.88 elsewhere), so the confidence machinery
+    # is only measurable while this phase runs.
+    - {name: medical_recurrent, domain: medical, steps: 1300, mode: recurrent,
+       recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
+                    novel_fraction: 0.5,
+                    exclude_chosen_buckets_from_background: true}}
+    # Same buckets as code_recurrent, now after TWO intervening domains.
+    - {name: code_revisit,      domain: code,    steps: 450,  mode: recurrent,
        recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
                     reuse_from: code_recurrent}}
-    - {name: mixed_tail,     domains: [general, code, math], steps: 950,
-       mode: mixed, weights: [0.34, 0.33, 0.33]}
+    - {name: mixed_tail, domains: [general, code, math, medical], steps: 600,
+       mode: mixed, weights: [0.25, 0.25, 0.25, 0.25]}
 
 train:
   steps: null               # derived from the stream (6000)

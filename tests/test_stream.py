@@ -224,3 +224,116 @@ class TestSamplerAndParsing:
     def test_invalid_mode_raises(self) -> None:
         with pytest.raises(ValueError, match="unknown mode"):
             PhaseSpec(name="x", steps=1, mode="bogus", domain="a")
+
+
+class TestBackgroundBucketExclusion:
+    """Background slots must not re-increment the chosen buckets' counters.
+
+    Only the *sampled rows* are reserved by default, so a background draw
+    can land on another row of a chosen bucket. The controller keys
+    repetition on the bucket, not the row, so those hits inflate the very
+    counter the phase is trying to measure — with n/(n+k) at k=10 the
+    frequency term saturates above 0.9 after ~45 of them.
+    """
+
+    @staticmethod
+    def _bucket_of(index: int) -> int:
+        return index // 10  # matches _FakeDataset's layout
+
+    def _background_buckets(self, exclude: bool) -> set[int]:
+        phases = [
+            PhaseSpec(
+                name="rec", steps=60, mode="recurrent", domain="a",
+                recurrence=RecurrenceSpec(
+                    num_buckets=3, samples_per_bucket=4, revisit_period=10,
+                    exclude_chosen_buckets_from_background=exclude,
+                ),
+            ),
+        ]
+        s = _schedule(phases)
+        chosen = {
+            self._bucket_of(i)
+            for rows in s.phase_buckets("rec").values()
+            for i in rows
+        }
+        slots = {(b * 10) // 3 for b in range(3)}
+        seen: set[int] = set()
+        for t in range(60):
+            if t % 10 in slots:
+                continue  # a bucket-owned revisit slot, not background
+            seen.update(self._bucket_of(i) for i in s.indices_for_step(t))
+        return seen & chosen
+
+    def test_disabled_lets_background_hit_chosen_buckets(self) -> None:
+        assert self._background_buckets(exclude=False)
+
+    def test_enabled_keeps_background_off_chosen_buckets(self) -> None:
+        assert self._background_buckets(exclude=True) == set()
+
+    def test_revisit_slots_still_use_the_chosen_buckets(self) -> None:
+        """Exclusion must not starve the recurrence it protects."""
+        phases = [
+            PhaseSpec(
+                name="rec", steps=60, mode="recurrent", domain="a",
+                recurrence=RecurrenceSpec(
+                    num_buckets=3, samples_per_bucket=4, revisit_period=10,
+                    exclude_chosen_buckets_from_background=True,
+                ),
+            ),
+        ]
+        s = _schedule(phases)
+        subsets = s.phase_buckets("rec")
+        owned = {i for rows in subsets.values() for i in rows}
+        slots = {(b * 10) // 3 for b in range(3)}
+        revisits = [t for t in range(60) if t % 10 in slots]
+        assert revisits
+        for t in revisits:
+            assert set(s.indices_for_step(t)) <= owned
+
+
+class TestNovelCursor:
+    def test_rows_are_never_reused_across_phases(self) -> None:
+        phases = [
+            PhaseSpec(name="n1", steps=4, mode="novel", domain="b"),
+            PhaseSpec(name="n2", steps=4, mode="novel", domain="b"),
+        ]
+        s = _schedule(phases)
+        rows = [i for t in range(s.total_steps) for i in s.indices_for_step(t)]
+        assert len(rows) == len(set(rows)) == 16
+
+    def test_exhaustion_raises_with_an_actionable_message(self) -> None:
+        phases = [PhaseSpec(name="nov", steps=100, mode="novel", domain="b")]
+        with pytest.raises(ValueError, match="max_rows_per_domain"):
+            _schedule(phases)
+
+
+class TestDigestCoversData:
+    """A swapped corpus must not pass the resume guard."""
+
+    def _digest(self, **identity) -> str:
+        phases = [PhaseSpec(name="warm", steps=4, mode="random", domain="a")]
+        return StreamSchedule(
+            StreamConfig(enabled=True, phases=phases),
+            _FakeDataset(),
+            batch_size=2,
+            seed=7,
+            data_identity=identity or None,
+        ).config_digest()
+
+    def test_same_identity_same_digest(self) -> None:
+        assert self._digest(split="train") == self._digest(split="train")
+
+    def test_changing_the_repo_changes_the_digest(self) -> None:
+        a = self._digest(domains=[{"name": "code", "layer_c": "org/code-v1"}])
+        b = self._digest(domains=[{"name": "code", "layer_c": "org/code-v2"}])
+        assert a != b
+
+    def test_changing_bucket_columns_changes_the_digest(self) -> None:
+        a = self._digest(domains=[{"name": "code", "bucket_columns": None}])
+        b = self._digest(domains=[{"name": "code", "bucket_columns": ["source"]}])
+        assert a != b
+
+    def test_changing_the_row_cap_changes_the_digest(self) -> None:
+        assert self._digest(max_rows_per_domain=1000) != self._digest(
+            max_rows_per_domain=2000
+        )

@@ -25,6 +25,37 @@ def _build_synthetic(cfg: dict) -> Dataset:
     )
 
 
+def _data_identity(cfg: dict) -> dict:
+    """The parts of ``data`` that change which rows land in which batch.
+
+    Folded into ``StreamSchedule.config_digest()`` so the resume guard
+    catches a swapped corpus, a changed row cap, or a re-keyed bucket
+    column — not just an edited phase list.
+    """
+    from .hf_loader import normalize_domain_specs
+
+    specs = normalize_domain_specs(
+        list(cfg.get("domains", [])), cfg.get("repo_prefix", "hivemind-research")
+    )
+    return {
+        "split": cfg.get("split", "train"),
+        "max_rows_per_domain": cfg.get("max_rows_per_domain"),
+        "shuffle_before_cap": bool(cfg.get("shuffle_before_cap", True)),
+        "shuffle_seed": int(cfg.get("shuffle_seed", cfg.get("seed", 42))),
+        "domains": [
+            {
+                "name": s.name,
+                "layer_c": s.layer_c,
+                "layer_a": s.layer_a,
+                "layer_b": s.layer_b,
+                "max_rows": s.max_rows,
+                "bucket_columns": s.bucket_columns,
+            }
+            for s in specs
+        ],
+    }
+
+
 def _build_hf(cfg: dict) -> tuple[Dataset, Any]:
     # Lazy imports: the ``data`` extra may not be installed in CPU-smoke envs.
     from .collate import DistillCollator
@@ -108,6 +139,7 @@ def build_dataloader(
             dataset,
             batch_size=int(cfg.get("batch_size", 4)),
             seed=int(cfg.get("shuffle_seed", cfg.get("seed", 42))),
+            data_identity=_data_identity(cfg),
         )
         loader = DataLoader(
             dataset,

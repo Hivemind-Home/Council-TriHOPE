@@ -2,6 +2,15 @@
 # (~6 h on an A100 40GB / L40S). Same phase structure as stream_small with
 # doubled phase lengths and seq 1024.
 #
+#   phase              mode       domain   steps   [start,  end]
+#   general_warm       random     general   1000   [    0,   999]
+#   code_recurrent     recurrent  code      3000   [ 1000,  3999]
+#   novel_inject       novel      general    300   [ 4000,  4299]
+#   math_recurrent     recurrent  math      3000   [ 4300,  7299]
+#   medical_recurrent  recurrent  medical   2600   [ 7300,  9899]
+#   code_revisit       recurrent  code       900   [ 9900, 10799]
+#   mixed_tail         mixed      all 4     1200   [10800, 11999]
+#
 #   python train.py --config-name stream_headline
 #
 # Teachers default to cache mode (CE on teacher_output_text + confidence).
@@ -33,20 +42,37 @@ model:
 
 teachers:
   mode: cache
-  num_teachers: 3
+  num_teachers: 4
   prototype_seed_samples: 100
+  # These MUST equal the teacher_id values in the Layer-C tables, otherwise
+  # MetadataRouter's name lookup misses on every row.
   teacher_ids:
-    general: general_teacher
-    code: code_teacher
-    math: math_teacher
-  # Used only when teachers.mode=live is set on the CLI:
+    general: general_teacher_deepseek_r1_distill_llama_70b
+    code: code_teacher_deepseek_r1
+    math: math_teacher_deepseek_r1_distill_qwen_1p5b
+    medical: medical_teacher_qwen2p5_1p5b_instruct_clean
+  # Used only when teachers.mode=live is set on the CLI. Every streamed
+  # domain must appear here: an undeclared domain is not registered, so its
+  # samples fall through to teacher index 0 and distil through the wrong
+  # expert. teacher_hf.py hard-raises unless vocab_size == 151936, which
+  # rules out DeepSeek-R1-Distill-Llama-70B (128256) and the 7B Qwen2.5
+  # Coder/Math variants (152064) — only the 1.5B Qwen2.5 models qualify.
+  # Math and medical here are exactly the models that produced the cached
+  # supervision, so live-KD and cache-mode stay directly comparable.
+  # Total ≈ 12 GB, which fits alongside the 1.7B student on a 40 GB card.
   pretrained:
+    general:
+      name: Qwen/Qwen3-4B                              # 151936, nf4 ≈ 2.4 GB
+      quantization: nf4
     code:
-      name: Qwen/Qwen3-Coder-30B-A3B-Instruct
-      quantization: nf4
+      name: Qwen/Qwen2.5-Coder-1.5B-Instruct           # 151936, bf16 ≈ 3.1 GB
+      quantization: null
     math:
-      name: Qwen/Qwen3-30B-A3B-Thinking-2507
-      quantization: nf4
+      name: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B  # 151936, bf16 ≈ 3.1 GB
+      quantization: null
+    medical:
+      name: Qwen/Qwen2.5-1.5B-Instruct                 # 151936, bf16 ≈ 3.1 GB
+      quantization: null
   dtype: bfloat16
   trust_remote_code: false
   hf_cache_dir: null
@@ -110,10 +136,16 @@ controller:
 data:
   source: hf
   router: metadata
+  strict_load: true         # a missing domain must fail, not warn
+  shuffle_before_cap: true  # no-op here (max_rows_per_domain: null)
   domains:
     - {name: general, layer_c: hivemind-research/general-layerC-200k}
-    - {name: code,    layer_c: hivemind-research/code-layerC-200k}
+    # See stream_small.yaml: code's published bucket_id has only 3 distinct
+    # values, so the recurrent phases key on a composite instead (12 buckets).
+    - {name: code,    layer_c: hivemind-research/code-layerC-200k,
+       bucket_columns: [subdomain, difficulty, source]}
     - {name: math,    layer_c: hivemind-research/math-layerC-200K}
+    - {name: medical, layer_c: hivemind-research/medical-layerC-200k}
   split: train
   tokenizer: Qwen/Qwen3-1.7B
   max_seq_len: 1024
@@ -128,19 +160,28 @@ stream:
   enabled: true
   seed: null
   phases:
-    - {name: general_warm,   domain: general, steps: 1600, mode: random}
-    - {name: code_recurrent, domain: code,    steps: 3600, mode: recurrent,
+    - {name: general_warm,      domain: general, steps: 1000, mode: random}
+    - {name: code_recurrent,    domain: code,    steps: 3000, mode: recurrent,
        recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
-                    novel_fraction: 0.5}}
-    - {name: novel_inject,   domain: general, steps: 300,  mode: novel}
-    - {name: math_recurrent, domain: math,    steps: 3600, mode: recurrent,
+                    novel_fraction: 0.5,
+                    exclude_chosen_buckets_from_background: true}}
+    - {name: novel_inject,      domain: general, steps: 300,  mode: novel}
+    - {name: math_recurrent,    domain: math,    steps: 3000, mode: recurrent,
        recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
-                    novel_fraction: 0.5}}
-    - {name: code_revisit,   domain: code,    steps: 1000, mode: recurrent,
+                    novel_fraction: 0.5,
+                    exclude_chosen_buckets_from_background: true}}
+    # Medical is the only domain whose teacher_confidence reaches the 0.3
+    # gate (mean 0.596 vs 0.82-0.88 elsewhere).
+    - {name: medical_recurrent, domain: medical, steps: 2600, mode: recurrent,
+       recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
+                    novel_fraction: 0.5,
+                    exclude_chosen_buckets_from_background: true}}
+    # Same buckets as code_recurrent, now after TWO intervening domains.
+    - {name: code_revisit,      domain: code,    steps: 900,  mode: recurrent,
        recurrence: {num_buckets: 8, samples_per_bucket: 16, revisit_period: 10,
                     reuse_from: code_recurrent}}
-    - {name: mixed_tail,     domains: [general, code, math], steps: 1900,
-       mode: mixed, weights: [0.34, 0.33, 0.33]}
+    - {name: mixed_tail, domains: [general, code, math, medical], steps: 1200,
+       mode: mixed, weights: [0.25, 0.25, 0.25, 0.25]}
 
 train:
   steps: null               # derived from the stream (12000)

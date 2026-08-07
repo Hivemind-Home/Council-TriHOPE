@@ -1,12 +1,19 @@
 # CPU warm-up smoke for the phased-stream pipeline: tiny in-repo student,
-# REAL HF Layer-C data (math only — one download), cache-mode teachers
-# (CE on teacher_output_text), ~1-2 min on CPU.
+# REAL HF Layer-C data, cache-mode teachers (CE on teacher_output_text),
+# ~2-4 min on CPU.
 #
 #   python train.py --config-name stream_smoke
 #
 # Verifies end-to-end: Layer-C loading, stream phases (random → recurrent →
-# novel → revisit), routing decisions + event trace, consolidation flagging,
-# phase-boundary eval + retention tracking, checkpoint + resume.
+# novel → cross-domain recurrent → revisit), routing decisions + event
+# trace, consolidation flagging, phase-boundary eval + retention tracking,
+# checkpoint + resume.
+#
+# math + medical are both single-file train parquets, so this stays a small
+# download. Code is deliberately absent: load_dataset fetches the whole
+# split before .select, and code-layerC-200k is 64 shards (~870 MB), which
+# would blow the runtime contract. The composite-bucket path code needs is
+# covered without any download by tests/test_stream_configs.py.
 defaults: []
 
 model:
@@ -28,10 +35,12 @@ model:
 
 teachers:
   mode: cache               # supervision = teacher_output_text (CE); no teacher model loaded
-  num_teachers: 1
+  num_teachers: 2
   prototype_seed_samples: 8
+  # Real Layer-C teacher_id values — a mismatch makes MetadataRouter miss.
   teacher_ids:
-    math: math_teacher
+    math: math_teacher_deepseek_r1_distill_qwen_1p5b
+    medical: medical_teacher_qwen2p5_1p5b_instruct_clean
 
 distillation:
   tau: 4.0
@@ -70,8 +79,14 @@ controller:
 data:
   source: hf
   router: metadata
+  strict_load: true
+  # REQUIRED at this cap: the first 2000 rows of medical hold only 14
+  # buckets with ≥16 rows (17 across the full split), and general would
+  # drop to 15 of 26. Shuffling first keeps the cap representative.
+  shuffle_before_cap: true
   domains:
-    - {name: math, layer_c: hivemind-research/math-layerC-200K}
+    - {name: math,    layer_c: hivemind-research/math-layerC-200K}
+    - {name: medical, layer_c: hivemind-research/medical-layerC-200k}
   split: train
   tokenizer: Qwen/Qwen3-0.6B
   max_seq_len: 256
@@ -85,15 +100,21 @@ stream:
   enabled: true
   seed: null                # falls back to train.seed
   phases:
-    - {name: math_warm,      domain: math, steps: 10, mode: random}
-    - {name: math_recurrent, domain: math, steps: 30, mode: recurrent,
-       recurrence: {num_buckets: 4, samples_per_bucket: 8}}
-    - {name: novel_inject,   domain: math, steps: 5,  mode: novel}
-    - {name: math_revisit,   domain: math, steps: 10, mode: recurrent,
+    - {name: math_warm,         domain: math,    steps: 10, mode: random}
+    - {name: math_recurrent,    domain: math,    steps: 30, mode: recurrent,
+       recurrence: {num_buckets: 4, samples_per_bucket: 8,
+                    exclude_chosen_buckets_from_background: true}}
+    - {name: novel_inject,      domain: math,    steps: 5,  mode: novel}
+    # Second domain: exercises cross-domain forgetting and the low-confidence
+    # regime before the revisit measures recovery.
+    - {name: medical_recurrent, domain: medical, steps: 15, mode: recurrent,
+       recurrence: {num_buckets: 4, samples_per_bucket: 8,
+                    exclude_chosen_buckets_from_background: true}}
+    - {name: math_revisit,      domain: math,    steps: 10, mode: recurrent,
        recurrence: {num_buckets: 4, samples_per_bucket: 8, reuse_from: math_recurrent}}
 
 train:
-  steps: null               # derived from the stream (55)
+  steps: null               # derived from the stream (70)
   log_interval: 5
   seed: 1337
   device: cpu

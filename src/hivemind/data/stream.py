@@ -43,6 +43,17 @@ class RecurrenceSpec:
     ``novel_fraction`` of those become fresh single-use rows instead.
     ``reuse_from`` replays the exact bucket/sample selection of an earlier
     phase (steps-to-recover measurements).
+
+    ``exclude_chosen_buckets_from_background`` keeps this phase's background
+    slots away from the buckets it chose. Without it, only the *sampled rows*
+    are reserved, so a background draw can still land on another row of a
+    chosen bucket — and since the controller keys repetition on the batch's
+    bucket id, that re-increments the very counter the phase is trying to
+    measure. With ``n/(n+k)`` at ``k=10`` the frequency term saturates above
+    0.9 after ~45 such hits, so repetition would read high from the start of
+    the phase and never ramp. The scope is deliberately this phase's own
+    background pool; later phases (a mixed replay tail) may revisit these
+    buckets on purpose.
     """
 
     num_buckets: int = 8
@@ -50,6 +61,7 @@ class RecurrenceSpec:
     revisit_period: Optional[int] = None  # default: num_buckets (pure cycling)
     novel_fraction: float = 0.0
     reuse_from: Optional[str] = None
+    exclude_chosen_buckets_from_background: bool = False
 
 
 @dataclass
@@ -74,6 +86,42 @@ class PhaseSpec:
             raise ValueError(f"Phase '{self.name}': mode '{self.mode}' requires 'domain'")
         if self.steps <= 0:
             raise ValueError(f"Phase '{self.name}': steps must be positive")
+
+
+class _NovelCursor:
+    """Hands out never-before-used rows from a pre-shuffled pool.
+
+    Replaces a per-batch ``[i for i in pool if i not in used]`` rescan. That
+    scan is O(pool) per novel batch, and at headline scale (160k rows,
+    ~1160 novel batches across the stream) it costs ~10^8 membership tests
+    of pure startup latency before step 0. Shuffling once and walking a
+    cursor gives the same guarantee — each row used at most once, globally,
+    across every phase sharing the ``used`` set — in O(pool) total.
+    """
+
+    def __init__(
+        self, rng: np.random.Generator, pool: list[int], used: set[int]
+    ) -> None:
+        self._order = [int(i) for i in rng.permutation(pool)]
+        self._pos = 0
+        self._used = used
+
+    def take(self, n: int) -> list[int]:
+        out: list[int] = []
+        while len(out) < n and self._pos < len(self._order):
+            idx = self._order[self._pos]
+            self._pos += 1
+            if idx in self._used:
+                continue
+            self._used.add(idx)
+            out.append(idx)
+        if len(out) < n:
+            # Return what we consumed; the schedule is unusable either way.
+            raise ValueError(
+                "Not enough unused rows for a novel batch — increase the domain "
+                "row cap (data.max_rows_per_domain) or reduce novel steps."
+            )
+        return out
 
 
 @dataclass
@@ -110,12 +158,16 @@ class StreamSchedule:
         dataset: Any,  # HivemindHFDataset (needs indices_for_domain / indices_by_bucket)
         batch_size: int,
         seed: int,
+        data_identity: Optional[dict[str, Any]] = None,
     ) -> None:
         if not cfg.phases:
             raise ValueError("StreamSchedule requires at least one phase")
         self.cfg = cfg
         self.batch_size = int(batch_size)
         self.seed = int(cfg.seed if cfg.seed is not None else seed)
+        # Folded into config_digest so the resume guard notices a changed
+        # corpus, not just a changed phase list. See config_digest().
+        self.data_identity = data_identity or {}
 
         self.total_steps = sum(p.steps for p in cfg.phases)
         self._phase_starts: list[int] = []
@@ -190,9 +242,14 @@ class StreamSchedule:
             step += phase.steps
 
     def _background_pool(
-        self, dataset: Any, domain: str, used: set[int]
+        self,
+        dataset: Any,
+        domain: str,
+        used: set[int],
+        exclude_rows: Optional[set[int]] = None,
     ) -> list[int]:
-        pool = [i for i in dataset.indices_for_domain(domain) if i not in used]
+        blocked = used if not exclude_rows else (used | exclude_rows)
+        pool = [i for i in dataset.indices_for_domain(domain) if i not in blocked]
         if not pool:  # tiny datasets: fall back to the full domain
             pool = list(dataset.indices_for_domain(domain))
         return pool
@@ -238,7 +295,14 @@ class StreamSchedule:
         }
 
         rng = self._rng(pi, tag=3)
-        pool = self._background_pool(dataset, phase.domain, used)
+        exclude: Optional[set[int]] = None
+        if rec.exclude_chosen_buckets_from_background:
+            all_buckets = dataset.indices_by_bucket(phase.domain)
+            # Every row of a chosen bucket, not just the sampled subset —
+            # the controller keys repetition on the bucket, not the row.
+            exclude = {i for k in subsets for i in all_buckets.get(k, ())}
+        pool = self._background_pool(dataset, phase.domain, used, exclude)
+        novel = _NovelCursor(rng, pool, used)
         visits: dict[str, int] = {k: 0 for k in bucket_keys}
         batches: list[list[int]] = []
         novel_serial = 0
@@ -254,7 +318,7 @@ class StreamSchedule:
                     for j in range(self.batch_size)
                 ]
             elif rec.novel_fraction > 0 and rng.random() < rec.novel_fraction:
-                batch = self._claim_novel(rng, pool, used)
+                batch = novel.take(self.batch_size)
                 self._bucket_overrides[start + t] = (
                     f"novel_{phase.name}_{novel_serial}"
                 )
@@ -264,27 +328,15 @@ class StreamSchedule:
             batches.append(batch)
         return batches
 
-    def _claim_novel(
-        self, rng: np.random.Generator, pool: list[int], used: set[int]
-    ) -> list[int]:
-        fresh = [i for i in pool if i not in used]
-        if len(fresh) < self.batch_size:
-            raise ValueError(
-                "Not enough unused rows for a novel batch — increase the domain "
-                "row cap or reduce novel steps."
-            )
-        picked = list(rng.choice(fresh, size=self.batch_size, replace=False))
-        used.update(picked)
-        return [int(i) for i in picked]
-
     def _build_novel(
         self, pi: int, phase: PhaseSpec, dataset: Any, used: set[int], start: int
     ) -> list[list[int]]:
         rng = self._rng(pi, tag=4)
         pool = list(dataset.indices_for_domain(phase.domain))
+        novel = _NovelCursor(rng, pool, used)
         batches = []
         for t in range(phase.steps):
-            batch = self._claim_novel(rng, pool, used)
+            batch = novel.take(self.batch_size)
             self._bucket_overrides[start + t] = f"novel_{phase.name}_{t}"
             batches.append(batch)
         return batches
@@ -340,13 +392,22 @@ class StreamSchedule:
         return {k: list(v) for k, v in self._phase_buckets.get(phase_name, {}).items()}
 
     def config_digest(self) -> str:
+        """Fingerprint of everything that determines the batch sequence.
+
+        Stored in checkpoint metadata and compared on resume. It must cover
+        the *data* as well as the phase list: which repos are loaded, how
+        each domain's buckets are keyed, and how the row cap is applied all
+        change which rows land in which batch, and previously a run could
+        swap its corpus and still pass the resume guard.
+        """
         payload = {
             "seed": self.seed,
             "batch_size": self.batch_size,
             "phases": [asdict(p) for p in self.cfg.phases],
+            "data": self.data_identity,
         }
         return hashlib.sha256(
-            json.dumps(payload, sort_keys=True).encode("utf-8")
+            json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()[:16]
 
 
