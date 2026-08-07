@@ -433,6 +433,7 @@ def run_training_loop(
         keep_last=int(ckpt_cfg_raw.get("keep_last", 3)),
         keep_tagged=int(ckpt_cfg_raw.get("keep_tagged", 4)),
         resume_from=ckpt_cfg_raw.get("resume_from"),
+        allow_partial_load=bool(ckpt_cfg_raw.get("allow_partial_load", False)),
     )
     ckpt_manager = CheckpointManager(ckpt_cfg)
 

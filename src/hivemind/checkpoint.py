@@ -65,9 +65,36 @@ class CheckpointConfig:
     keep_last: int = 3
     keep_tagged: int = 4  # cap for tagged (e.g. pre_merge rollback) dirs
     resume_from: Optional[str] = None  # "latest" | "{step}" | absolute path
+    # Escape hatch for the key-mismatch guard in ``load()``. Leave false:
+    # a mismatch means the checkpoint does not describe this model, and
+    # silently loading nothing is far worse than stopping.
+    allow_partial_load: bool = False
 
 
 _UNTAGGED_RE = re.compile(r"^step_\d+$")
+
+
+def _reject_wrapped(model: nn.Module, where: str) -> None:
+    """Refuse a ``DistributedDataParallel``-wrapped student.
+
+    DDP's ``state_dict`` keys carry a ``module.`` prefix. Saving through the
+    wrapper and loading through the raw module (or vice versa) makes *every*
+    key mismatch — and because ``load_state_dict`` is called with
+    ``strict=False``, the model would silently load nothing while the
+    optimizer, controller EMAs, R-store and RNG all restore correctly. The
+    run then continues from a fresh backbone with a fully-warmed controller
+    and never reports a problem.
+
+    There is no safe way to guess which side the prefix belongs on, so this
+    is a hard error rather than a fix-up.
+    """
+    if isinstance(model, nn.parallel.DistributedDataParallel):
+        raise TypeError(
+            f"CheckpointManager.{where}() requires the unwrapped student module. "
+            "A DistributedDataParallel wrapper produces 'module.'-prefixed "
+            "state_dict keys, which would silently match nothing on load. "
+            "Pass ddp.module (or the raw student you wrapped)."
+        )
 
 
 def _split_student_state(model: nn.Module) -> tuple[dict, dict]:
@@ -109,9 +136,16 @@ def _restore_rng(state: dict) -> None:
 class CheckpointManager:
     """Owns the checkpoint directory and the save/load protocol."""
 
-    def __init__(self, cfg: CheckpointConfig) -> None:
+    def __init__(self, cfg: CheckpointConfig, *, is_main: bool = True) -> None:
         self.cfg = cfg
         self.root = Path(cfg.dir)
+        # Under DDP only rank 0 writes checkpoints: the tmp→rename→symlink
+        # dance in ``save`` is not safe to run concurrently from N processes
+        # against one directory. Every rank still *reads* (resume restores the
+        # same state everywhere), so ``load`` and the resolve helpers are
+        # unguarded — and so is this mkdir, which is idempotent, so that the
+        # read paths never race against rank 0 creating the root.
+        self.is_main = is_main
         if cfg.enabled:
             self.root.mkdir(parents=True, exist_ok=True)
 
@@ -138,6 +172,9 @@ class CheckpointManager:
         to — resume from it explicitly via ``checkpoint.resume_from=<path>``.
         """
         if not self.cfg.enabled:
+            return None
+        _reject_wrapped(student, "save")
+        if not self.is_main:
             return None
 
         suffix = f"_{tag}" if tag else ""
@@ -254,13 +291,27 @@ class CheckpointManager:
         phase_eval: Optional[PhaseEvalTracker] = None,
         map_location: str | torch.device = "cpu",
     ) -> dict[str, Any]:
+        _reject_wrapped(student, "load")
         # weights_only=False: our own checkpoints carry numpy arrays in
         # controller/RNG state, which torch>=2.6's default unpickler rejects.
         # Trust is fine here because we only load checkpoints we wrote.
         base = torch.load(path / "base.pt", map_location=map_location, weights_only=False)
         lora = torch.load(path / "lora.pt", map_location=map_location, weights_only=False)
         merged = {**base, **lora}
+        # ``merged`` is the full state_dict split by name and rejoined, so a
+        # correctly-matched checkpoint yields two empty lists. Anything else
+        # means this checkpoint does not describe this model — stop rather
+        # than resume onto partially-restored weights.
         missing, unexpected = student.load_state_dict(merged, strict=False)
+        if (missing or unexpected) and not self.cfg.allow_partial_load:
+            raise RuntimeError(
+                f"checkpoint {path} does not match the student model: "
+                f"{len(missing)} missing key(s) {list(missing)[:8]}, "
+                f"{len(unexpected)} unexpected key(s) {list(unexpected)[:8]}. "
+                "This usually means the model config changed, or the "
+                "checkpoint was written from a differently-wrapped module. "
+                "Set checkpoint.allow_partial_load=true to load anyway."
+            )
         if missing:
             logger.warning("checkpoint missing keys: %s", list(missing)[:8])
         if unexpected:
