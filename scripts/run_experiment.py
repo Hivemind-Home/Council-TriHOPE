@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -89,7 +90,10 @@ def expand_matrix(manifest: dict) -> list[ResolvedRun]:
                 f"++logging.path={run_dir / 'metrics.jsonl'}",
                 f"++logging.events_path={run_dir / 'events.jsonl'}",
                 f"++run.dir={run_dir}",
-                f"++hydra.run.dir={run_dir / 'hydra'}",
+                # Per-rank: torchrun sets RANK, and N processes writing the
+                # same .hydra/ snapshot concurrently is a race. Analysis only
+                # ever reads run.dir, so per-rank snapshots are harmless.
+                f"++hydra.run.dir={run_dir / 'hydra'}/rank${{oc.env:RANK,0}}",
             ]
             resolved.append(
                 ResolvedRun(
@@ -119,27 +123,70 @@ def _write_status(run: ResolvedRun, state: str, **extra) -> None:
     (run.run_dir / "status.json").write_text(json.dumps(payload, indent=2))
 
 
-def launch(run: ResolvedRun, base_config: str, resume: bool = False) -> int:
-    """Run one training subprocess, tee-ing output to stdout.log."""
-    cmd = [
-        sys.executable,
-        str(REPO_ROOT / "train.py"),
-        "--config-name",
-        base_config,
-        *run.overrides,
-    ]
+def build_command(run: ResolvedRun, base_config: str, nproc: int, resume: bool) -> list[str]:
+    """Plain python for one process, torch.distributed.run for many.
+
+    ``python -m torch.distributed.run`` rather than the ``torchrun`` shim so
+    the same interpreter is guaranteed (this repo runs under conda/uv where
+    PATH resolution is not reliable). ``distributed.world_size`` is forwarded
+    so init_distributed can cross-check it against WORLD_SIZE and fail loudly
+    on a mismatch instead of silently training on fewer GPUs.
+    """
+    if nproc > 1:
+        cmd = [
+            sys.executable, "-m", "torch.distributed.run",
+            "--standalone", "--nnodes=1", f"--nproc_per_node={nproc}",
+            # Per-rank stdout/stderr files; without this N ranks interleave
+            # into one fd and the log is unreadable.
+            f"--log-dir={run.run_dir / 'torchrun_logs'}",
+            "--redirects=3", "--tee=3",
+            str(REPO_ROOT / "train.py"),
+            "--config-name", base_config,
+            *run.overrides,
+            "++distributed.enabled=true",
+            f"++distributed.world_size={nproc}",
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            str(REPO_ROOT / "train.py"),
+            "--config-name",
+            base_config,
+            *run.overrides,
+        ]
     if resume and (run.run_dir / "checkpoints").exists():
         cmd.append("++checkpoint.resume_from=latest")
+    return cmd
+
+
+def launch(
+    run: ResolvedRun,
+    base_config: str,
+    resume: bool = False,
+    nproc: int = 1,
+    gpu: int | None = None,
+) -> int:
+    """Run one training subprocess, tee-ing output to stdout.log."""
+    cmd = build_command(run, base_config, nproc, resume)
+
+    env = dict(os.environ)
+    if gpu is not None:
+        # One spec per GPU (--parallel-gpus). For a matrix of INDEPENDENT
+        # runs this beats DDP-ing a single spec across N GPUs: no
+        # collectives, no batch-size divisibility constraint, no stream
+        # digest change, and N times the runs rather than N times the
+        # tokens on one run.
+        env["CUDA_VISIBLE_DEVICES"] = str(gpu)
 
     run.run_dir.mkdir(parents=True, exist_ok=True)
     _write_status(run, "running", cmd=" ".join(cmd), started=time.time())
-    print(f"[{run.run_id}] {' '.join(cmd)}")
+    print(f"[{run.run_id}]{f' gpu={gpu}' if gpu is not None else ''} {' '.join(cmd)}")
 
     with open(run.run_dir / "stdout.log", "a", encoding="utf-8") as log:
         log.write(f"\n=== launch {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n{' '.join(cmd)}\n")
         log.flush()
         proc = subprocess.Popen(
-            cmd, cwd=str(REPO_ROOT), stdout=log, stderr=subprocess.STDOUT
+            cmd, cwd=str(REPO_ROOT), stdout=log, stderr=subprocess.STDOUT, env=env
         )
         code = proc.wait()
 
@@ -189,6 +236,53 @@ def write_index(manifest: dict, runs: list[ResolvedRun]) -> None:
     (out_root / "manifest_index.json").write_text(json.dumps(index, indent=2))
 
 
+def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
+    """One spec per GPU, concurrently, refilling a slot as each finishes."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    n = int(args.parallel_gpus)
+    pending = []
+    for run in runs:
+        status = _read_status(run)
+        if args.resume and status["state"] == "done":
+            print(f"[{run.run_id}] already done — skipping")
+            continue
+        pending.append((run, args.resume and status["state"] in ("running", "failed")))
+
+    print(f"Dispatching {len(pending)} runs across {n} GPUs...")
+    failures = 0
+    # A free-GPU queue rather than a static split, so a short run does not
+    # leave its GPU idle while a long one on another slot finishes.
+    free_gpus: list[int] = list(range(n))
+    lock = __import__("threading").Lock()
+
+    def _work(item):
+        run, resume_this = item
+        with lock:
+            gpu = free_gpus.pop()
+        try:
+            return run, launch(
+                run, manifest["base_config"], resume=resume_this, nproc=nproc, gpu=gpu
+            )
+        finally:
+            with lock:
+                free_gpus.append(gpu)
+
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        for run, code in pool.map(_work, pending):
+            if code == 0:
+                cleanup_checkpoints(run, policy)
+            else:
+                failures += 1
+                print(f"[{run.run_id}] FAILED (exit {code})")
+            write_index(manifest, runs)
+
+    write_index(manifest, runs)
+    done = sum(1 for r in runs if _read_status(r)["state"] == "done")
+    print(f"\nDone: {done}/{len(runs)} runs complete, {failures} failed this session.")
+    return 1 if failures else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("manifest", type=Path)
@@ -198,7 +292,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-hours", type=float, default=None, help="stop launching past this budget"
     )
+    parser.add_argument(
+        "--parallel-gpus",
+        type=int,
+        default=None,
+        help=(
+            "run N specs CONCURRENTLY, one per GPU (CUDA_VISIBLE_DEVICES pinned). "
+            "For a matrix of independent runs this beats DDP: no collectives, no "
+            "batch-size constraint, no stream-digest change, N x the runs."
+        ),
+    )
+    parser.add_argument(
+        "--nproc-per-node",
+        type=int,
+        default=None,
+        help=(
+            "DDP-shard EACH run across N GPUs via torch.distributed.run. Use for "
+            "long single runs (headline), not for the ablation matrix. Requires "
+            "data.batch_size (the GLOBAL batch) to be divisible by N."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.parallel_gpus and args.nproc_per_node and args.nproc_per_node > 1:
+        parser.error(
+            "--parallel-gpus and --nproc-per-node are alternative ways to spend the "
+            "same GPUs; pick one."
+        )
 
     manifest = load_manifest(args.manifest)
     runs = expand_matrix(manifest)
@@ -214,8 +333,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     policy = str(manifest.get("cleanup_checkpoints", "keep_final"))
+    nproc = int(args.nproc_per_node or manifest.get("nproc_per_node", 1))
     budget_start = time.time()
     failures = 0
+
+    if args.parallel_gpus and args.parallel_gpus > 1:
+        return _run_parallel(runs, manifest, args, policy, nproc=1)
+
     for run in runs:
         status = _read_status(run)
         if args.resume and status["state"] == "done":
@@ -227,7 +351,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Budget of {args.max_hours}h exhausted — stopping before {run.run_id}")
                 break
         resume_this = args.resume and status["state"] in ("running", "failed")
-        code = launch(run, manifest["base_config"], resume=resume_this)
+        code = launch(
+            run, manifest["base_config"], resume=resume_this, nproc=nproc
+        )
         if code == 0:
             cleanup_checkpoints(run, policy)
         else:

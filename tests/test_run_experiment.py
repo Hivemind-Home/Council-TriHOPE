@@ -125,3 +125,73 @@ class TestManifestFilesParse:
         runs = expand_matrix(manifest)
         assert len(runs) >= 4
         assert len({r.run_id for r in runs}) == len(runs)
+
+
+class TestLaunchModes:
+    """Two ways to spend N GPUs, with different trade-offs."""
+
+    @staticmethod
+    def _run(tmp_path):
+        from run_experiment import ResolvedRun
+
+        return ResolvedRun(
+            run_id="trihope-seed1", spec_id="trihope", seed=1,
+            run_dir=tmp_path / "trihope-seed1",
+            overrides=["++train.seed=1"],
+        )
+
+    def test_single_process_command_is_unchanged(self, tmp_path):
+        from run_experiment import build_command
+
+        cmd = build_command(self._run(tmp_path), "stream_small", nproc=1, resume=False)
+        assert cmd[1].endswith("train.py")
+        assert "torch.distributed.run" not in " ".join(cmd)
+        assert "++distributed.enabled=true" not in cmd
+
+    def test_multi_process_uses_torch_distributed_run(self, tmp_path):
+        from run_experiment import build_command
+
+        cmd = build_command(self._run(tmp_path), "stream_small", nproc=4, resume=False)
+        joined = " ".join(cmd)
+        # -m torch.distributed.run, not the `torchrun` shim: guarantees the
+        # same interpreter under conda/uv.
+        assert cmd[1] == "-m" and cmd[2] == "torch.distributed.run"
+        assert "--nproc_per_node=4" in cmd
+        assert "++distributed.enabled=true" in cmd
+        # Forwarded so init_distributed can cross-check against WORLD_SIZE.
+        assert "++distributed.world_size=4" in cmd
+        # Per-rank log files, else N ranks interleave into one fd.
+        assert "--redirects=3" in cmd and "torchrun_logs" in joined
+
+    def test_resume_flag_is_appended_last_in_both_modes(self, tmp_path):
+        from run_experiment import build_command
+
+        run = self._run(tmp_path)
+        (run.run_dir / "checkpoints").mkdir(parents=True)
+        for nproc in (1, 4):
+            cmd = build_command(run, "stream_small", nproc=nproc, resume=True)
+            assert cmd[-1] == "++checkpoint.resume_from=latest"
+
+    def test_hydra_run_dir_is_per_rank(self):
+        from run_experiment import expand_matrix
+
+        runs = expand_matrix(
+            {"experiment": "e", "base_config": "stream_small",
+             "runs": [{"id": "a"}], "seeds": [1]}
+        )
+        hydra = [o for o in runs[0].overrides if o.startswith("++hydra.run.dir=")]
+        assert len(hydra) == 1
+        # N ranks writing one .hydra/ snapshot concurrently is a race.
+        assert "${oc.env:RANK,0}" in hydra[0]
+
+    def test_the_two_gpu_modes_are_mutually_exclusive(self, tmp_path, capsys):
+        import pytest as _pytest
+        from run_experiment import main
+
+        manifest = tmp_path / "m.yaml"
+        manifest.write_text(
+            "experiment: e\nbase_config: stream_small\nruns:\n  - id: a\n"
+        )
+        with _pytest.raises(SystemExit):
+            main([str(manifest), "--parallel-gpus", "2", "--nproc-per-node", "2"])
+        assert "pick one" in capsys.readouterr().err
