@@ -177,3 +177,66 @@ class TestBuildGoldProbes:
     def test_missing_domain_skipped(self) -> None:
         probes = build_gold_probes(_GoldDataset(), ["code"], num_samples=3, seed=1)
         assert probes == {}
+
+
+class _ProbeDataset:
+    """Rows with a controllable gold density, mirroring the real corpora."""
+
+    def __init__(self, n: int, gold_every: int, domain: str = "math"):
+        self.domain = domain
+        self._rows = [
+            {
+                "input_text": f"q{i}",
+                "target_text": f"a{i}",
+                "has_gold_label": (i % gold_every == 0),
+            }
+            for i in range(n)
+        ]
+
+    def __getitem__(self, i):
+        return self._rows[i]
+
+    def gold_indices(self, name):
+        if name != self.domain:
+            raise KeyError(name)
+        return [i for i, r in enumerate(self._rows) if r["has_gold_label"]]
+
+
+class TestGoldProbeScanWindow:
+    """Gold rows are sparse: math has 379 in 20 000 validation rows."""
+
+    def test_a_wide_scan_reaches_the_requested_count(self):
+        ds = _ProbeDataset(n=20000, gold_every=53)  # ~377 gold rows
+        probes = build_gold_probes(ds, ["math"], num_samples=64, seed=1)
+        assert len(probes["math"].rows) == 64
+
+    def test_a_narrow_scan_starves_the_probe_set(self):
+        """This is the shipped behaviour the fix targets: 256 rows -> ~5 probes."""
+        ds = _ProbeDataset(n=256, gold_every=53)
+        probes = build_gold_probes(ds, ["math"], num_samples=64, seed=1)
+        assert len(probes["math"].rows) < 64
+
+    def test_shortfall_is_reported(self, capsys):
+        ds = _ProbeDataset(n=256, gold_every=53)
+        build_gold_probes(ds, ["math"], num_samples=64, seed=1)
+        assert "raise eval.exact_match.max_scan_rows" in capsys.readouterr().out
+
+    def test_no_gold_rows_is_reported_not_silent(self, capsys):
+        ds = _ProbeDataset(n=100, gold_every=10_000)  # only index 0 is gold
+        ds._rows[0]["has_gold_label"] = False
+        build_gold_probes(ds, ["math"], num_samples=8, seed=1)
+        assert "no has_gold_label rows" in capsys.readouterr().out
+
+    def test_unknown_domain_is_reported_not_silent(self, capsys):
+        ds = _ProbeDataset(n=10, gold_every=1)
+        probes = build_gold_probes(ds, ["nope"], num_samples=4, seed=1)
+        assert probes == {}
+        assert "not in the probe dataset" in capsys.readouterr().out
+
+    def test_probe_choice_is_deterministic_in_the_seed(self):
+        ds = _ProbeDataset(n=20000, gold_every=53)
+        a = build_gold_probes(ds, ["math"], num_samples=16, seed=7)
+        b = build_gold_probes(ds, ["math"], num_samples=16, seed=7)
+        assert [r["input_text"] for r in a["math"].rows] == [
+            r["input_text"] for r in b["math"].rows
+        ]

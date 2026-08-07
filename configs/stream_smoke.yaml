@@ -154,8 +154,9 @@ eval:
   on_consolidation: true
   exact_match:
     enabled: true
-    domains: [math]
+    domains: [medical]        # 78% gold vs math's 2%
     num_samples: 4
+    max_scan_rows: 2000
     max_new_tokens: 8
 
 profiling:

@@ -508,6 +508,7 @@ def run_training_loop(
         exact_match_domains=list(em_raw.get("domains", ["math"])),
         exact_match_samples=int(em_raw.get("num_samples", 64)),
         exact_match_max_new_tokens=int(em_raw.get("max_new_tokens", 64)),
+        exact_match_max_scan_rows=int(em_raw.get("max_scan_rows", 20000)),
     )
     val_loaders: dict[str, Any] = {}
     if eval_config.enabled and data_source == "hf":
@@ -543,8 +544,29 @@ def run_training_loop(
         for name, loader in val_loaders.items():
             if name not in eval_config.exact_match_domains:
                 continue
+            # Probes need their OWN dataset. The val loaders are capped at
+            # eval.max_rows_per_domain (a couple hundred rows) for speed,
+            # and gold rows are sparse — math has 379 in 20 000, so scanning
+            # the eval cap yields ~3 probes and quantizes EM to thirds.
+            probe_dataset = loader.dataset
+            scan = eval_config.exact_match_max_scan_rows
+            if scan > int(eval_cfg_raw.get("max_rows_per_domain", 256) or 256):
+                probe_cfg = dict(base_data)
+                probe_cfg["split"] = eval_cfg_raw.get("split", "validation")
+                probe_cfg["domains"] = [
+                    s for s in base_data.get("domains", [])
+                    if domain_names([s])[0] == name
+                ]
+                probe_cfg["max_rows_per_domain"] = scan
+                probe_cfg["shuffle"] = False
+                try:
+                    probe_dataset = build_dataloader(
+                        probe_cfg, distributed=False
+                    ).dataset
+                except RuntimeError as exc:
+                    print(f"eval: exact_match probe scan for {name} failed: {exc}")
             probes = build_gold_probes(
-                loader.dataset,
+                probe_dataset,
                 [name],
                 num_samples=eval_config.exact_match_samples,
                 seed=int(train_cfg.get("seed", 42)),

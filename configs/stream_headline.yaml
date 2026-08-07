@@ -225,8 +225,10 @@ eval:
   on_consolidation: false
   exact_match:
     enabled: true
-    domains: [math]
+    # code is 100% gold, medical 78%, math 2% (379 rows in 20k).
+    domains: [code, medical, math]
     num_samples: 64
+    max_scan_rows: 20000     # independent of eval.max_rows_per_domain
     max_new_tokens: 64
 
 profiling:

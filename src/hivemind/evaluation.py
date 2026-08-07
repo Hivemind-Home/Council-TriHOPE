@@ -48,6 +48,12 @@ class EvaluationConfig:
     exact_match_domains: list[str] = field(default_factory=lambda: ["math"])
     exact_match_samples: int = 64
     exact_match_max_new_tokens: int = 64
+    #: How many validation rows to scan for gold-labelled probes. This is
+    #: deliberately independent of ``max_rows_per_domain``, which caps the
+    #: *loss* eval loaders at a couple hundred rows: math carries 379 gold
+    #: rows in 20 000, so scanning only the eval cap yields ~3 probes and
+    #: quantizes the EM column to thirds.
+    exact_match_max_scan_rows: int = 20000
 
 
 @dataclass
@@ -331,16 +337,33 @@ def build_gold_probes(
         try:
             gold = list(dataset.gold_indices(domain))
         except (KeyError, AttributeError):
+            print(f"[warn] exact_match: domain {domain!r} not in the probe dataset")
             continue
         if not gold:
+            # Silent before: a domain with 0% has_gold_label (general) or a
+            # scan window that happens to miss the gold rows would simply
+            # produce no EM column, with nothing in the logs to say why.
+            print(
+                f"[warn] exact_match: domain {domain!r} has no has_gold_label rows "
+                "in the scanned window; no EM probes for it."
+            )
             continue
         rng = np.random.default_rng(seed + len(domain))
         if len(gold) > num_samples:
             gold = [int(i) for i in rng.choice(gold, size=num_samples, replace=False)]
         rows = [dataset[i] for i in gold]
+        # gold_indices is the real filter; target_text is non-empty on every
+        # published row, so this only guards hand-made datasets.
         rows = [r for r in rows if r.get("target_text")]
-        if rows:
-            probes[domain] = GoldProbeSet(domain=domain, rows=rows)
+        if not rows:
+            continue
+        if len(rows) < num_samples:
+            print(
+                f"[warn] exact_match: domain {domain!r} yielded {len(rows)} probes, "
+                f"requested {num_samples}. EM will be quantized to 1/{len(rows)}; "
+                "raise eval.exact_match.max_scan_rows to scan more rows."
+            )
+        probes[domain] = GoldProbeSet(domain=domain, rows=rows)
     return probes
 
 
