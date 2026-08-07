@@ -412,15 +412,53 @@ class StreamSchedule:
 
 
 class StreamBatchSampler(Sampler[list[int]]):
-    """Batch sampler that replays a StreamSchedule from ``start_step``."""
+    """Batch sampler that replays a StreamSchedule from ``start_step``.
 
-    def __init__(self, schedule: StreamSchedule, start_step: int = 0) -> None:
+    Under DDP the schedule itself is built identically on every rank (it is
+    a pure function of the seed) at the **global** batch size, and each rank
+    takes a contiguous slice of each step's index list. Keeping the schedule
+    global is not a stylistic choice: ``batch_size`` is hashed into
+    ``config_digest()``, and rebuilding at a per-device size would change
+    which rows land in which bucket subset. The stream is the experiment; it
+    must not depend on how many GPUs happen to be available.
+
+    Contiguous (not strided) slicing means rank 0's first element is the
+    global batch's first element, which is what lets the controller-input
+    sync reproduce single-process ``bucket_id`` / ``embedding`` exactly.
+    Bucket purity survives because any contiguous slice of a bucket-pure
+    list is bucket-pure; novel-row uniqueness survives because each row goes
+    to exactly one rank.
+    """
+
+    def __init__(
+        self,
+        schedule: StreamSchedule,
+        start_step: int = 0,
+        rank: int = 0,
+        world_size: int = 1,
+    ) -> None:
         self.schedule = schedule
         self.start_step = int(start_step)
+        self.rank = int(rank)
+        self.world_size = max(1, int(world_size))
+        if self.world_size > 1 and schedule.batch_size % self.world_size:
+            raise ValueError(
+                f"data.batch_size={schedule.batch_size} is the GLOBAL batch and must "
+                f"be divisible by world_size={self.world_size}. Set it to a multiple "
+                f"of {self.world_size} — but note that changing batch_size changes "
+                f"the stream digest ({schedule.config_digest()}), so existing "
+                "checkpoints will not resume."
+            )
+        self.per_rank = schedule.batch_size // self.world_size
 
     def __iter__(self) -> Iterator[list[int]]:
         for step in range(self.start_step, self.schedule.total_steps):
-            yield self.schedule.indices_for_step(step)
+            idx = self.schedule.indices_for_step(step)
+            if self.world_size == 1:
+                yield idx
+            else:
+                lo = self.rank * self.per_rank
+                yield idx[lo : lo + self.per_rank]
 
     def __len__(self) -> int:
         return self.schedule.total_steps - self.start_step

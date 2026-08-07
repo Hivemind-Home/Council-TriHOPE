@@ -101,6 +101,8 @@ def build_dataloader(
     distributed: bool = False,
     stateful: bool = False,
     stream=None,
+    rank: int = 0,
+    world_size: int = 1,
 ):
     """Build a DataLoader from config.
 
@@ -134,10 +136,11 @@ def build_dataloader(
     if stream is not None and getattr(stream, "enabled", False):
         if source != "hf":
             raise ValueError("stream schedules require data.source=hf")
-        if distributed:
-            raise ValueError("stream schedules are single-process only")
         from .stream import StreamBatchSampler, StreamSchedule
 
+        # Built at the GLOBAL batch size on every rank — identical by
+        # construction, since the schedule is a pure function of the seed.
+        # Sharding happens inside the sampler, per step.
         schedule = StreamSchedule(
             stream,
             dataset,
@@ -147,7 +150,9 @@ def build_dataloader(
         )
         loader = DataLoader(
             dataset,
-            batch_sampler=StreamBatchSampler(schedule),
+            batch_sampler=StreamBatchSampler(
+                schedule, rank=rank, world_size=world_size
+            ),
             num_workers=cfg.get("num_workers", 0),
             pin_memory=cfg.get("pin_memory", True),
             collate_fn=collate_fn,

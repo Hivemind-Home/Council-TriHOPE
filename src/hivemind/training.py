@@ -38,6 +38,7 @@ from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
 from .data.hf_loader import domain_names
 from .distillation import DistillationConfig, compute_distillation_objective
+from .distributed import DistContext
 from .embedding import SharedEmbedding
 from .evaluation import (
     EvaluationConfig,
@@ -249,24 +250,42 @@ def run_training_loop(
     *,
     device: torch.device,
     distributed: bool = False,
+    dist: DistContext | None = None,
 ) -> dict[str, float]:
     """Main training loop with multi-teacher distillation and R/F/P routing.
 
     Args:
         cfg: full Hydra config.
         device: torch device.
-        distributed: whether running distributed.
+        distributed: deprecated alias kept for the CLI and existing tests;
+            prefer ``dist``.
+        dist: the process-group handle from
+            :func:`hivemind.distributed.init_distributed`. Inert at
+            ``world_size == 1``, which keeps the single-GPU path identical.
 
     Returns:
         Final metrics dict.
+
+    Under DDP exactly ONE call site uses the wrapped module — the student
+    forward. Everything else (module index, optimizer, stores, consolidator,
+    eval, checkpoints) must see the raw module: DDP has no ``__getattr__``
+    forwarding, so ``.blocks`` / ``.embed`` / ``.get_param_groups()`` raise
+    through it, and the parameter objects are shared either way.
     """
+    dist = dist if dist is not None else DistContext()
+    is_main = dist.is_main
     train_cfg = cfg.train
     seed = train_cfg.get("seed", 1337)
+    # The same seed on every rank is deliberate: it makes the initial
+    # weights, and every later reset_lora() draw, identical without a
+    # collective. All shipped configs run dropout=0, so the RNG streams do
+    # not desynchronize; consolidation broadcasts lora_a anyway.
     _seed_everything(seed)
 
     # --- Build components ---
     student = _build_student(cfg, device)
-    print(f"Student model: {sum(p.numel() for p in student.parameters()):,} params")
+    if is_main:
+        print(f"Student model: {sum(p.numel() for p in student.parameters()):,} params")
 
     # Data source decides the teacher kind + router kind.
     data_source = cfg.data.get("source", "synthetic")
@@ -369,6 +388,14 @@ def run_training_loop(
     elif trainable != "all":
         raise ValueError(f"train.trainable must be 'all' or 'lora', got {trainable!r}")
 
+    # DDP wrap. AFTER the requires_grad mutation above (DDP freezes the
+    # trainable set at construction) and BEFORE the optimizer, whose groups
+    # must be built from the raw module. DDP's construction-time parameter
+    # broadcast also gives the replication invariant its base case for free.
+    # ``student`` stays the raw module everywhere below; only the forward
+    # goes through ``model_fwd``.
+    model_fwd = dist.wrap(student)
+
     # Optimizer
     optim_cfg = OmegaConf.to_container(cfg.optim, resolve=True)
     optimizer = build_optimizer(student, optim_cfg)
@@ -456,7 +483,9 @@ def run_training_loop(
         resume_from=ckpt_cfg_raw.get("resume_from"),
         allow_partial_load=bool(ckpt_cfg_raw.get("allow_partial_load", False)),
     )
-    ckpt_manager = CheckpointManager(ckpt_cfg)
+    # Only rank 0 writes: the tmp->rename->symlink sequence is not safe to
+    # run concurrently against one directory. Every rank still loads.
+    ckpt_manager = CheckpointManager(ckpt_cfg, is_main=is_main)
 
     # Data — the train loader uses a StatefulSampler so its (epoch, offset)
     # cursor checkpoints alongside everything else (bit-exact resume). When a
@@ -476,7 +505,11 @@ def run_training_loop(
     data_sampler = None
     if stream_cfg.enabled:
         dataloader, stream_schedule = build_dataloader(
-            data_cfg, distributed, stream=stream_cfg
+            data_cfg,
+            distributed,
+            stream=stream_cfg,
+            rank=dist.rank,
+            world_size=dist.world_size,
         )
         cfg_steps = train_cfg.get("steps")
         if cfg_steps not in (None, stream_schedule.total_steps):
@@ -486,6 +519,12 @@ def run_training_loop(
                 "or make them equal."
             )
     else:
+        if dist.enabled:
+            raise ValueError(
+                "distributed.enabled requires a stream schedule (stream.enabled=true). "
+                "The non-stream StatefulSampler has no rank-aware sharding and its "
+                "(epoch, offset) cursor is what makes resume bit-exact."
+            )
         dataloader, data_sampler = build_dataloader(data_cfg, distributed, stateful=True)
     if int(data_cfg.get("num_workers", 0)) > 0:
         print(
@@ -580,11 +619,17 @@ def run_training_loop(
 
     # Logger
     log_cfg = OmegaConf.to_container(cfg.get("logging", {}), resolve=True) or {}
+    # One writer per JSONL file: all ranks appending to the same fd
+    # produces interleaved, torn records.
+    if not is_main:
+        log_cfg = dict(log_cfg, enabled=False)
     logger = init_logger(log_cfg)
 
     # Event trace ("when and why parameters changed") + per-module ledger.
-    trace_enabled = bool(log_cfg.get("enabled", False)) and bool(
-        log_cfg.get("events_enabled", True)
+    trace_enabled = (
+        bool(log_cfg.get("enabled", False))
+        and bool(log_cfg.get("events_enabled", True))
+        and is_main
     )
     event_trace = EventTrace(
         log_cfg.get("events_path", "logs/events.jsonl"), enabled=trace_enabled
@@ -700,7 +745,13 @@ def run_training_loop(
     data_iter = iter(dataloader)
 
     student.train()
-    pbar = tqdm(range(start_step, steps), desc="Training", initial=start_step, total=steps)
+    pbar = tqdm(
+        range(start_step, steps),
+        desc="Training",
+        initial=start_step,
+        total=steps,
+        disable=not is_main,
+    )
 
     # Track the last completed step so a SIGINT (Ctrl+C) or unexpected
     # exit can save a checkpoint at exactly where we stopped. The handler
@@ -812,6 +863,8 @@ def run_training_loop(
                 current_phase = phase_name
 
         # Get batch
+        raw = None
+        collate_failed = False
         with profiler.timer.section("data"):
             try:
                 raw = next(data_iter)
@@ -824,6 +877,23 @@ def run_training_loop(
                     ) from None
                 data_iter = iter(dataloader)
                 raw = next(data_iter)
+            except ValueError:
+                # DistillCollator raises when every row in the shard was
+                # malformed. Single-process that is fatal; under DDP it would
+                # kill one rank while the others block in the reducer — a hang,
+                # which is strictly worse than a crash. Agree on it first.
+                collate_failed = True
+
+        if dist.all_reduce_max_int(1 if collate_failed else 0):
+            if dist.cfg.on_empty_batch == "fail":
+                raise RuntimeError(
+                    f"step {step}: a rank produced an empty batch after collation "
+                    "(every row was missing input_text / response text). Set "
+                    "distributed.on_empty_batch=skip to continue instead."
+                )
+            optimizer.zero_grad()
+            event_trace.emit({"type": "skipped_step", "step": step})
+            continue
 
         batch = _unpack_batch(raw, device)
         tokens = batch["input_ids"]  # [B, T]
@@ -870,7 +940,9 @@ def run_training_loop(
         optimizer.zero_grad()
 
         with profiler.timer.section("forward"), autocast_ctx:
-            student_logits = student(tokens)  # [B, T, V]
+            # The ONLY site that goes through the DDP wrapper — this is what
+            # engages the gradient all-reduce during backward.
+            student_logits = model_fwd(tokens)  # [B, T, V]
 
             # Regularization (incl. dropout-based consistency penalty if enabled)
             consistency_forward = (
@@ -918,6 +990,25 @@ def run_training_loop(
         else:
             bucket_id = teacher_indices[0].item() if teacher_indices.numel() > 0 else 0
         embedding = h_t[0] if h_t.numel() > 0 else None
+        batch_conf = batch.get("teacher_confidence")
+        if isinstance(batch_conf, torch.Tensor) and batch_conf.numel() > 0:
+            conf_sum = float(batch_conf.float().sum().item())
+            conf_count = int(batch_conf.numel())
+        else:
+            conf_sum, conf_count = 0.0, 0
+
+        # Under DDP these three are the ONLY controller inputs still derived
+        # from the rank-local batch; everything downstream is a pure function
+        # of them plus the (already all-reduced) gradients. One fused
+        # collective makes them global, and the replication invariant in
+        # hivemind.distributed then holds by induction. Placed after
+        # scaler.unscale_ so DDP's own reduction has completed.
+        bucket_id, embedding, conf_mean = dist.sync_controller_inputs(
+            bucket_id=bucket_id,
+            embedding=embedding,
+            conf_sum=conf_sum,
+            conf_count=conf_count,
+        )
 
         with profiler.timer.section("signals"):
             module_signals = (
@@ -934,12 +1025,6 @@ def run_training_loop(
         # === Step 9: R/F/P routing policy ===
         policy_section = profiler.timer.section("policy_write")
         policy_section.__enter__()
-        batch_conf = batch.get("teacher_confidence")
-        conf_mean = (
-            float(batch_conf.float().mean().item())
-            if isinstance(batch_conf, torch.Tensor) and batch_conf.numel() > 0
-            else None
-        )
         actions = (
             policy.decide(module_signals, teacher_confidence=conf_mean)
             if controller_enabled
@@ -1006,6 +1091,23 @@ def run_training_loop(
 
         policy_section.__exit__(None, None, None)
 
+        # Tier 1: prove the replicas still agree on WHICH coordinates open.
+        # Divergence here has no symptom of its own — DDP synchronizes
+        # gradients, never parameters — so the replicas would simply drift
+        # apart and the run would finish looking healthy.
+        dist.assert_rank_consistent(
+            (
+                step,
+                bucket_id,
+                None if conf_mean is None else round(conf_mean, 12),
+                tuple(
+                    (d["module"], d["store"], d["coords_opened"])
+                    for d in write_metrics["actions"]
+                ),
+            ),
+            what="routing decisions",
+        )
+
         # === Step 11: Masked optimizer step ===
         # Coordinates not opened by an action stay bit-identical (params,
         # moments, weight decay, bias-correction clocks — Theorem 1).
@@ -1019,6 +1121,11 @@ def run_training_loop(
                 # A GradScaler inf/nan skip must not leak masks into the
                 # next step.
                 optimizer.clear_masks()
+
+        # Tier 2: catch drift that has not yet flipped a discrete decision.
+        every = dist.cfg.assert_rank_consistency
+        if every and step % every == 0:
+            dist.assert_state_consistent(student, optimizer, step=step)
 
         # === Step 12: Consolidation check ===
         # Record the batch for distill-based consolidation replay (no-op
@@ -1237,7 +1344,11 @@ def run_training_loop(
         # emergency save resumes from the right place.
         profiler.step_end(tokens_in_step=int(tokens.numel()))
         last_step = step
-        if _interrupted["flag"]:
+        # SIGINT does not land on every rank at the same instant. If one
+        # rank breaks and the others do not, the survivors block forever
+        # in the next gradient all-reduce — so agree on it first.
+        if dist.all_reduce_max_int(1 if _interrupted["flag"] else 0):
+            _interrupted["flag"] = True
             break
 
     # Restore the prior signal handler before any more code runs.
@@ -1248,7 +1359,7 @@ def run_training_loop(
 
     if current_phase is not None:
         profiler.on_phase_end(current_phase)
-    if run_dir is not None:
+    if run_dir is not None and is_main:
         write_run_summary(
             run_dir,
             profiler=profiler,

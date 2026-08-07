@@ -173,6 +173,22 @@ stream:
     - {name: mixed_tail, domains: [general, code, math, medical], steps: 600,
        mode: mixed, weights: [0.25, 0.25, 0.25, 0.25]}
 
+distributed:
+  enabled: false            # master switch; every collective no-ops at world_size 1
+  backend: nccl             # gloo for the CPU equivalence tests
+  strategy: ddp             # deepspeed/fsdp are rejected at startup — see
+                            # src/hivemind/distributed.py for why they void Theorem 1
+  world_size: auto          # cross-checked against the launcher's WORLD_SIZE
+  find_unused_parameters: false
+  gradient_as_bucket_view: true
+  broadcast_buffers: false
+  assert_rank_consistency: 100   # 0=off; tier-1 digest every step, tier-2 state every N
+  eval_mode: rank0
+  consolidation_mode: replicate  # | rank0_broadcast
+  on_empty_batch: fail           # | skip
+  allow_world_size_change: false
+  timeout_minutes: 30
+
 train:
   steps: null               # derived from the stream (6000)
   log_interval: 20

@@ -38,6 +38,19 @@ def build_optimizer(
     eps = cfg.get("eps", 1e-8)
     amsgrad = bool(cfg.get("amsgrad", False))
 
+    # Every other consumer of the student fails loudly on a DDP wrapper
+    # (no __getattr__ forwarding), but this one would not: hasattr() is
+    # False, so it would quietly collapse to a single "shared" group and
+    # discard lr_lora / lr_base / weight_decay_base — a silent change of
+    # experiment with no traceback.
+    if isinstance(model, nn.parallel.DistributedDataParallel):
+        raise TypeError(
+            "build_optimizer requires the unwrapped student module. A "
+            "DistributedDataParallel wrapper has no get_param_groups(), so the "
+            "P/F/shared learning-rate groups would be silently collapsed into "
+            "one. Pass ddp.module (or the raw student you wrapped)."
+        )
+
     if hasattr(model, "get_param_groups"):
         named = model.get_param_groups()
     else:
