@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import random
 from contextlib import nullcontext
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -36,6 +37,7 @@ from .controller.policy import RFPPolicy
 from .controller.signals import SignalComputer
 from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
+from .data.collate import EmptyBatchError
 from .data.hf_loader import domain_names
 from .distillation import DistillationConfig, compute_distillation_objective
 from .distributed import DistContext
@@ -590,6 +592,14 @@ def run_training_loop(
                 val_loaders[name] = build_dataloader(per_domain, distributed=False)
             except RuntimeError as exc:
                 print(f"eval: skipping domain {name}: {exc}")
+    # The eval block is entered on a predicate that includes `val_loaders`.
+    # A transient per-rank load failure would therefore make ranks disagree,
+    # and whoever entered would block forever at the barrier. Agree instead.
+    if dist.enabled:
+        agreed = dist.all_reduce_max_int(0 if val_loaders else 1)
+        if agreed and val_loaders:
+            print("[warn] a rank failed to build its eval loaders; disabling eval.")
+            val_loaders = {}
     forgetting_tracker = ForgettingTracker() if eval_config.track_forgetting else None
     phase_tracker = PhaseEvalTracker() if eval_config.enabled else None
 
@@ -673,9 +683,7 @@ def run_training_loop(
     run_raw = cfg.get("run", None)
     run_dir = run_raw.get("dir") if run_raw is not None else None
     if run_dir is None and log_cfg.get("enabled"):
-        from pathlib import Path as _Path
-
-        run_dir = str(_Path(str(log_cfg.get("path", "logs/metrics.jsonl"))).parent)
+        run_dir = str(Path(str(log_cfg.get("path", "logs/metrics.jsonl"))).parent)
 
     # Mixed precision
     mp_cfg = train_cfg.get("mixed_precision", {})
@@ -702,7 +710,7 @@ def run_training_loop(
     # be mid-update on rank 0 while another rank reads it.
     _resolved = str(ckpt_manager.resolve_resume_path() or "") if dist.is_main else ""
     _resolved = dist.broadcast_obj(_resolved, src=0)
-    resume_path = _Path(_resolved) if _resolved else None
+    resume_path = Path(_resolved) if _resolved else None
     if resume_path is not None:
         meta = ckpt_manager.load(
             resume_path,
@@ -820,7 +828,11 @@ def run_training_loop(
                     ),
                 },
             )
-            print("[hivemind] checkpoint saved. Resume with checkpoint.resume_from=latest")
+            if is_main:
+                print(
+                    "[hivemind] checkpoint saved. "
+                    "Resume with checkpoint.resume_from=latest"
+                )
         except Exception as exc:  # noqa: BLE001 — best-effort on shutdown
             print(f"[hivemind] emergency save failed: {exc}")
 
@@ -849,14 +861,18 @@ def run_training_loop(
                 "reason": "pre_merge",
                 **(
                     {
-                            "stream_digest": stream_schedule.config_digest(),
-                            "world_size": dist.world_size,
-                        }
+                        "stream_digest": stream_schedule.config_digest(),
+                        "world_size": dist.world_size,
+                    }
                     if stream_schedule is not None
                     else {}
                 ),
             },
         )
+        # Rank 0 serializes the whole model here; without this the other
+        # ranks race straight into the merge and the next gradient
+        # all-reduce. p_study_small sets checkpoint_before_merge on four runs.
+        dist.barrier()
 
     import signal
 
@@ -915,10 +931,12 @@ def run_training_loop(
                     ) from None
                 data_iter = iter(dataloader)
                 raw = next(data_iter)
-            except ValueError:
-                # DistillCollator raises when every row in the shard was
-                # malformed. Single-process that is fatal; under DDP it would
-                # kill one rank while the others block in the reducer — a hang,
+            except EmptyBatchError:
+                # Only the collator's own "every row was unusable" signal —
+                # a bare `except ValueError` here would silently reinterpret
+                # a dataset/tokenizer/cache failure as an empty shard.
+                # Single-process this is fatal; under DDP it would kill one
+                # rank while the others block in the reducer, i.e. a hang,
                 # which is strictly worse than a crash. Agree on it first.
                 collate_failed = True
 
@@ -931,6 +949,25 @@ def run_training_loop(
                 )
             optimizer.zero_grad()
             event_trace.emit({"type": "skipped_step", "step": step})
+            # Close the step properly rather than `continue`-ing past the
+            # tail: otherwise the profiler never sees it, `last_step` lags
+            # (so a SIGINT save resumes a step early), and a skip on the
+            # FINAL step would lose the final checkpoint entirely.
+            profiler.step_end(tokens_in_step=0)
+            last_step = step
+            if step == steps - 1 and ckpt_cfg.enabled:
+                event_trace.flush()
+                ckpt_manager.save(
+                    step=step, student=student, optimizer=optimizer,
+                    signal_computer=signal_computer, r_store=r_store,
+                    consolidator=consolidator, forgetting=forgetting_tracker,
+                    ledger=ledger, sampler=data_sampler, phase_eval=phase_tracker,
+                    extra={"skipped_final_step": True, "world_size": dist.world_size},
+                )
+                dist.barrier()
+            if dist.all_reduce_max_int(1 if _interrupted["flag"] else 0):
+                _interrupted["flag"] = True
+                break
             continue
 
         batch = _unpack_batch(raw, device)
@@ -946,7 +983,6 @@ def run_training_loop(
                     "router='metadata' requires HF-style batches with a metadata dict."
                 )
             teacher_indices = router.route(batch["metadata"], device=device)
-            scores = None
             if step == start_step and router.miss_count:
                 # A silent 100% miss rate still trains (every cache teacher
                 # returns zeros) — surface it on the very first step.
@@ -957,7 +993,7 @@ def run_training_loop(
                     "teacher_id values; routing is falling back to index 0."
                 )
         else:
-            teacher_indices, scores = router.route(
+            teacher_indices, _scores = router.route(
                 h_t, registry.prototypes.to(device)
             )
 
@@ -1032,8 +1068,11 @@ def run_training_loop(
         if isinstance(batch_conf, torch.Tensor) and batch_conf.numel() > 0:
             conf_sum = float(batch_conf.float().sum().item())
             conf_count = int(batch_conf.numel())
+            # Passed through unchanged when world_size == 1, so the
+            # single-GPU objective stays bit-identical to before DDP existed.
+            conf_local_mean = float(batch_conf.float().mean().item())
         else:
-            conf_sum, conf_count = 0.0, 0
+            conf_sum, conf_count, conf_local_mean = 0.0, 0, None
 
         # Under DDP these three are the ONLY controller inputs still derived
         # from the rank-local batch; everything downstream is a pure function
@@ -1046,6 +1085,7 @@ def run_training_loop(
             embedding=embedding,
             conf_sum=conf_sum,
             conf_count=conf_count,
+            conf_local_mean=conf_local_mean,
         )
 
         with profiler.timer.section("signals"):
@@ -1290,69 +1330,85 @@ def run_training_loop(
             # during a long exact_match generation).
             dist.barrier()
             eval_metrics: dict = {}
+            eval_failed = 0
             if is_main:
-                eval_metrics = run_evaluation(
-                    student=student,
-                    val_loaders=val_loaders,
-                    device=device,
-                    config=eval_config,
-                    forgetting=forgetting_tracker,
-                    r_store=r_store,
-                    probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
-                )
+                try:
+                    eval_metrics = run_evaluation(
+                        student=student,
+                        val_loaders=val_loaders,
+                        device=device,
+                        config=eval_config,
+                        forgetting=forgetting_tracker,
+                        r_store=r_store,
+                        probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
+                    )
 
-                # Gold exact-match probes only at phase boundaries (generation
-                # is expensive).
-                if em_probes and em_tokenizer is not None and boundary_phase is not None:
-                    for name, probe in em_probes.items():
-                        eval_metrics[f"eval/{name}/exact_match"] = exact_match_eval(
-                            student,
-                            em_tokenizer,
-                            probe,
-                            device,
-                            max_new_tokens=eval_config.exact_match_max_new_tokens,
+                    # Gold exact-match probes only at phase boundaries (generation
+                    # is expensive).
+                    if em_probes and em_tokenizer is not None and boundary_phase is not None:
+                        for name, probe in em_probes.items():
+                            eval_metrics[f"eval/{name}/exact_match"] = exact_match_eval(
+                                student,
+                                em_tokenizer,
+                                probe,
+                                device,
+                                max_new_tokens=eval_config.exact_match_max_new_tokens,
+                            )
+
+                    # Phase-resolved retention accounting (the paper's forgetting
+                    # numbers segment by phase, not just first-seen baselines).
+                    if boundary_phase is not None and phase_tracker is not None:
+                        phase_domains = (
+                            list(boundary_phase.domains)
+                            if boundary_phase.domains
+                            else ([boundary_phase.domain] if boundary_phase.domain else [])
+                        )
+                        domain_loss = {
+                            d: eval_metrics[f"eval/{d}/loss"]
+                            for d in val_loaders
+                            if f"eval/{d}/loss" in eval_metrics
+                        }
+                        domain_em = {
+                            d: eval_metrics[f"eval/{d}/exact_match"]
+                            for d in val_loaders
+                            if f"eval/{d}/exact_match" in eval_metrics
+                        }
+                        deltas = phase_tracker.record(
+                            phase=boundary_phase.name,
+                            step=step,
+                            phase_domains=phase_domains,
+                            domain_loss=domain_loss,
+                            domain_em=domain_em or None,
+                        )
+                        for d, delta in deltas.items():
+                            eval_metrics[f"eval/{d}/retention_delta"] = delta
+                        event_trace.emit(
+                            {
+                                "type": "phase_eval",
+                                "step": step,
+                                "phase": boundary_phase.name,
+                                "loss": domain_loss,
+                                "em": domain_em,
+                                "retention_delta": deltas,
+                            }
                         )
 
-                # Phase-resolved retention accounting (the paper's forgetting
-                # numbers segment by phase, not just first-seen baselines).
-                if boundary_phase is not None and phase_tracker is not None:
-                    phase_domains = (
-                        list(boundary_phase.domains)
-                        if boundary_phase.domains
-                        else ([boundary_phase.domain] if boundary_phase.domain else [])
-                    )
-                    domain_loss = {
-                        d: eval_metrics[f"eval/{d}/loss"]
-                        for d in val_loaders
-                        if f"eval/{d}/loss" in eval_metrics
-                    }
-                    domain_em = {
-                        d: eval_metrics[f"eval/{d}/exact_match"]
-                        for d in val_loaders
-                        if f"eval/{d}/exact_match" in eval_metrics
-                    }
-                    deltas = phase_tracker.record(
-                        phase=boundary_phase.name,
-                        step=step,
-                        phase_domains=phase_domains,
-                        domain_loss=domain_loss,
-                        domain_em=domain_em or None,
-                    )
-                    for d, delta in deltas.items():
-                        eval_metrics[f"eval/{d}/retention_delta"] = delta
-                    event_trace.emit(
-                        {
-                            "type": "phase_eval",
-                            "step": step,
-                            "phase": boundary_phase.name,
-                            "loss": domain_loss,
-                            "em": domain_em,
-                            "retention_delta": deltas,
-                        }
-                    )
-
+                except Exception as exc:  # noqa: BLE001 — see below
+                    # An eval failure on rank 0 (OOM during exact-match
+                    # generation is the realistic one) would otherwise unwind
+                    # here while every other rank sits in the broadcast below
+                    # until the NCCL watchdog fires. Record it and let the
+                    # all-reduce turn it into a simultaneous crash.
+                    eval_failed = 1
+                    print(f"[error] evaluation failed at step {step}: {exc!r}")
             if consolidation_due:
                 eval_metrics["eval/trigger"] = "consolidation"
+            # Turn a rank-0 eval failure into a crash on every rank rather
+            # than a 30-minute NCCL-watchdog hang on ranks 1..N-1.
+            if dist.all_reduce_max_int(eval_failed):
+                raise RuntimeError(
+                    f"evaluation failed on rank 0 at step {step}; aborting all ranks."
+                )
             # Share the canonical numbers so every rank's view agrees.
             eval_metrics = dist.broadcast_obj(eval_metrics, src=0)
             logger.log(eval_metrics, step)

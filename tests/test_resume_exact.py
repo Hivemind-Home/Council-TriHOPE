@@ -67,7 +67,14 @@ class TestStatefulSampler:
         assert list(iter(s)) == [0, 1, 2, 3, 4]
 
 
-def _cfg(tmp_path: Path, steps: int, resume_from: str | None = None) -> OmegaConf:
+def _cfg(
+    tmp_path: Path,
+    steps: int,
+    resume_from: str | None = None,
+    *,
+    logging_enabled: bool = True,
+    run_dir: str | None = None,
+) -> OmegaConf:
     return OmegaConf.create(
         {
             "model": {
@@ -99,11 +106,12 @@ def _cfg(tmp_path: Path, steps: int, resume_from: str | None = None) -> OmegaCon
                 "resume_from": resume_from,
             },
             "logging": {
-                "enabled": True,
+                "enabled": logging_enabled,
                 "backend": "json",
                 "path": str(tmp_path / "metrics.jsonl"),
                 "events_path": str(tmp_path / "events.jsonl"),
             },
+            **({"run": {"dir": run_dir}} if run_dir else {}),
         }
     )
 
@@ -183,3 +191,46 @@ class TestBitExactResume:
         ref_data = torch.load(ref_dir / "ckpt" / final / "data.pt", weights_only=False)
         res_data = torch.load(part_dir / "ckpt" / final / "data.pt", weights_only=False)
         assert ref_data == res_data
+
+
+class TestResumeUnderRealisticConfigs:
+    """Resume must work in the shapes the runner and DDP actually produce.
+
+    The original test only covered `logging.enabled: true` with no `run:`
+    block — which happened to be the ONE combination that bound a
+    conditionally-imported name used unconditionally on the resume path.
+    scripts/run_experiment.py always injects `++run.dir=`, and DDP forces
+    logging off on every rank > 0, so both of those shapes were broken.
+    """
+
+    @staticmethod
+    def _run(cfg):
+        from hivemind.training import run_training_loop
+
+        return run_training_loop(cfg, device=torch.device("cpu"))
+
+    def test_resume_with_run_dir_set(self, tmp_path):
+        """scripts/run_experiment.py always sets run.dir."""
+        d = tmp_path / "a"
+        d.mkdir()
+        self._run(_cfg(d, steps=4, run_dir=str(d)))
+        out = self._run(_cfg(d, steps=6, resume_from="latest", run_dir=str(d)))
+        assert "loss/total" in out
+
+    def test_resume_with_logging_disabled(self, tmp_path):
+        """DDP forces logging off on every rank > 0."""
+        d = tmp_path / "b"
+        d.mkdir()
+        self._run(_cfg(d, steps=4, logging_enabled=True))
+        out = self._run(_cfg(d, steps=6, resume_from="latest", logging_enabled=False))
+        assert "loss/total" in out
+
+    def test_resume_with_both(self, tmp_path):
+        d = tmp_path / "c"
+        d.mkdir()
+        self._run(_cfg(d, steps=4, run_dir=str(d)))
+        out = self._run(
+            _cfg(d, steps=6, resume_from="latest",
+                 run_dir=str(d), logging_enabled=False)
+        )
+        assert "loss/total" in out

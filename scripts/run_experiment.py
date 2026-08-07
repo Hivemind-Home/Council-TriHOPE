@@ -171,6 +171,7 @@ def launch(
 
     env = dict(os.environ)
     if gpu is not None:
+        gpu = _visible_device(gpu)
         # One spec per GPU (--parallel-gpus). For a matrix of INDEPENDENT
         # runs this beats DDP-ing a single spec across N GPUs: no
         # collectives, no batch-size divisibility constraint, no stream
@@ -236,6 +237,57 @@ def write_index(manifest: dict, runs: list[ResolvedRun]) -> None:
     (out_root / "manifest_index.json").write_text(json.dumps(index, indent=2))
 
 
+def _device_count() -> int:
+    try:
+        import torch
+
+        return torch.cuda.device_count()
+    except Exception:  # noqa: BLE001 — torch may be absent in a dry-run env
+        return 0
+
+
+def _visible_device(slot: int) -> str:
+    """Map a 0-based slot to a device id the parent actually owns.
+
+    A bare index is wrong whenever the parent already has a restricted
+    allocation (Slurm, Lightning): with CUDA_VISIBLE_DEVICES=4,5 the
+    children would be pointed at physical GPUs 0 and 1, which this job does
+    not own.
+    """
+    inherited = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if not inherited:
+        return str(slot)
+    ids = [x.strip() for x in inherited.split(",") if x.strip()]
+    return ids[slot] if slot < len(ids) else str(slot)
+
+
+def _check_shardable(manifest: dict, nproc: int) -> int:
+    """data.batch_size is the GLOBAL batch and must divide by the rank count.
+
+    Checked here so the failure names the fix once, instead of every rank
+    crashing inside StreamBatchSampler. stream_headline ships batch_size: 1
+    precisely because it is tuned for one GPU.
+    """
+    import yaml as _yaml
+
+    cfg_path = REPO_ROOT / "configs" / f"{manifest['base_config']}.yaml"
+    try:
+        batch_size = int(_yaml.safe_load(cfg_path.read_text())["data"]["batch_size"])
+    except Exception:  # noqa: BLE001 — an unreadable config is preflight's problem
+        return 0
+    if batch_size % nproc == 0:
+        return 0
+    print(
+        f"data.batch_size={batch_size} in {manifest['base_config']} is the GLOBAL "
+        f"batch and does not divide by --nproc-per-node {nproc}.\n"
+        f"  Add an override to keep the per-device batch at {batch_size}:\n"
+        f"      overrides: [data.batch_size={batch_size * nproc}]\n"
+        f"  NOTE: changing batch_size changes the stream digest, so this is a "
+        f"FRESH run — existing checkpoints will not resume."
+    )
+    return 2
+
+
 def _preflight_manifest(manifest: dict) -> int:
     """Metadata-only validation of the manifest's base config."""
     cmd = [
@@ -254,6 +306,18 @@ def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
     from concurrent.futures import ThreadPoolExecutor
 
     n = int(args.parallel_gpus)
+    inherited = os.environ.get("CUDA_VISIBLE_DEVICES")
+    available = (
+        len([x for x in inherited.split(",") if x.strip()])
+        if inherited
+        else _device_count()
+    )
+    if available and n > available:
+        print(
+            f"--parallel-gpus {n} exceeds the {available} GPU(s) this process can "
+            f"see; capping to {available}."
+        )
+        n = available
     pending = []
     for run in runs:
         status = _read_status(run)
@@ -281,14 +345,19 @@ def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
             with lock:
                 free_gpus.append(gpu)
 
-    with ThreadPoolExecutor(max_workers=n) as pool:
-        for run, code in pool.map(_work, pending):
-            if code == 0:
-                cleanup_checkpoints(run, policy)
-            else:
-                failures += 1
-                print(f"[{run.run_id}] FAILED (exit {code})")
-            write_index(manifest, runs)
+    try:
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            for run, code in pool.map(_work, pending):
+                if code == 0:
+                    cleanup_checkpoints(run, policy)
+                else:
+                    failures += 1
+                    print(f"[{run.run_id}] FAILED (exit {code})")
+                write_index(manifest, runs)
+    finally:
+        # Otherwise a raised launch() leaves every completed run's status.json
+        # stuck at "running", and --resume would redo them.
+        write_index(manifest, runs)
 
     write_index(manifest, runs)
     done = sum(1 for r in runs if _read_status(r)["state"] == "done")
@@ -338,7 +407,13 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     manifest = load_manifest(args.manifest)
+    nproc_requested = int(args.nproc_per_node or manifest.get("nproc_per_node", 1))
     runs = expand_matrix(manifest)
+
+    if nproc_requested > 1:
+        code = _check_shardable(manifest, nproc_requested)
+        if code:
+            return code
 
     if not args.dry_run and not args.no_preflight:
         # One config check before ANY run launches: a broken manifest then

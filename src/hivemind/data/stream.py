@@ -107,20 +107,23 @@ class _NovelCursor:
         self._used = used
 
     def take(self, n: int) -> list[int]:
+        # Scan first, claim second: mutating `used`/`_pos` before we know the
+        # request can be met leaves the cursor and the global claim ledger
+        # corrupted if the caller ever catches the exhaustion error.
         out: list[int] = []
-        while len(out) < n and self._pos < len(self._order):
-            idx = self._order[self._pos]
-            self._pos += 1
-            if idx in self._used:
-                continue
-            self._used.add(idx)
-            out.append(idx)
+        pos = self._pos
+        while len(out) < n and pos < len(self._order):
+            idx = self._order[pos]
+            pos += 1
+            if idx not in self._used:
+                out.append(idx)
         if len(out) < n:
-            # Return what we consumed; the schedule is unusable either way.
             raise ValueError(
                 "Not enough unused rows for a novel batch — increase the domain "
                 "row cap (data.max_rows_per_domain) or reduce novel steps."
             )
+        self._pos = pos
+        self._used.update(out)
         return out
 
 
@@ -406,9 +409,17 @@ class StreamSchedule:
             "phases": [asdict(p) for p in self.cfg.phases],
             "data": self.data_identity,
         }
-        return hashlib.sha256(
-            json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()[:16]
+        try:
+            blob = json.dumps(payload, sort_keys=True)
+        except TypeError as exc:
+            # No `default=str` fallback: a default __repr__ carries a memory
+            # address, which would make the digest differ per process and
+            # break the resume guard non-deterministically. Fail loudly.
+            raise TypeError(
+                f"stream config is not JSON-serializable ({exc}); the digest "
+                "must be deterministic across processes."
+            ) from exc
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 class StreamBatchSampler(Sampler[list[int]]):

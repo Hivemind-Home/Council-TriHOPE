@@ -68,7 +68,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -121,12 +121,15 @@ class DistConfig:
         if unknown:
             raise ValueError(f"Unknown distributed config keys: {sorted(unknown)}")
         strategy = str(cfg.strategy).lower()
-        if cfg.enabled and strategy in _REJECTED_STRATEGIES:
+        # Checked even when disabled: otherwise `strategy: fsdp, enabled:
+        # false` validates clean and silently becomes DDP the day someone
+        # flips the switch.
+        if strategy in _REJECTED_STRATEGIES:
             raise ValueError(
                 f"distributed.strategy={strategy!r} is not supported. "
                 f"{_REJECTED_STRATEGIES[strategy]} Use strategy=ddp."
             )
-        if cfg.enabled and strategy != "ddp":
+        if strategy != "ddp":
             raise ValueError(
                 f"distributed.strategy must be 'ddp', got {strategy!r}."
             )
@@ -188,7 +191,11 @@ class DistContext:
         """
         if not self.enabled:
             return module
-        device_ids = [self.local_rank] if torch.cuda.is_available() else None
+        try:
+            on_cuda = next(module.parameters()).is_cuda
+        except StopIteration:
+            on_cuda = False
+        device_ids = [self.local_rank] if on_cuda else None
         return nn.parallel.DistributedDataParallel(
             module,
             device_ids=device_ids,
@@ -231,6 +238,7 @@ class DistContext:
         embedding: Optional[torch.Tensor],
         conf_sum: float,
         conf_count: int,
+        conf_local_mean: Optional[float] = None,
     ) -> tuple[int, Optional[torch.Tensor], Optional[float]]:
         """Make the three rank-local controller inputs globally identical.
 
@@ -250,7 +258,16 @@ class DistContext:
         against a step measured in tens of milliseconds.
         """
         if not self.enabled:
-            mean = conf_sum / conf_count if conf_count else None
+            # Return the caller's own float32 mean verbatim. Recomputing it
+            # as a float64 sum/count would differ in the last bits, and
+            # RFPPolicy compares confidence against its threshold strictly —
+            # so that would be a decision-visible change to the single-GPU
+            # path, which this module promises not to touch.
+            mean = (
+                conf_local_mean
+                if conf_local_mean is not None
+                else (conf_sum / conf_count if conf_count else None)
+            )
             return bucket_id, embedding, mean
 
         d = embedding.numel() if embedding is not None else 0
@@ -305,22 +322,43 @@ class DistContext:
                 f"{payload!r}"
             )
 
+    @staticmethod
+    def _positional_sum(t: torch.Tensor) -> float:
+        """Index-weighted sum: unlike a plain sum, it detects a PERMUTATION.
+
+        That matters because the failure this guards against is a merge
+        broadcasting adapters in a different order per rank, which swaps
+        equally-shaped tensors' contents. A plain sum is invariant under
+        exactly that.
+        """
+        flat = t.detach().reshape(-1).to(torch.float64)
+        ramp = torch.arange(1, flat.numel() + 1, dtype=torch.float64, device=flat.device)
+        return float((flat * ramp).sum().item())
+
     def state_checksum(
         self, model: nn.Module, optimizer: Optional[torch.optim.Optimizer] = None
     ) -> tuple[float, float, float]:
-        """Tier 2 ingredients: float64 sums over params and optimizer state."""
+        """Tier 2 ingredients: index-weighted float64 sums.
+
+        Compared with EXACT equality by :meth:`assert_state_consistent`, and
+        that is deliberate: within one job DDP hands every rank the same
+        all-reduced gradient, so the replicas stay bit-identical (measured
+        over 120 steps: zero difference). The float drift documented in the
+        equivalence test is between a 1-rank JOB and a 2-rank JOB — different
+        reduction trees — which is a different comparison entirely.
+        """
         p_sum = 0.0
         for p in model.parameters():
-            p_sum += float(p.detach().to(torch.float64).sum().item())
+            p_sum += self._positional_sum(p)
         m_sum = cs_sum = 0.0
         if optimizer is not None:
             for st in optimizer.state.values():
                 ea = st.get("exp_avg")
                 if ea is not None:
-                    m_sum += float(ea.detach().to(torch.float64).sum().item())
+                    m_sum += self._positional_sum(ea)
                 cs = st.get("coord_step")
                 if cs is not None:
-                    cs_sum += float(cs.detach().to(torch.float64).sum().item())
+                    cs_sum += self._positional_sum(cs)
         return p_sum, m_sum, cs_sum
 
     def assert_state_consistent(
@@ -379,10 +417,20 @@ def init_distributed(cfg: Any) -> DistContext:
     if not dcfg.enabled:
         return DistContext(cfg=dcfg)
 
+    # "Was this launched by torchrun?" is a question about the ENVIRONMENT,
+    # not about how many GPUs exist. Keying on device_count meant a plain
+    # `python train.py ++distributed.enabled=true` on a 4-GPU box tried to
+    # join an env:// rendezvous that no launcher had set up.
+    launched_distributed = "RANK" in os.environ and "WORLD_SIZE" in os.environ
     world_size = _resolve_world_size(dcfg)
-    if world_size <= 1:
-        # Asked for multi-GPU but launched as one process: no group, and the
-        # whole module stays inert.
+    if not launched_distributed or world_size <= 1:
+        if not launched_distributed and world_size > 1:
+            print(
+                "[warn] distributed.enabled=true but this process was not started "
+                "by a launcher (no RANK/WORLD_SIZE in the environment) — running "
+                "single-process. Use: python -m torch.distributed.run "
+                f"--standalone --nproc_per_node={world_size} train.py ..."
+            )
         return DistContext(cfg=dcfg)
 
     rank = int(os.environ.get("RANK", 0))
@@ -429,23 +477,3 @@ def reject_unsupported_features(cfg: Any, dist_ctx: DistContext) -> None:
             "counters would drift. Use dtype=bf16 (which disables the scaler "
             "entirely) or run single-GPU."
         )
-
-
-def shard_sequence(items: Sequence[int], rank: int, world_size: int) -> list[int]:
-    """Contiguous per-rank slice of one step's batch indices.
-
-    Contiguous rather than strided so rank 0's element 0 *is* the global
-    batch's element 0 — which is what :meth:`DistContext.sync_controller_inputs`
-    relies on to reproduce single-process ``bucket_id`` / ``embedding``.
-    Bucket purity survives because any contiguous slice of a bucket-pure
-    list is bucket-pure, and novel-row uniqueness survives because each row
-    lands on exactly one rank.
-    """
-    if world_size <= 1:
-        return list(items)
-    per_rank, rem = divmod(len(items), world_size)
-    if rem:
-        raise ValueError(
-            f"batch of {len(items)} cannot be split evenly across {world_size} ranks"
-        )
-    return list(items[rank * per_rank : (rank + 1) * per_rank])

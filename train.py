@@ -32,7 +32,12 @@ def main(cfg: DictConfig) -> None:
     )
     dist_ctx = init_distributed(cfg)
     reject_unsupported_features(cfg, dist_ctx)
-    device = resolve_device(cfg.train.device, local_rank=dist_ctx.local_rank)
+    # local_rank only means anything under a launcher; passing it when
+    # single-process would reject a legitimate `train.device: cuda:1`.
+    device = resolve_device(
+        cfg.train.device,
+        local_rank=dist_ctx.local_rank if dist_ctx.enabled else None,
+    )
     try:
         run_training_loop(cfg, device=device, dist=dist_ctx)
     finally:

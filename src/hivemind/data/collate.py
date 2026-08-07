@@ -53,6 +53,17 @@ class CollateOutput:
 IGNORE_INDEX = -100
 
 
+class EmptyBatchError(ValueError):
+    """Every row in a batch was unusable after collation.
+
+    A dedicated type so the training loop can distinguish this from any
+    other ValueError raised inside the data pipeline (dataset indexing,
+    tokenizer, logits cache) — those must not be silently reinterpreted as
+    "the shard was empty". Subclasses ValueError so existing callers that
+    catch ValueError keep working.
+    """
+
+
 class DistillCollator:
     """Tokenize + pad a batch of HivemindHFDataset rows."""
 
@@ -201,7 +212,7 @@ class DistillCollator:
         if not built:
             # Preserve DataLoader invariants by raising — an empty batch
             # signals every row was malformed, which is upstream's bug.
-            raise ValueError(
+            raise EmptyBatchError(
                 "DistillCollator: all rows in the batch were missing input_text / response text."
             )
 

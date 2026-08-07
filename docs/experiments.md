@@ -244,8 +244,12 @@ not by habit.**
 # no collectives, no batch-size constraint, no digest change, N x the runs.
 python scripts/run_experiment.py configs/experiments/baselines_small.yaml --parallel-gpus 4
 
-# Group D / live-KD — ONE long run. DDP-shard it.
-python scripts/run_experiment.py configs/experiments/headline.yaml --nproc-per-node 4
+# Group D / live-KD — ONE long run. DDP-shard it. data.batch_size is the
+# GLOBAL batch and must divide by the rank count, so the headline (which
+# ships batch_size: 1, tuned for one GPU) needs the override below to keep
+# the per-device batch at 1. The runner refuses to launch without it.
+python scripts/run_experiment.py configs/experiments/headline.yaml \
+    --nproc-per-node 4      # -> add `overrides: [data.batch_size=4]` to the manifest
 
 # Or directly:
 python -m torch.distributed.run --standalone --nproc_per_node=4 \

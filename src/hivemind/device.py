@@ -24,6 +24,15 @@ def resolve_device(device_str: str, local_rank: int | None = None) -> torch.devi
     if dev.type == "cuda" and not torch.cuda.is_available():
         return torch.device("cpu")
     if dev.type == "cuda":
+        if dev.index is not None and local_rank is not None and dev.index != local_rank:
+            # `train.device: cuda:0` under torchrun would put every rank on
+            # device 0 while DDP passes device_ids=[local_rank] — a confusing
+            # mismatch. Name it here instead.
+            raise ValueError(
+                f"train.device={device_str!r} pins device {dev.index}, but this is "
+                f"local rank {local_rank}. Use 'auto' (or bare 'cuda') so each rank "
+                "takes its own GPU."
+            )
         idx = dev.index if dev.index is not None else (local_rank or 0)
         torch.cuda.set_device(int(idx))
         return torch.device(f"cuda:{int(idx)}")

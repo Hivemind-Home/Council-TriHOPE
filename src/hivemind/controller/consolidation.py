@@ -54,6 +54,11 @@ def _lora_zeroed(adapters: Iterable[LoRAAdapter]):
                 ad.lora_b.copy_(backup)
 
 
+def _module_sort_key(mid: ModuleId) -> tuple:
+    """Rank-stable ordering for ModuleId (whose hash is seed-randomized)."""
+    return (mid.layer, mid.block_type, mid.param_type)
+
+
 class ConsolidationScheduler:
     """Periodic F→P consolidation based on signal thresholds."""
 
@@ -135,10 +140,21 @@ class ConsolidationScheduler:
         # been flagging modules, only re-validate those. Otherwise fall
         # back to the unconditional sweep across all F-type modules
         # (preserves prior behaviour for callers that don't use flags).
+        # Sorted, not set/dict order: ModuleId is a frozen dataclass of strs,
+        # so its hash is PYTHONHASHSEED-randomized and torchrun does not pin
+        # the seed. Iterating _pending_p directly makes each rank merge — and
+        # therefore broadcast in _sync_after_merge — in a DIFFERENT order,
+        # pairing rank i's j-th adapter with rank 0's j-th tensor from another
+        # module. Between equally-shaped modules that succeeds silently and
+        # permutes lora_a; a checksum cannot see it, because a sum is
+        # invariant under permutation.
         if self._pending_p:
-            candidates = list(self._pending_p)
+            candidates = sorted(self._pending_p, key=_module_sort_key)
         else:
-            candidates = [mid for mid in module_signals if mid.param_type == "F"]
+            candidates = sorted(
+                (mid for mid in module_signals if mid.param_type == "F"),
+                key=_module_sort_key,
+            )
 
         for mid in candidates:
             if mid.param_type != "F":
@@ -222,7 +238,10 @@ class ConsolidationScheduler:
         Optimizer state is still reset (Corollary 2), so the merge itself
         remains mechanically correct — only the *timing* is wrong.
         """
-        targets = list(module_ids) if module_ids is not None else self.all_f_modules()
+        targets = sorted(
+            module_ids if module_ids is not None else self.all_f_modules(),
+            key=_module_sort_key,
+        )
         merged_ids: list[ModuleId] = []
         for mid in targets:
             if mid.param_type != "F":
@@ -343,9 +362,18 @@ class ConsolidationScheduler:
             # would train each replica's base weights on different data.
             # Broadcast rank 0's — once per merge, not once per step, which
             # is why the fix lives here and not in record_batch.
+            #
+            # It must happen ON THE MODEL'S DEVICE: record_batch keeps the
+            # tensor on CPU to save GPU memory, and a nccl-only process group
+            # cannot broadcast a CPU tensor. A gloo test would never catch it,
+            # because gloo accepts CPU tensors.
+            device = next(self.model.parameters()).device
             shape = self.dist.broadcast_obj(tuple(replay.shape), src=0)
-            if not self.dist.is_main:
-                replay = torch.empty(shape, dtype=replay.dtype)
+            replay = (
+                replay.to(device)
+                if self.dist.is_main
+                else torch.empty(shape, dtype=replay.dtype, device=device)
+            )
             self.dist.broadcast_tensor_(replay)
         return replay
 
