@@ -41,6 +41,12 @@ class DistillationConfig:
     use_teacher_confidence: bool = False
     confidence_floor: float = 0.0
     confidence_power: float = 1.0
+    #: Weight each row's CE by its teacher confidence. Off by default so
+    #: existing results reproduce. Note that ``use_teacher_confidence``
+    #: alone only reaches KD, and KD is inert without logit caches — so in
+    #: cache mode this flag is the *only* thing that makes confidence
+    #: affect the objective at all.
+    ce_confidence_weighting: bool = False
 
 
 def _shift(logits: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -100,20 +106,39 @@ def compute_ce_loss(
     student_logits: torch.Tensor,
     targets: torch.Tensor,
     ignore_index: int = IGNORE_INDEX,
+    row_weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Token-level cross-entropy with standard shift-by-one.
 
     Works for both conventions: pass raw tokens (everything contributes)
     or a labels tensor with ``-100`` on prompt/pad (only response
     positions contribute).
+
+    ``row_weights`` is an optional ``[B]`` tensor scaling each row's
+    contribution (teacher confidence). As in :func:`compute_kd_loss` the
+    denominator stays the count of contributing *positions*, so a weight
+    below 1 genuinely shrinks the loss instead of being normalized away.
+    With ``row_weights=None`` this is exactly ``F.cross_entropy(...,
+    reduction="mean", ignore_index=...)``.
     """
     B, T, V = student_logits.shape
     shift_logits, shift_targets = _shift(student_logits, targets)
-    return F.cross_entropy(
+    if row_weights is None:
+        return F.cross_entropy(
+            shift_logits.view(-1, V),
+            shift_targets.view(-1),
+            ignore_index=ignore_index,
+        )
+
+    per_token = F.cross_entropy(
         shift_logits.view(-1, V),
         shift_targets.view(-1),
         ignore_index=ignore_index,
-    )
+        reduction="none",
+    ).view(B, T - 1)
+    valid = (shift_targets != ignore_index).to(per_token.dtype)
+    weighted = per_token * valid * row_weights.view(-1, 1).to(per_token.dtype)
+    return weighted.sum() / valid.sum().clamp_min(1.0)
 
 
 def compute_distillation_objective(
@@ -140,17 +165,37 @@ def compute_distillation_objective(
     contribute to CE via ``labels``.
 
     ``teacher_confidence`` is an optional ``[B]`` float tensor from Layer
-    B. When ``config.use_teacher_confidence`` is True, it multiplies the
-    per-row KD mask so low-confidence teacher outputs contribute less —
-    see Theory 201 §1 "teacher confidence/entropy routing cues".
+    B/C, floored and optionally raised to ``confidence_power``. It reaches
+    the objective by two independent switches — see Theory 201 §1 "teacher
+    confidence/entropy routing cues":
+
+    * ``use_teacher_confidence`` multiplies the per-row **KD** mask. This
+      has no effect without a teacher logits cache, because the mask it
+      scales is then all zeros.
+    * ``ce_confidence_weighting`` scales each row's **CE**. In cache mode
+      (supervision = ``teacher_output_text``, no NPZ logits) this is the
+      only route by which confidence changes the loss.
     """
     metrics: dict[str, float] = {}
+
+    # Teacher confidence, shaped once so KD and CE cannot drift apart.
+    conf: torch.Tensor | None = None
+    if teacher_confidence is not None:
+        conf = teacher_confidence.to(student_logits.dtype).clamp_min(
+            config.confidence_floor
+        )
+        if config.confidence_power != 1.0:
+            conf = conf.clamp_min(1e-6).pow(config.confidence_power)
 
     # CE
     ce_targets = labels if labels is not None else targets
     ce_loss: torch.Tensor | None = None
     if ce_targets is not None and config.lambda_ce > 0:
-        ce_loss = compute_ce_loss(student_logits, ce_targets)
+        ce_loss = compute_ce_loss(
+            student_logits,
+            ce_targets,
+            row_weights=conf if config.ce_confidence_weighting else None,
+        )
 
     # KD — active positions are "where CE contributes", i.e. response tokens
     kd_active_mask: torch.Tensor | None = None
@@ -162,13 +207,10 @@ def compute_distillation_objective(
     effective_row_mask = teacher_logits_mask
     if (
         config.use_teacher_confidence
-        and teacher_confidence is not None
+        and conf is not None
         and teacher_logits_mask is not None
     ):
-        conf = teacher_confidence.to(teacher_logits_mask.dtype).clamp_min(config.confidence_floor)
-        if config.confidence_power != 1.0:
-            conf = conf.clamp_min(1e-6).pow(config.confidence_power)
-        effective_row_mask = teacher_logits_mask * conf
+        effective_row_mask = teacher_logits_mask * conf.to(teacher_logits_mask.dtype)
 
     kd_loss = compute_kd_loss(
         teacher_logits=teacher_logits,
@@ -192,6 +234,8 @@ def compute_distillation_objective(
     metrics["loss/total"] = total.item()
     if teacher_logits_mask is not None:
         metrics["loss/kd_row_hit_frac"] = float(teacher_logits_mask.mean().item())
-    if config.use_teacher_confidence and teacher_confidence is not None:
+    if teacher_confidence is not None and (
+        config.use_teacher_confidence or config.ce_confidence_weighting
+    ):
         metrics["loss/teacher_conf_mean"] = float(teacher_confidence.mean().item())
     return total, metrics

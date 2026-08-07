@@ -59,7 +59,8 @@ distillation:
   lambda_kd: 1.0            # inert without logit caches; harmless to keep
   lambda_ce: 1.0
   lambda_reg: 0.01
-  use_teacher_confidence: true
+  use_teacher_confidence: true   # scales KD (inert without logit caches)
+  ce_confidence_weighting: true  # scales CE — the only live route in cache mode
   confidence_floor: 0.1
   confidence_power: 1.0
 
@@ -119,6 +120,9 @@ controller:
 data:
   source: hf
   router: metadata
+  vocab_size: ${model.vocab_size}   # collator sizes logits to the MODEL vocab
+  gold_policy: teacher_only        # | gold_when_available (the gold_ce ablation)
+  append_eos: true
   strict_load: true         # a missing domain must fail, not warn
   shuffle_before_cap: true  # sample the corpus, not the head of the parquet
   domains:

@@ -389,6 +389,7 @@ def run_training_loop(
         use_teacher_confidence=dist_cfg.get("use_teacher_confidence", False),
         confidence_floor=dist_cfg.get("confidence_floor", 0.0),
         confidence_power=dist_cfg.get("confidence_power", 1.0),
+        ce_confidence_weighting=dist_cfg.get("ce_confidence_weighting", False),
     )
 
     # Regularization config

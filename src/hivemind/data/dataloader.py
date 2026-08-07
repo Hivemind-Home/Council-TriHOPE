@@ -88,6 +88,10 @@ def _build_hf(cfg: dict) -> tuple[Dataset, Any]:
         tokenizer=tokenizer,
         max_seq_len=hf_cfg.max_seq_len,
         logits_cache=logits_cache,
+        # The model's vocab, not the tokenizer's — see DistillCollator.
+        vocab_size=cfg.get("vocab_size"),
+        append_eos=bool(cfg.get("append_eos", True)),
+        gold_policy=str(cfg.get("gold_policy", "teacher_only")),
     )
     return dataset, collator
 

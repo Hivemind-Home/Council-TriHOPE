@@ -383,10 +383,14 @@ def exact_match_eval(
     correct = 0
 
     for row in probes.rows:
+        # add_special_tokens=False mirrors DistillCollator._encode. Without
+        # it the probe prompt carries specials the student never saw during
+        # training, so EM measures a distribution shift rather than recall.
         prompt_ids = tokenizer(
             row["input_text"],
             truncation=True,
             max_length=max_prompt_tokens,
+            add_special_tokens=False,
             return_tensors="pt",
         )["input_ids"].to(device)
 

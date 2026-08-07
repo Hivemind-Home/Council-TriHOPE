@@ -62,13 +62,36 @@ class DistillCollator:
         max_seq_len: int,
         logits_cache: TeacherLogitsCache,
         prompt_max_fraction: float = 0.5,
+        vocab_size: int | None = None,
+        append_eos: bool = True,
+        gold_policy: str = "teacher_only",
     ) -> None:
+        if gold_policy not in ("teacher_only", "gold_when_available"):
+            raise ValueError(
+                f"gold_policy must be 'teacher_only' or 'gold_when_available', "
+                f"got {gold_policy!r}"
+            )
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.logits_cache = logits_cache
         self.prompt_max_fraction = prompt_max_fraction
+        self.gold_policy = gold_policy
         self.pad_id = int(getattr(tokenizer, "pad_token_id", 0) or 0)
-        self.vocab_size = int(getattr(tokenizer, "vocab_size", 0) or 0)
+        # The model's vocab, not the tokenizer's. Qwen3 reports
+        # tokenizer.vocab_size=151643 while the model embeds 151936, and a
+        # cached teacher logits tensor built at the tokenizer's number is
+        # rejected by batch_teacher_forward's shape check.
+        if vocab_size is None:
+            vocab_size = int(
+                getattr(tokenizer, "vocab_size", 0)
+                or (len(tokenizer) if hasattr(tokenizer, "__len__") else 0)
+            )
+        self.vocab_size = int(vocab_size)
+        eos = getattr(tokenizer, "eos_token_id", None)
+        # Without EOS the student never learns a stop token, yet
+        # exact_match_eval breaks generation on it — so every EM probe
+        # would run to max_new_tokens.
+        self.eos_id = int(eos) if (append_eos and eos is not None) else None
 
     # -- row-level ---------------------------------------------------------
 
@@ -79,6 +102,21 @@ class DistillCollator:
         return ids[:max_len]
 
     def _pick_response(self, row: dict[str, Any]) -> tuple[str | None, str]:
+        """Choose this row's supervision target.
+
+        ``teacher_only`` (default) always distils the teacher trace. Note
+        that the gold branch below is effectively unreachable on the
+        published corpora — every row has a non-empty ``target_text`` —
+        so ``has_gold_label`` carries all the information and is otherwise
+        unused. ``gold_when_available`` switches rows the dataset marks as
+        gold onto their human/verified target instead; that is a different
+        experiment (code is 100% gold, medical 78%), exposed as the
+        ``gold_ce`` ablation rather than a silent default.
+        """
+        if self.gold_policy == "gold_when_available" and row.get("has_gold_label"):
+            target_text = row.get("target_text")
+            if target_text:
+                return target_text, "gold"
         teacher_text = row.get("teacher_output_text")
         if teacher_text:
             return teacher_text, "teacher"
@@ -109,6 +147,15 @@ class DistillCollator:
         response_ids = self._encode(response, response_budget)
         if not response_ids:
             return None
+        # Teach the stop token when there is room for it. Qwen3's eos
+        # (151645) differs from its pad (151643), so this never collides
+        # with padding and the label mask stays correct.
+        if (
+            self.eos_id is not None
+            and response_ids[-1] != self.eos_id
+            and len(prompt_ids) + len(response_ids) < self.max_seq_len
+        ):
+            response_ids = response_ids + [self.eos_id]
 
         seq = prompt_ids + response_ids
         labels_row = [IGNORE_INDEX] * len(prompt_ids) + list(response_ids)
@@ -165,9 +212,18 @@ class DistillCollator:
         attention_mask = torch.zeros((B, T), dtype=torch.long)
         labels = torch.full((B, T), IGNORE_INDEX, dtype=torch.long)
 
+        # Only materialize the [B, T, V] buffer when a row actually carried
+        # cached logits. Without a teacher_logits_root every entry is None,
+        # and allocating it anyway costs ~620 MB of pinned zeros per batch
+        # at B=2, T=512, V=151936 — which batch_teacher_forward then
+        # discards on its shape check. The [B, T, 1] sentinel takes exactly
+        # the same branch there.
         V = self.vocab_size
+        has_cached_logits = any(r["teacher_tensor"] is not None for r in built)
         teacher_logits = (
-            torch.zeros((B, T, V), dtype=torch.float32) if V > 0 else torch.zeros((B, T, 1))
+            torch.zeros((B, T, V), dtype=torch.float32)
+            if (has_cached_logits and V > 0)
+            else torch.zeros((B, T, 1), dtype=torch.float32)
         )
         teacher_logits_mask = torch.zeros((B,), dtype=torch.float32)
 

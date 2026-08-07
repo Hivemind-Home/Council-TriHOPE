@@ -82,7 +82,16 @@ class _CharTokenizer:
 
     eos_token_id = 0
 
-    def __call__(self, text, truncation=True, max_length=512, return_tensors="pt"):
+    def __call__(
+        self,
+        text,
+        truncation=True,
+        max_length=512,
+        return_tensors="pt",
+        add_special_tokens=False,
+    ):
+        # add_special_tokens is accepted (and ignored) to match the real
+        # HF tokenizer signature the eval path calls with.
         ids = [min(ord(c), 255) for c in text][:max_length]
         return {"input_ids": torch.tensor([ids], dtype=torch.long)}
 

@@ -47,7 +47,8 @@ distillation:
   lambda_kd: 1.0            # inert without logit caches (row mask all-zero)
   lambda_ce: 1.0
   lambda_reg: 0.0
-  use_teacher_confidence: true
+  use_teacher_confidence: true   # scales KD (inert without logit caches)
+  ce_confidence_weighting: true  # scales CE — the only live route in cache mode
   confidence_floor: 0.1
   confidence_power: 1.0
 
@@ -79,6 +80,9 @@ controller:
 data:
   source: hf
   router: metadata
+  vocab_size: ${model.vocab_size}   # collator sizes logits to the MODEL vocab
+  gold_policy: teacher_only        # | gold_when_available (the gold_ce ablation)
+  append_eos: true
   strict_load: true
   # REQUIRED at this cap: the first 2000 rows of medical hold only 14
   # buckets with ≥16 rows (17 across the full split), and general would
