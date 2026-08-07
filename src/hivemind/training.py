@@ -68,6 +68,15 @@ from .teacher_router import MetadataRouter, TeacherRouter, batch_teacher_forward
 from .tracing import EventTrace, ModuleLedger
 
 
+def _as_container(node: Any) -> dict:
+    """OmegaConf node or plain dict -> plain dict."""
+    if node is None:
+        return {}
+    if OmegaConf.is_config(node):
+        return OmegaConf.to_container(node, resolve=True)  # type: ignore[return-value]
+    return dict(node)
+
+
 def _seed_everything(seed: int) -> None:
     """Set all random seeds for reproducibility."""
     random.seed(seed)
@@ -499,6 +508,11 @@ def run_training_loop(
     from .data.stream import parse_stream_config
 
     data_cfg = OmegaConf.to_container(cfg.data, resolve=True)
+    # Preflight cross-checks teacher ids and EM probe availability against
+    # the real rows, so it needs those blocks alongside the data config.
+    # Tests pass plain dicts, so only convert genuine OmegaConf nodes.
+    data_cfg["_teachers_cfg"] = _as_container(cfg.get("teachers", {}))
+    data_cfg["_eval_cfg"] = _as_container(cfg.get("eval", {}))
     data_cfg.setdefault("shuffle_seed", int(train_cfg.get("seed", 42)))
     stream_raw = cfg.get("stream")
     stream_cfg = parse_stream_config(

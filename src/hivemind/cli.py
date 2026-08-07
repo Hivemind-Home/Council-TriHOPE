@@ -31,6 +31,60 @@ def doctor(json_output: bool = typer.Option(False, "--json", help="JSON output")
 
 
 @app.command()
+def preflight(
+    config_name: str = typer.Option("stream_small", help="Config name"),
+    metadata_only: bool = typer.Option(
+        False,
+        "--metadata-only",
+        help="skip the checks that need the split downloaded",
+    ),
+) -> None:
+    """Validate a config against the real data BEFORE spending GPU time.
+
+    Reports every problem at once — bucket cardinality against what each
+    recurrent phase asks for, teacher_ids against the values actually in
+    the rows, exact-match probe availability, novel-row budget, undeclared
+    phase domains. Exit code 1 on any blocking problem.
+    """
+    from hydra import compose, initialize_config_dir
+
+    from .config_utils import unwrap_config
+    from .data.preflight import PreflightError, validate_config
+
+    cfg_dir = str(Path(__file__).resolve().parents[2] / "configs")
+    with initialize_config_dir(config_dir=cfg_dir, version_base=None):
+        cfg = unwrap_config(compose(config_name=config_name))
+
+    dataset = tokenizer = None
+    if not metadata_only:
+        from omegaconf import OmegaConf
+
+        from .data.dataloader import _build_hf
+
+        data_cfg = OmegaConf.to_container(cfg.data, resolve=True)
+        data_cfg["preflight"] = False  # this IS the preflight
+        typer.echo(f"Loading {config_name} data (use --metadata-only to skip)...")
+        dataset, tokenizer = _build_hf(data_cfg)
+        tokenizer = getattr(tokenizer, "tokenizer", None)
+
+    try:
+        report = validate_config(cfg, dataset=dataset, tokenizer=tokenizer)
+    except PreflightError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(1) from None
+
+    for key, value in report.facts.items():
+        typer.echo(f"  {key}: {value}")
+    if report.warnings:
+        typer.echo(report.render())
+    if report.ok:
+        typer.echo(f"preflight OK for {config_name}")
+    else:
+        typer.echo(report.render())
+        raise typer.Exit(1)
+
+
+@app.command()
 def smoke(config_name: str = typer.Option("pilot_smoke", help="Config name")) -> None:
     """Run a quick smoke test."""
 

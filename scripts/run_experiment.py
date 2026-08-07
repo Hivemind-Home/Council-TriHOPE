@@ -236,6 +236,19 @@ def write_index(manifest: dict, runs: list[ResolvedRun]) -> None:
     (out_root / "manifest_index.json").write_text(json.dumps(index, indent=2))
 
 
+def _preflight_manifest(manifest: dict) -> int:
+    """Metadata-only validation of the manifest's base config."""
+    cmd = [
+        sys.executable, "-m", "hivemind", "preflight",
+        "--config-name", str(manifest["base_config"]), "--metadata-only",
+    ]
+    print(f"[preflight] {' '.join(cmd)}")
+    proc = subprocess.run(cmd, cwd=str(REPO_ROOT))
+    if proc.returncode:
+        print("[preflight] FAILED — refusing to launch. Use --no-preflight to override.")
+    return proc.returncode
+
+
 def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
     """One spec per GPU, concurrently, refilling a slot as each finishes."""
     from concurrent.futures import ThreadPoolExecutor
@@ -293,6 +306,11 @@ def main(argv: list[str] | None = None) -> int:
         "--max-hours", type=float, default=None, help="stop launching past this budget"
     )
     parser.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="skip the config/data validation pass before launching",
+    )
+    parser.add_argument(
         "--parallel-gpus",
         type=int,
         default=None,
@@ -321,6 +339,13 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest = load_manifest(args.manifest)
     runs = expand_matrix(manifest)
+
+    if not args.dry_run and not args.no_preflight:
+        # One config check before ANY run launches: a broken manifest then
+        # fails in about a minute instead of six hours into Group D.
+        code = _preflight_manifest(manifest)
+        if code:
+            return code
     if args.only:
         runs = [r for r in runs if r.spec_id == args.only]
         if not runs:

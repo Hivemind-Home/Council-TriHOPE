@@ -25,6 +25,20 @@ def _build_synthetic(cfg: dict) -> Dataset:
     )
 
 
+def _stream_to_dict(stream) -> dict:
+    """StreamConfig -> the plain dict shape preflight expects."""
+    from dataclasses import asdict, is_dataclass
+
+    phases = []
+    for p in getattr(stream, "phases", []):
+        d = asdict(p) if is_dataclass(p) else dict(p)
+        rec = d.get("recurrence")
+        if rec is not None and is_dataclass(rec):
+            d["recurrence"] = asdict(rec)
+        phases.append(d)
+    return {"phases": phases}
+
+
 def _data_identity(cfg: dict) -> dict:
     """The parts of ``data`` that change which rows land in which batch.
 
@@ -137,6 +151,23 @@ def build_dataloader(
         if source != "hf":
             raise ValueError("stream schedules require data.source=hf")
         from .stream import StreamBatchSampler, StreamSchedule
+
+        if cfg.get("preflight", True):
+            # Runs here, not earlier: the dataset is already built and its
+            # bucket index is cached and reused by StreamSchedule below, so
+            # the checks are effectively free. Reports EVERY problem at once
+            # instead of surfacing whichever the schedule trips over first.
+            from .preflight import validate_or_raise
+
+            validate_or_raise(
+                data_cfg=cfg,
+                stream_cfg=_stream_to_dict(stream),
+                teachers_cfg=cfg.get("_teachers_cfg"),
+                eval_cfg=cfg.get("_eval_cfg"),
+                model_cfg={"vocab_size": cfg.get("vocab_size")},
+                dataset=dataset,
+                tokenizer=getattr(collate_fn, "tokenizer", None),
+            )
 
         # Built at the GLOBAL batch size on every rank — identical by
         # construction, since the schedule is a pure function of the seed.
