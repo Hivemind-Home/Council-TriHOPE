@@ -459,9 +459,14 @@ def run_training_loop(
     )
     p_store = PermanentStore()
 
+    # Merges mutate weights outside the optimizer, so the scheduler needs the
+    # process group: it broadcasts the reinitialized lora_a and the distill
+    # replay batch (see ConsolidationScheduler._sync_after_merge/_pick_replay).
+    # ``student`` here is the RAW module — the reducer guard uses the wrapper.
     consolidator = ConsolidationScheduler(
-        ctrl_config.consolidation, student, p_store, optimizer=optimizer
+        ctrl_config.consolidation, student, p_store, optimizer=optimizer, dist=dist
     )
+    consolidator._ddp_handle = model_fwd if model_fwd is not student else None
     writer = WriteExecutor(
         student,
         optimizer,
@@ -679,7 +684,11 @@ def run_training_loop(
     # the load restores RNG state and the sampler cursor, and creating the
     # iterator first would consume them out of order.
     start_step = 0
-    resume_path = ckpt_manager.resolve_resume_path()
+    # Every rank must resolve to the SAME directory: the `latest` symlink can
+    # be mid-update on rank 0 while another rank reads it.
+    _resolved = str(ckpt_manager.resolve_resume_path() or "") if dist.is_main else ""
+    _resolved = dist.broadcast_obj(_resolved, src=0)
+    resume_path = _Path(_resolved) if _resolved else None
     if resume_path is not None:
         meta = ckpt_manager.load(
             resume_path,
@@ -704,10 +713,19 @@ def run_training_loop(
                     "Resuming would silently change the data order."
                 )
             dataloader.batch_sampler.start_step = start_step
+        saved_ws = int((meta.get("extra") or {}).get("world_size", 1))
+        if saved_ws != dist.world_size and not dist.cfg.allow_world_size_change:
+            raise RuntimeError(
+                f"checkpoint was written at world_size={saved_ws} but this run has "
+                f"{dist.world_size}. The global batch composition is preserved, but "
+                "the float reduction order changes, so the resume is not bit-exact. "
+                "Set distributed.allow_world_size_change=true to proceed anyway."
+            )
         event_trace.emit(
             {"type": "resume", "step": start_step, "from": str(resume_path)}
         )
-        print(f"Resumed from {resume_path} at step {start_step}.")
+        if is_main:
+            print(f"Resumed from {resume_path} at step {start_step}.")
 
     # One self-describing config event per (re)start so the trace can be
     # analyzed without the Hydra config at hand.
@@ -779,7 +797,10 @@ def run_training_loop(
                 extra={
                     "interrupted": reason,
                     **(
-                        {"stream_digest": stream_schedule.config_digest()}
+                        {
+                            "stream_digest": stream_schedule.config_digest(),
+                            "world_size": dist.world_size,
+                        }
                         if stream_schedule is not None
                         else {}
                     ),
@@ -813,7 +834,10 @@ def run_training_loop(
             extra={
                 "reason": "pre_merge",
                 **(
-                    {"stream_digest": stream_schedule.config_digest()}
+                    {
+                            "stream_digest": stream_schedule.config_digest(),
+                            "world_size": dist.world_size,
+                        }
                     if stream_schedule is not None
                     else {}
                 ),
@@ -1242,73 +1266,87 @@ def run_training_loop(
             and val_loaders
             and (interval_due or boundary_phase is not None or consolidation_due)
         ):
-            eval_metrics = run_evaluation(
-                student=student,
-                val_loaders=val_loaders,
-                device=device,
-                config=eval_config,
-                forgetting=forgetting_tracker,
-                r_store=r_store,
-                probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
-            )
+            # Rank 0 only. ForgettingTracker and PhaseEvalTracker are
+            # CHECKPOINTED mutable state that run_evaluation mutates in
+            # place, so running eval everywhere would make rank 0's
+            # checkpoint stop describing every rank. Cost is negligible:
+            # eval.max_batches batches against hundreds of training steps.
+            # Barriers on both sides keep the others from racing ahead into
+            # the next backward's all-reduce (and tripping the NCCL watchdog
+            # during a long exact_match generation).
+            dist.barrier()
+            eval_metrics: dict = {}
+            if is_main:
+                eval_metrics = run_evaluation(
+                    student=student,
+                    val_loaders=val_loaders,
+                    device=device,
+                    config=eval_config,
+                    forgetting=forgetting_tracker,
+                    r_store=r_store,
+                    probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
+                )
 
-            # Gold exact-match probes only at phase boundaries (generation
-            # is expensive).
-            if em_probes and em_tokenizer is not None and boundary_phase is not None:
-                for name, probe in em_probes.items():
-                    eval_metrics[f"eval/{name}/exact_match"] = exact_match_eval(
-                        student,
-                        em_tokenizer,
-                        probe,
-                        device,
-                        max_new_tokens=eval_config.exact_match_max_new_tokens,
+                # Gold exact-match probes only at phase boundaries (generation
+                # is expensive).
+                if em_probes and em_tokenizer is not None and boundary_phase is not None:
+                    for name, probe in em_probes.items():
+                        eval_metrics[f"eval/{name}/exact_match"] = exact_match_eval(
+                            student,
+                            em_tokenizer,
+                            probe,
+                            device,
+                            max_new_tokens=eval_config.exact_match_max_new_tokens,
+                        )
+
+                # Phase-resolved retention accounting (the paper's forgetting
+                # numbers segment by phase, not just first-seen baselines).
+                if boundary_phase is not None and phase_tracker is not None:
+                    phase_domains = (
+                        list(boundary_phase.domains)
+                        if boundary_phase.domains
+                        else ([boundary_phase.domain] if boundary_phase.domain else [])
                     )
-
-            # Phase-resolved retention accounting (the paper's forgetting
-            # numbers segment by phase, not just first-seen baselines).
-            if boundary_phase is not None and phase_tracker is not None:
-                phase_domains = (
-                    list(boundary_phase.domains)
-                    if boundary_phase.domains
-                    else ([boundary_phase.domain] if boundary_phase.domain else [])
-                )
-                domain_loss = {
-                    d: eval_metrics[f"eval/{d}/loss"]
-                    for d in val_loaders
-                    if f"eval/{d}/loss" in eval_metrics
-                }
-                domain_em = {
-                    d: eval_metrics[f"eval/{d}/exact_match"]
-                    for d in val_loaders
-                    if f"eval/{d}/exact_match" in eval_metrics
-                }
-                deltas = phase_tracker.record(
-                    phase=boundary_phase.name,
-                    step=step,
-                    phase_domains=phase_domains,
-                    domain_loss=domain_loss,
-                    domain_em=domain_em or None,
-                )
-                for d, delta in deltas.items():
-                    eval_metrics[f"eval/{d}/retention_delta"] = delta
-                event_trace.emit(
-                    {
-                        "type": "phase_eval",
-                        "step": step,
-                        "phase": boundary_phase.name,
-                        "loss": domain_loss,
-                        "em": domain_em,
-                        "retention_delta": deltas,
+                    domain_loss = {
+                        d: eval_metrics[f"eval/{d}/loss"]
+                        for d in val_loaders
+                        if f"eval/{d}/loss" in eval_metrics
                     }
-                )
+                    domain_em = {
+                        d: eval_metrics[f"eval/{d}/exact_match"]
+                        for d in val_loaders
+                        if f"eval/{d}/exact_match" in eval_metrics
+                    }
+                    deltas = phase_tracker.record(
+                        phase=boundary_phase.name,
+                        step=step,
+                        phase_domains=phase_domains,
+                        domain_loss=domain_loss,
+                        domain_em=domain_em or None,
+                    )
+                    for d, delta in deltas.items():
+                        eval_metrics[f"eval/{d}/retention_delta"] = delta
+                    event_trace.emit(
+                        {
+                            "type": "phase_eval",
+                            "step": step,
+                            "phase": boundary_phase.name,
+                            "loss": domain_loss,
+                            "em": domain_em,
+                            "retention_delta": deltas,
+                        }
+                    )
 
             if consolidation_due:
                 eval_metrics["eval/trigger"] = "consolidation"
+            # Share the canonical numbers so every rank's view agrees.
+            eval_metrics = dist.broadcast_obj(eval_metrics, src=0)
             logger.log(eval_metrics, step)
             # Surface key eval numbers on the progress bar
             macro = eval_metrics.get("eval/macro_loss")
             if macro is not None:
                 pbar.set_postfix_str(f"val_loss={macro:.3f}", refresh=False)
+            dist.barrier()
 
         # Checkpoint
         if (
@@ -1332,12 +1370,18 @@ def run_training_loop(
                 extra={
                     "final_metrics": final_metrics,
                     **(
-                        {"stream_digest": stream_schedule.config_digest()}
+                        {
+                            "stream_digest": stream_schedule.config_digest(),
+                            "world_size": dist.world_size,
+                        }
                         if stream_schedule is not None
                         else {}
                     ),
                 },
             )
+            # Ranks > 0 must not race past a save: rank 0 is still writing,
+            # and at the final step they would otherwise exit mid-write.
+            dist.barrier()
 
         # Mark this step as fully complete (signals + writes + optimizer
         # step + maybe checkpoint all finished) so the SIGINT handler's
@@ -1368,7 +1412,10 @@ def run_training_loop(
             ledger_totals=ledger.totals(),
             interrupted=bool(_interrupted["flag"]),
             extra=(
-                {"stream_digest": stream_schedule.config_digest()}
+                {
+                            "stream_digest": stream_schedule.config_digest(),
+                            "world_size": dist.world_size,
+                        }
                 if stream_schedule is not None
                 else None
             ),

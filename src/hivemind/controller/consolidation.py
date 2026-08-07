@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import contextlib
 from collections import deque
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 import torch
 import torch.nn as nn
@@ -63,10 +63,15 @@ class ConsolidationScheduler:
         model: nn.Module,
         p_store: PermanentStore,
         optimizer: Optional[MaskedAdamW] = None,
+        dist: Any = None,
     ) -> None:
         self.config = config
         self.model = model
         self.p_store = p_store
+        # Process-group handle (hivemind.distributed.DistContext) or None.
+        # Merges mutate weights outside the optimizer, so they need their own
+        # synchronization — see _sync_after_merge.
+        self.dist = dist
         # When provided, the merged adapter's optimizer state (moments,
         # AMSGrad max, coordinate counters) is zeroed after every merge —
         # paper Corollary 2: the reinitialized adapter must start from a
@@ -155,10 +160,32 @@ class ConsolidationScheduler:
                     )
                 if merged > 0:
                     self._reset_adapter_optimizer_state(mid)
+                    self._sync_after_merge(mid)
                     consolidated.append(mid)
                     self._pending_p.discard(mid)
 
         return consolidated
+
+    def _sync_after_merge(self, mid: ModuleId) -> None:
+        """Broadcast the freshly reinitialized adapter from rank 0.
+
+        ``reset_lora`` draws A from ``nn.init.kaiming_uniform_`` off the
+        GLOBAL torch RNG. Today every rank happens to agree, because they
+        share a seed and all shipped configs run dropout=0 — but that is a
+        latent invariant, not a guarantee: enable dropout and the ranks
+        consume different numbers of RNG values, their streams desynchronize,
+        and the next merge initializes a DIFFERENT A on each rank. That is
+        silent, permanent divergence of the model.
+
+        Broadcasting is preferred over threading a shared Generator into
+        reset_lora because changing the RNG source would change single-GPU
+        numerics. B is exactly zero after a merge, so only A needs sending —
+        a few hundred KB, at a period measured in thousands of steps.
+        """
+        if self.dist is None or not getattr(self.dist, "enabled", False):
+            return
+        for ad in self._get_lora_adapters(mid):
+            self.dist.broadcast_tensor_(ad.lora_a.data)
 
     def _reset_adapter_optimizer_state(self, mid: ModuleId) -> None:
         """Zero optimizer state for the merged block's LoRA factors.
@@ -208,6 +235,7 @@ class ConsolidationScheduler:
                 )
             if merged > 0:
                 self._reset_adapter_optimizer_state(mid)
+                self._sync_after_merge(mid)
                 self._pending_p.discard(mid)
                 merged_ids.append(mid)
         return merged_ids
@@ -266,6 +294,17 @@ class ConsolidationScheduler:
         opt = torch.optim.AdamW(base_params, lr=self.config.distill_lr)
         tau = max(self.config.distill_tau, 1e-3)
 
+        # ``self.model`` is the unwrapped student, so these inner backwards
+        # bypass DDP's forward and its reducer early-returns today. That is
+        # correct but version-dependent, so pin it: clearing the sync flag
+        # makes the reducer's non-participation explicit rather than
+        # incidental. tests/test_distributed_consolidation.py fails on a
+        # timeout if a future torch release changes the behaviour.
+        ddp = getattr(self, "_ddp_handle", None)
+        prev_sync = getattr(ddp, "require_backward_grad_sync", None)
+        if ddp is not None:
+            ddp.require_backward_grad_sync = False
+
         try:
             with _lora_zeroed(adapters):
                 for _ in range(max(1, self.config.distill_iters)):
@@ -285,6 +324,8 @@ class ConsolidationScheduler:
             # Restore requires_grad, training mode; reset LoRA.
             for p, was in previously_trainable:
                 p.requires_grad = was
+            if ddp is not None and prev_sync is not None:
+                ddp.require_backward_grad_sync = prev_sync
             if was_training:
                 self.model.train()
             for ad in adapters:
@@ -296,7 +337,17 @@ class ConsolidationScheduler:
         if not self._replay:
             return None
         # Use the most recent batch; simple and avoids mixing distributions.
-        return self._replay[-1]
+        replay = self._replay[-1]
+        if self.dist is not None and getattr(self.dist, "enabled", False):
+            # record_batch stored this rank's SHARD, so distilling against it
+            # would train each replica's base weights on different data.
+            # Broadcast rank 0's — once per merge, not once per step, which
+            # is why the fix lives here and not in record_batch.
+            shape = self.dist.broadcast_obj(tuple(replay.shape), src=0)
+            if not self.dist.is_main:
+                replay = torch.empty(shape, dtype=replay.dtype)
+            self.dist.broadcast_tensor_(replay)
+        return replay
 
     # -- serialisation ----------------------------------------------------
 
