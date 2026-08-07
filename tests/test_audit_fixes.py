@@ -371,3 +371,52 @@ class TestResumeWithoutACheckpointRoot:
             CheckpointConfig(enabled=False, dir=str(tmp_path / "nope"))
         )
         assert mgr.resolve_resume_path() is None
+
+
+class TestRetrievalStoreDeviceAlignment:
+    """WriteExecutor stores R entries with .cpu(); eval queries them with a
+    tensor on the training device. On GPU that raised a device mismatch the
+    first time eval ran with a non-empty buffer — invisible here because a
+    CPU-only suite has both sides on the same device already."""
+
+    @staticmethod
+    def _store(n: int = 3, dim: int = 8):
+        from hivemind.stores.retrieval import RetrievalEntry, RetrievalStore
+
+        store = RetrievalStore(max_size=16)
+        for i in range(n):
+            store.add(
+                RetrievalEntry(
+                    embedding=torch.randn(dim).cpu(),  # as WriteExecutor writes them
+                    teacher_id=0,
+                    bucket_id=i,
+                    step=i,
+                )
+            )
+        return store
+
+    def test_aligned_puts_query_on_the_buffer_device(self):
+        store = self._store()
+        query, embeddings = store._aligned(torch.randn(8))
+        assert query.device == embeddings.device
+
+    def test_query_is_moved_not_the_buffer(self):
+        """The buffer can hold max_size entries and _retrieval_hit_rate calls
+        this once per probe row, so the query must be what moves."""
+        store = self._store()
+        _, embeddings = store._aligned(torch.randn(8))
+        assert embeddings.device == store._buffer[0].embedding.device
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+    def test_cuda_query_against_cpu_buffer(self):
+        store = self._store()
+        q = torch.randn(8, device="cuda")
+        assert isinstance(store.hit_count(q, threshold=0.0), int)
+        assert len(store.query_nearest(q, k=2)) == 2
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
+    def test_eval_hit_rate_with_cuda_probes(self):
+        from hivemind.evaluation import _retrieval_hit_rate
+
+        rate = _retrieval_hit_rate(self._store(), torch.randn(4, 8, device="cuda"))
+        assert 0.0 <= rate <= 1.0

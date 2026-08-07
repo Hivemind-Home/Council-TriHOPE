@@ -51,6 +51,25 @@ class RetrievalStore:
         """Add an entry to the retrieval buffer."""
         self._buffer.append(entry)
 
+    def _aligned(self, embedding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Query and stacked buffer embeddings, on one device.
+
+        ``WriteExecutor`` stores entries with ``.cpu()`` so a full buffer
+        does not pin GPU memory for ``max_size`` embeddings, but the query
+        arrives on the training device. Without this the cosine similarity
+        raises a device mismatch the moment the R-store is non-empty on a
+        GPU run — invisible to the CPU test suite, which has both sides on
+        the same device.
+
+        The query moves to the buffer, never the reverse:
+        ``_retrieval_hit_rate`` calls this once per probe row, so hauling
+        ``max_size`` embeddings to the GPU each time would cost far more
+        than moving one row off it.
+        """
+        embeddings = torch.stack([e.embedding.float().flatten() for e in self._buffer])
+        query = embedding.detach().float().flatten().to(embeddings.device)
+        return query, embeddings
+
     def hit_count(self, embedding: torch.Tensor, threshold: float = 0.85) -> int:
         """Count entries with cosine similarity above threshold.
 
@@ -64,8 +83,7 @@ class RetrievalStore:
         if not self._buffer:
             return 0
 
-        query = embedding.detach().float().flatten()
-        embeddings = torch.stack([e.embedding.float().flatten() for e in self._buffer])
+        query, embeddings = self._aligned(embedding)
         sims = F.cosine_similarity(query.unsqueeze(0), embeddings)
         return (sims >= threshold).sum().item()
 
@@ -80,8 +98,7 @@ class RetrievalStore:
         if not self._buffer:
             return []
 
-        query = embedding.detach().float().flatten()
-        embeddings = torch.stack([e.embedding.float().flatten() for e in self._buffer])
+        query, embeddings = self._aligned(embedding)
         sims = F.cosine_similarity(query.unsqueeze(0), embeddings)
 
         k = min(k, len(self._buffer))
