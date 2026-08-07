@@ -36,6 +36,7 @@ from .controller.policy import RFPPolicy
 from .controller.signals import SignalComputer
 from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
+from .data.hf_loader import domain_names
 from .distillation import DistillationConfig, compute_distillation_objective
 from .embedding import SharedEmbedding
 from .evaluation import (
@@ -291,8 +292,21 @@ def run_training_loop(
             cache_dir=teachers_cfg.get("hf_cache_dir"),
         )
     elif data_source == "hf":
-        domains = list(cfg.data.get("domains", ["code"]))
+        # ``data.domains`` entries are DomainSpec dicts, not bare strings —
+        # passing them through raw stringifies the whole dict into the
+        # teacher id and makes both MetadataRouter lookups miss.
+        domains = domain_names(
+            OmegaConf.to_container(cfg.data.domains, resolve=True)
+            if "domains" in cfg.data
+            else ["code"]
+        )
         teacher_ids = dict(teachers_cfg.get("teacher_ids", {}))
+        missing_ids = [d for d in domains if d not in teacher_ids]
+        if missing_ids:
+            print(
+                f"[warn] teachers.teacher_ids has no entry for {missing_ids}; "
+                "those domains can only route by domain name."
+            )
         teachers = create_hf_cache_teachers(
             domains=domains,
             teacher_ids=teacher_ids,
@@ -330,9 +344,15 @@ def run_training_loop(
         domain_to_index = {
             getattr(t.model, "domain", ""): i for i, t in enumerate(registry.teachers)
         }
+        # Live teachers: a routing miss silently distils a domain through the
+        # wrong expert, so refuse. Cache teachers all return zeros, so a miss
+        # cannot change the loss — keep the tolerant fallback there.
         router: TeacherRouter | MetadataRouter = MetadataRouter(
             teacher_names=[t.name for t in registry.teachers],
             domain_to_index=domain_to_index,
+            strict=bool(
+                cfg.data.get("router_strict", teacher_mode == "live")
+            ),
         )
     else:
         router = TeacherRouter()
@@ -490,8 +510,6 @@ def run_training_loop(
     )
     val_loaders: dict[str, Any] = {}
     if eval_config.enabled and data_source == "hf":
-        from .data.hf_loader import domain_names
-
         base_data = OmegaConf.to_container(cfg.data, resolve=True)
         domain_specs = list(base_data.get("domains", []))
         for spec, name in zip(domain_specs, domain_names(domain_specs)):
@@ -798,6 +816,15 @@ def run_training_loop(
                 )
             teacher_indices = router.route(batch["metadata"], device=device)
             scores = None
+            if step == start_step and router.miss_count:
+                # A silent 100% miss rate still trains (every cache teacher
+                # returns zeros) — surface it on the very first step.
+                print(
+                    f"[warn] MetadataRouter missed {router.miss_count}/"
+                    f"{router.routed_count} samples on the first step. "
+                    "teachers.teacher_ids does not match the dataset's "
+                    "teacher_id values; routing is falling back to index 0."
+                )
         else:
             teacher_indices, scores = router.route(
                 h_t, registry.prototypes.to(device)
@@ -1054,6 +1081,7 @@ def run_training_loop(
                 metrics["phase"] = current_phase
             if isinstance(router, MetadataRouter):
                 metrics["router/miss_count"] = router.miss_count
+                metrics["router/miss_rate"] = router.miss_rate
 
             pbar.set_postfix(
                 loss=f"{loss_metrics['loss/total']:.4f}",

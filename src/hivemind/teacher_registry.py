@@ -160,13 +160,22 @@ def create_hf_cache_teachers(
     """One ``CacheBackedTeacher`` per domain.
 
     ``teacher_ids`` maps domain → teacher_id. When absent we fall back to
-    ``"{domain}_teacher"`` which matches nothing in the Layer B data but
-    is fine because metadata routing looks up by domain when the
-    teacher_id is unknown.
+    ``"{domain}_teacher"``, which matches nothing in the Layer B/C data;
+    metadata routing then has to fall back to its domain lookup.
+
+    ``domains`` must be plain names. Passing the raw ``data.domains`` config
+    entries (dicts / DictConfigs) used to stringify into nonsense ids and
+    non-string ``domain`` attributes, which made *both* MetadataRouter
+    lookups miss and sent every sample to teacher index 0.
     """
     teacher_ids = teacher_ids or {}
     teachers: list[TeacherInfo] = []
     for domain in domains:
+        if not isinstance(domain, str):
+            raise TypeError(
+                f"create_hf_cache_teachers expects domain names, got {type(domain).__name__}: "
+                f"{domain!r}. Use hivemind.data.hf_loader.domain_names(cfg.data.domains)."
+            )
         tid = teacher_ids.get(domain, f"{domain}_teacher")
         model = CacheBackedTeacher(teacher_id=tid, domain=domain, vocab_size=vocab_size).to(device)
         model.eval()

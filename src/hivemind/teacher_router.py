@@ -73,16 +73,32 @@ class MetadataRouter:
     3. If both miss, fall back to index 0 (and record the miss count —
        the caller logs it). Falling back beats raising because a single
        unroutable sample shouldn't kill the whole step.
+
+    ``strict`` turns step 3 into an error instead. Worth enabling for live
+    teachers, where routing to index 0 silently distils a domain through
+    the wrong expert; in cache mode every teacher returns zeros, so a miss
+    cannot change the loss and the fallback is harmless.
+
+    ``routed_count`` / ``miss_count`` are cumulative so the caller can
+    report a miss *rate* — a 100% miss rate that still trains is exactly
+    the failure this class is easiest to hide.
     """
 
     def __init__(
         self,
         teacher_names: list[str],
         domain_to_index: dict[str, int] | None = None,
+        strict: bool = False,
     ) -> None:
         self._name_to_index = {name: i for i, name in enumerate(teacher_names)}
         self._domain_to_index = dict(domain_to_index or {})
+        self.strict = bool(strict)
         self.miss_count = 0
+        self.routed_count = 0
+
+    @property
+    def miss_rate(self) -> float:
+        return self.miss_count / self.routed_count if self.routed_count else 0.0
 
     def route(self, metadata: dict[str, list[Any]], device: torch.device) -> torch.Tensor:
         teacher_ids = metadata.get("teacher_id", [])
@@ -96,9 +112,18 @@ class MetadataRouter:
             if idx is None:
                 idx = self._domain_to_index.get(dom)
             if idx is None:
+                if self.strict:
+                    raise KeyError(
+                        f"MetadataRouter: sample {i} has teacher_id={tid!r} "
+                        f"domain={dom!r}, neither of which is registered. "
+                        f"Known teacher_ids={sorted(self._name_to_index)}, "
+                        f"known domains={sorted(self._domain_to_index)}. "
+                        "Fix teachers.teacher_ids to match the dataset."
+                    )
                 idx = 0
                 self.miss_count += 1
             indices[i] = idx
+        self.routed_count += B
         return indices
 
 
