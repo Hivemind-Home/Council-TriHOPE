@@ -25,6 +25,7 @@ class StoreAction:
     surprise: float = 0.0
     repetition: float = 0.0
     stability_C: float = 0.0
+    stability_C_sustained: float = 0.0
     stability_V: float = 0.0
     stability_adam: float = 0.0
     grad_norm: float = 0.0
@@ -110,6 +111,7 @@ class RFPPolicy:
                 surprise=sig.surprise,
                 repetition=sig.repetition,
                 stability_C=sig.stability_C,
+                stability_C_sustained=sig.stability_C_sustained,
                 stability_V=sig.stability_V,
                 stability_adam=sig.stability_adam,
                 grad_norm=sig.grad_norm,

@@ -19,6 +19,11 @@ class StabilityConfig:
     """Stability signal configuration."""
 
     ema_alpha: float = 0.1
+    # EMA smoothing for the *sustained* directional cosine (C̄). The
+    # instantaneous C = cos(g_t, m_{t-1}) is noisy at any single step; C̄
+    # accumulates it so a module that has been directionally consistent for
+    # a sustained window reads high even when the current step is noisy.
+    c_ema_alpha: float = 0.1
     warmup_threshold: float = 1e-6
     eps: float = 1e-8
 
@@ -67,6 +72,18 @@ class ConsolidationConfig:
     period: int = 1000
     min_stability_C: float = 0.7
     min_repetition: float = 0.6
+    # Which directional-stability signal the merge re-validation reads:
+    # - ``instant``   : the per-step cosine C = cos(g_t, m_{t-1}). Sampled
+    #   at the exact period boundary, so a genuinely-stable module still
+    #   fails unless the boundary batch happens to hit it aligned. This is
+    #   the original behaviour and the default (nothing changes unless a
+    #   config opts in).
+    # - ``sustained`` : the EMA C̄ of that cosine (StabilityConfig.c_ema_alpha).
+    #   Faithful to Theory 101 §"stability has remained high for multiple
+    #   windows" — a module consolidates when it has been consistently
+    #   aligned, not when it is lucky at one step. Keep ``min_stability_C``
+    #   at its strict value; this changes *what is measured*, not the bar.
+    stability_mode: str = "instant"
     merge_strategy: str = "direct"
     distill_iters: int = 4
     distill_lr: float = 1.0e-4
@@ -75,6 +92,13 @@ class ConsolidationConfig:
     # Save a tagged rollback checkpoint immediately before any merge
     # (needed by the incorrect-consolidation / rollback experiments).
     checkpoint_before_merge: bool = False
+
+    def __post_init__(self) -> None:
+        if self.stability_mode not in ("instant", "sustained"):
+            raise ValueError(
+                f"Unknown consolidation.stability_mode '{self.stability_mode}'; "
+                "allowed: 'instant' | 'sustained'"
+            )
 
 
 @dataclass

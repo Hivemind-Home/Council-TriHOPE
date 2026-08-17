@@ -1163,6 +1163,7 @@ def run_training_loop(
                     "signals": {
                         "S": round(act.surprise, 6),
                         "C": round(act.stability_C, 6),
+                        "C_bar": round(act.stability_C_sustained, 6),
                         "V": round(act.stability_V, 6),
                         "R": round(act.repetition, 6),
                         "R_mom": round(act.repetition_components.get("mom", 0.0), 6),
@@ -1233,6 +1234,7 @@ def run_training_loop(
                         "pre_signals": (
                             {
                                 "C": round(sig.stability_C, 6),
+                                "C_bar": round(sig.stability_C_sustained, 6),
                                 "R": round(sig.repetition, 6),
                             }
                             if sig is not None

@@ -200,3 +200,89 @@ def test_first_update_after_merge_uses_fresh_bias_correction():
     p.grad = grad.clone()
     optimizer.step()
     torch.testing.assert_close(p.detach(), q.detach(), rtol=1e-6, atol=1e-8)
+
+
+def _model_with_lora():
+    """A tiny student with LoRA on every projection, B initialized nonzero."""
+    torch.manual_seed(0)
+    model = StudentModel(StudentConfig(
+        vocab_size=64, dim=32, num_layers=1, heads=4,
+        lora=LoRAConfig(rank=4, target_modules=["q", "k", "v", "o", "up", "gate", "down"]),
+    ))
+    for m in model.modules():
+        if isinstance(m, LoRALinear):
+            torch.nn.init.normal_(m.lora_B, std=0.1)
+    return model
+
+
+def test_sustained_mode_merges_on_ema_despite_noisy_instant_cosine():
+    """The fix: a module stable over time (high C̄) consolidates even when
+    the instantaneous cosine at the period boundary is low."""
+    config = ConsolidationConfig(
+        min_stability_C=0.7, min_repetition=0.5, period=100, stability_mode="sustained"
+    )
+    scheduler = ConsolidationScheduler(config, _model_with_lora(), PermanentStore())
+
+    mid = ModuleId(0, "attn", "F")
+    signals = {
+        mid: ModuleSignals(
+            module_id=mid,
+            stability_C=0.1,             # noisy/low at THIS boundary step
+            stability_C_sustained=0.9,   # but sustained-stable over the window
+            repetition=0.8,
+        )
+    }
+    assert mid in scheduler.consolidate(signals)
+
+
+def test_instant_mode_rejects_the_same_noisy_boundary_step():
+    """Same signals under the original ``instant`` mode do NOT merge — this
+    is exactly the P≈0 behaviour the fix addresses."""
+    config = ConsolidationConfig(
+        min_stability_C=0.7, min_repetition=0.5, period=100, stability_mode="instant"
+    )
+    scheduler = ConsolidationScheduler(config, _model_with_lora(), PermanentStore())
+
+    mid = ModuleId(0, "attn", "F")
+    signals = {
+        mid: ModuleSignals(
+            module_id=mid, stability_C=0.1, stability_C_sustained=0.9, repetition=0.8
+        )
+    }
+    assert mid not in scheduler.consolidate(signals)
+
+
+def test_sustained_mode_rejects_low_ema_despite_lucky_high_instant():
+    """Sustained mode does not consolidate a module that is only aligned at
+    this one step (high instant C, low C̄) — it is not a stricter-instant."""
+    config = ConsolidationConfig(
+        min_stability_C=0.7, min_repetition=0.5, period=100, stability_mode="sustained"
+    )
+    scheduler = ConsolidationScheduler(config, _model_with_lora(), PermanentStore())
+
+    mid = ModuleId(0, "attn", "F")
+    signals = {
+        mid: ModuleSignals(
+            module_id=mid, stability_C=0.95, stability_C_sustained=0.2, repetition=0.8
+        )
+    }
+    assert mid not in scheduler.consolidate(signals)
+
+
+def test_instant_is_the_default_mode():
+    """Default config re-validates on the instantaneous cosine (no behaviour
+    change for existing configs/checkpoints)."""
+    config = ConsolidationConfig(min_stability_C=0.7, min_repetition=0.5, period=100)
+    assert config.stability_mode == "instant"
+    scheduler = ConsolidationScheduler(config, _model_with_lora(), PermanentStore())
+
+    mid = ModuleId(0, "attn", "F")
+    # high instant, unset sustained (0.0) → must still merge under default.
+    signals = {mid: ModuleSignals(module_id=mid, stability_C=0.9, repetition=0.8)}
+    assert mid in scheduler.consolidate(signals)
+
+
+def test_invalid_stability_mode_rejected():
+    import pytest
+    with pytest.raises(ValueError, match="stability_mode"):
+        ConsolidationConfig(stability_mode="bogus")

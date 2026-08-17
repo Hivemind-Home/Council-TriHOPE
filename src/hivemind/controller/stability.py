@@ -23,6 +23,10 @@ class StabilityTracker:
         self._ema_norm: float = 0.0  # a_t: EMA of gradient norm
         self._ema_norm_sq: float = 0.0  # b_t: EMA of squared gradient norm
         self._initialized: bool = False
+        # Sustained directional consistency C̄: EMA of the per-step cosine.
+        # Seeded on the first non-warmup observation, then smoothed.
+        self._ema_C: float = 0.0
+        self._c_initialized: bool = False
 
     def compute_directional(
         self,
@@ -37,6 +41,11 @@ class StabilityTracker:
 
         Returns:
             Cosine similarity in [-1, 1], or 0.0 if m_{t-1} is too small.
+
+        Side effect: advances the sustained-cosine EMA (:attr:`sustained_C`)
+        on every non-warmup call. Warmup steps (``m`` below threshold) do
+        not pollute the EMA — C̄ only accumulates once the module has a
+        meaningful momentum direction to compare against.
         """
         m_norm = adam_m_prev.float().norm()
         if m_norm < self.config.warmup_threshold:
@@ -46,7 +55,24 @@ class StabilityTracker:
         m_flat = adam_m_prev.float().flatten()
 
         cos_sim = F.cosine_similarity(g_flat.unsqueeze(0), m_flat.unsqueeze(0)).item()
+
+        # Update sustained directional consistency C̄ (EMA of the cosine).
+        if not self._c_initialized:
+            self._ema_C = cos_sim
+            self._c_initialized = True
+        else:
+            beta = self.config.c_ema_alpha
+            self._ema_C = (1 - beta) * self._ema_C + beta * cos_sim
+
         return cos_sim
+
+    @property
+    def sustained_C(self) -> float:
+        """Sustained directional consistency C̄ (EMA of the per-step cosine).
+
+        0.0 until the first non-warmup :meth:`compute_directional` call.
+        """
+        return self._ema_C
 
     def compute_adam_ratio(
         self,
@@ -142,9 +168,14 @@ class StabilityTracker:
             "_ema_norm": self._ema_norm,
             "_ema_norm_sq": self._ema_norm_sq,
             "_initialized": self._initialized,
+            "_ema_C": self._ema_C,
+            "_c_initialized": self._c_initialized,
         }
 
     def load_state_dict(self, state: dict) -> None:
         self._ema_norm = float(state.get("_ema_norm", 0.0))
         self._ema_norm_sq = float(state.get("_ema_norm_sq", 0.0))
         self._initialized = bool(state.get("_initialized", False))
+        # Backward-compatible: pre-C̄ checkpoints simply start the EMA cold.
+        self._ema_C = float(state.get("_ema_C", 0.0))
+        self._c_initialized = bool(state.get("_c_initialized", False))

@@ -25,7 +25,8 @@ class ModuleSignals:
     module_id: ModuleId
     grad_norm: float = 0.0  # r_t(j) = ||g_t(j)||₂
     surprise: float = 0.0  # S_t(j)
-    stability_C: float = 0.0  # directional cosine
+    stability_C: float = 0.0  # directional cosine (instantaneous)
+    stability_C_sustained: float = 0.0  # C̄: EMA of the directional cosine
     stability_adam: float = 0.0  # Adam ratio
     stability_V: float = 0.0  # windowed variance
     repetition: float = 0.0  # fused R_t(j)
@@ -168,10 +169,12 @@ class SignalComputer:
                     self._stability[mid] = stability_tracker
                 if self._stability_c_disabled:
                     signals.stability_C = self._neutral_c
+                    signals.stability_C_sustained = self._neutral_c
                 else:
                     signals.stability_C = stability_tracker.compute_directional(
                         grad_cat, m_cat
                     )
+                    signals.stability_C_sustained = stability_tracker.sustained_C
                 signals.stability_adam = stability_tracker.compute_adam_ratio(m_cat, v_cat)
                 if self._stability_v_disabled:
                     signals.stability_V = self._neutral_v

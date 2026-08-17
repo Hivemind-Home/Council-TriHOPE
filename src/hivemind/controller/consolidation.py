@@ -130,10 +130,21 @@ class ConsolidationScheduler:
              repeating (R ≥ min_repetition) — re-validated at merge time
              so a stale flag from earlier doesn't trigger a bad merge.
 
+        The stability conjunct reads either the instantaneous cosine
+        (``stability_mode="instant"``) or its EMA C̄
+        (``stability_mode="sustained"``). Sustained is the faithful test:
+        the instantaneous cosine is sampled at the exact period boundary,
+        so a genuinely-stable module fails unless the boundary batch hit it
+        aligned; C̄ carries the module's directional history to the
+        boundary, so consolidation fires on sustained stability rather than
+        a lucky step. The threshold ``min_stability_C`` is unchanged — this
+        selects *what* is compared, not the bar.
+
         Successfully merged modules are removed from the pending set; any
         flagged module that no longer satisfies thresholds remains pending
         for the next period (its signals may recover).
         """
+        sustained = self.config.stability_mode == "sustained"
         consolidated: list[ModuleId] = []
 
         # Decide which modules to consider this round. If the policy has
@@ -164,9 +175,10 @@ class ConsolidationScheduler:
                 # No fresh signal for this module — keep it pending; we'll
                 # re-check next period.
                 continue
+            c_value = sig.stability_C_sustained if sustained else sig.stability_C
             if (
                 sig.repetition >= self.config.min_repetition
-                and sig.stability_C >= self.config.min_stability_C
+                and c_value >= self.config.min_stability_C
             ):
                 if self.config.merge_strategy == "distill":
                     merged = self._consolidate_distill(mid)

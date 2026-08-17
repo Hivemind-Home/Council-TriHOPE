@@ -96,7 +96,7 @@ regularization:
 controller:
   enabled: true
   surprise: {s_min: 0.0, s_max: 20.0, eps: 1.0e-8}
-  stability: {ema_alpha: 0.1, warmup_threshold: 1.0e-6, eps: 1.0e-8}
+  stability: {ema_alpha: 0.1, c_ema_alpha: 0.1, warmup_threshold: 1.0e-6, eps: 1.0e-8}
   repetition:
     alpha_mom: 0.05
     alpha_hash: 0.1
@@ -119,6 +119,12 @@ controller:
     period: 1000
     min_stability_C: 0.7
     min_repetition: 0.6
+    # Re-validate merges on the SUSTAINED cosine C̄ (EMA), not the
+    # instantaneous cosine at the exact period boundary. Faithful to the
+    # "stable for multiple windows" criterion — lets genuinely-stable
+    # modules consolidate without lowering the strict 0.7 bar. Flip to
+    # ``instant`` to reproduce the original (P≈0) behaviour for the ablation.
+    stability_mode: sustained
     merge_strategy: direct
     checkpoint_before_merge: false
   writer:
