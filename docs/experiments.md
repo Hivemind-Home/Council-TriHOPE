@@ -143,6 +143,16 @@ split), so a run can no longer swap its corpus and still pass the guard.
 
 ## Experiment groups
 
+> **ICLR-2027 campaign:** the tiered run order for the reframed paper
+> (E1 controller comparison, E5 bad-teacher rollback, E2/E3/E4) lives in
+> [docs/GPU_RUNBOOK.md](GPU_RUNBOOK.md). `baselines_small.yaml` now holds
+> the four controller baselines (`surprise_gate`, `molf_style`,
+> `plateau_trigger`, `random_routing`) plus `trihope_no_hash`;
+> `r_tier_small.yaml` (E2), `budget_sweep_small.yaml` (E3) and
+> `bad_teacher_small.yaml` (E5) are new. `python -m analysis.run_report`
+> accepts several experiment dirs and writes `budget_curve.csv` +
+> `pareto_budget.png` (Figure 1). Per-task details: `docs/CHANGELOG_iclr.md`.
+
 Run in this order. Each run writes
 `runs/{experiment}/{spec}-seed{seed}/{metrics.jsonl, events.jsonl,
 run_summary.json, checkpoints/, stdout.log, status.json}`.

@@ -301,23 +301,31 @@ def _preflight_manifest(manifest: dict) -> int:
     return proc.returncode
 
 
-def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
-    """One spec per GPU, concurrently, refilling a slot as each finishes."""
+def _run_parallel(
+    runs, manifest, args, policy: str, nproc: int, share_gpu: bool = False
+) -> int:
+    """N specs concurrently: one per GPU (``--parallel-gpus``), or N processes
+    sharing the single visible GPU (``--concurrent``, ``share_gpu=True`` —
+    the 0.6B student uses a small fraction of a large card). A slot is
+    refilled as soon as its run finishes."""
     from concurrent.futures import ThreadPoolExecutor
 
-    n = int(args.parallel_gpus)
-    inherited = os.environ.get("CUDA_VISIBLE_DEVICES")
-    available = (
-        len([x for x in inherited.split(",") if x.strip()])
-        if inherited
-        else _device_count()
-    )
-    if available and n > available:
-        print(
-            f"--parallel-gpus {n} exceeds the {available} GPU(s) this process can "
-            f"see; capping to {available}."
+    if share_gpu:
+        n = int(args.concurrent)
+    else:
+        n = int(args.parallel_gpus)
+        inherited = os.environ.get("CUDA_VISIBLE_DEVICES")
+        available = (
+            len([x for x in inherited.split(",") if x.strip()])
+            if inherited
+            else _device_count()
         )
-        n = available
+        if available and n > available:
+            print(
+                f"--parallel-gpus {n} exceeds the {available} GPU(s) this process can "
+                f"see; capping to {available}."
+            )
+            n = available
     pending = []
     for run in runs:
         status = _read_status(run)
@@ -326,7 +334,10 @@ def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
             continue
         pending.append((run, args.resume and status["state"] in ("running", "failed")))
 
-    print(f"Dispatching {len(pending)} runs across {n} GPUs...")
+    print(
+        f"Dispatching {len(pending)} runs "
+        + (f"{n} at a time on the shared GPU..." if share_gpu else f"across {n} GPUs...")
+    )
     failures = 0
     # A free-GPU queue rather than a static split, so a short run does not
     # leave its GPU idle while a long one on another slot finishes.
@@ -347,7 +358,12 @@ def _run_parallel(runs, manifest, args, policy: str, nproc: int) -> int:
             gpu = free_gpus.pop()
         try:
             return run, launch(
-                run, manifest["base_config"], resume=resume_this, nproc=nproc, gpu=gpu
+                run,
+                manifest["base_config"],
+                resume=resume_this,
+                nproc=nproc,
+                # Shared-GPU mode inherits the parent's device visibility.
+                gpu=None if share_gpu else gpu,
             )
         finally:
             with lock:
@@ -407,11 +423,30 @@ def main(argv: list[str] | None = None) -> int:
             "data.batch_size (the GLOBAL batch) to be divisible by N."
         ),
     )
+    parser.add_argument(
+        "--concurrent",
+        type=int,
+        default=None,
+        help=(
+            "run N specs CONCURRENTLY on the ONE visible GPU (no device pinning). "
+            "For a small student on a large card: pick N from the peak memory of "
+            "a first run (run_summary.json profile.final_peak_mem_gb)."
+        ),
+    )
     args = parser.parse_args(argv)
-    if args.parallel_gpus and args.nproc_per_node and args.nproc_per_node > 1:
+    modes = [
+        name
+        for name, val in (
+            ("--parallel-gpus", args.parallel_gpus),
+            ("--nproc-per-node", args.nproc_per_node),
+            ("--concurrent", args.concurrent),
+        )
+        if val and val > 1
+    ]
+    if len(modes) > 1:
         parser.error(
-            "--parallel-gpus and --nproc-per-node are alternative ways to spend the "
-            "same GPUs; pick one."
+            f"{' and '.join(modes)} are alternative ways to spend the same GPU(s); "
+            "pick one."
         )
 
     manifest = load_manifest(args.manifest)
@@ -447,6 +482,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.parallel_gpus and args.parallel_gpus > 1:
         return _run_parallel(runs, manifest, args, policy, nproc=1)
+    if args.concurrent and args.concurrent > 1:
+        return _run_parallel(runs, manifest, args, policy, nproc=1, share_gpu=True)
 
     for run in runs:
         status = _read_status(run)

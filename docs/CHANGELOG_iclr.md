@@ -175,3 +175,27 @@ deviation from the task document with the reason.
   steps rather than "number of P actions" — the doc left the unit open,
   and this is the only definition under which full FT, LoRA-only and the
   merge-based controllers sit on one axis.
+
+## T8 — manifests, shared-GPU runner mode, and the GPU runbook
+
+- `configs/experiments/baselines_small.yaml` (E1, 3 seeds): trihope
+  (replay on), **trihope_no_hash** (label-free recurrence: bucket-id
+  counter off), full_ft, lora_only, no_retrieval, no_consolidation,
+  surprise_gate, molf_style, plateau_trigger, random_routing, gold_ce.
+  `r_tier_small.yaml` (E2, 3 seeds): trihope_replay, trihope_r_terminal,
+  trihope_no_hash_replay, fp_only, p_only. `budget_sweep_small.yaml` (E3,
+  1 seed, 21 points): trihope 3×3 (S × R_low), trihope_no_hash ×3,
+  surprise_gate ×3, plateau_trigger ×3 tolerances, molf_style ×3 scores.
+  `bad_teacher_small.yaml` lands with T5 (its keys come from T4–T6).
+- `scripts/run_experiment.py --concurrent N`: N runs at a time on the one
+  visible GPU without device pinning (the 0.6B student uses a fraction of
+  a 96 GB card); exclusive with `--parallel-gpus` / `--nproc-per-node`.
+- `docs/GPU_RUNBOOK.md`: the tiered campaign (E1 → E5 → E2/E3/E4 →
+  optional 1.7B), exact commands, artifacts, the go/no-go check.
+- Tests: `tests/test_run_experiment.py` (+2; manifest parse list extended).
+- Deviations: `p_only` is `debug.policy_override=always_p` (every selected
+  block opens fully and every adapter is flagged for the next sweep) — the
+  doc's "adam_score + always open" would still be two-tier. `surprise_gate`
+  and `random_routing` run with replay on so their R tier means the same
+  thing as trihope's. `trihope_no_hash` is added to E1/E2/E3 as a headline
+  candidate (see the plan: the bucket-id counter is dataset metadata).

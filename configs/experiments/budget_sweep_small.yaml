@@ -1,0 +1,135 @@
+# E3 — the budget curve (the paper's identity figure). Each controller is
+# swept over its own threshold so Figure 1 can show forgetting vs. permanent
+# writes as a CURVE per controller, not a single point. 1 seed per point;
+# the chosen operating points are the 3-seed specs in baselines_small.
+#   python scripts/run_experiment.py configs/experiments/budget_sweep_small.yaml
+#   python -m analysis.run_report runs/baselines_small_v1 runs/budget_sweep_small_v1
+experiment: budget_sweep_small_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+runs:
+  - id: trihope_s1_r0p2
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=1.0
+      - controller.policy.repetition_low=0.2
+  - id: trihope_s1_r0p3
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=1.0
+      - controller.policy.repetition_low=0.3
+  - id: trihope_s1_r0p45
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=1.0
+      - controller.policy.repetition_low=0.45
+  - id: trihope_s2_r0p2
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=2.0
+      - controller.policy.repetition_low=0.2
+  - id: trihope_s2_r0p3
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=2.0
+      - controller.policy.repetition_low=0.3
+  - id: trihope_s2_r0p45
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=2.0
+      - controller.policy.repetition_low=0.45
+  - id: trihope_s4_r0p2
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=4.0
+      - controller.policy.repetition_low=0.2
+  - id: trihope_s4_r0p3
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=4.0
+      - controller.policy.repetition_low=0.3
+  - id: trihope_s4_r0p45
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=4.0
+      - controller.policy.repetition_low=0.45
+  - id: trihope_no_hash_s1
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.ablation.disable_signals=[repetition_hash]
+      - controller.policy.surprise_high=1.0
+  - id: trihope_no_hash_s2
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.ablation.disable_signals=[repetition_hash]
+      - controller.policy.surprise_high=2.0
+  - id: trihope_no_hash_s4
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.ablation.disable_signals=[repetition_hash]
+      - controller.policy.surprise_high=4.0
+  - id: surprise_gate_s1
+    overrides:
+      - controller.policy.mode=surprise_only
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=1.0
+  - id: surprise_gate_s2
+    overrides:
+      - controller.policy.mode=surprise_only
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=2.0
+  - id: surprise_gate_s4
+    overrides:
+      - controller.policy.mode=surprise_only
+      - controller.retrieval.replay_on_hit=true
+      - controller.policy.surprise_high=4.0
+  - id: plateau_trigger_t0p005
+    overrides:
+      - controller.enabled=false
+      - train.trainable=lora
+      - controller.consolidation.trigger=plateau
+      - controller.consolidation.plateau_window=200
+      - controller.consolidation.plateau_tolerance=0.005
+      - controller.consolidation.plateau_min_gap=200
+  - id: plateau_trigger_t0p01
+    overrides:
+      - controller.enabled=false
+      - train.trainable=lora
+      - controller.consolidation.trigger=plateau
+      - controller.consolidation.plateau_window=200
+      - controller.consolidation.plateau_tolerance=0.01
+      - controller.consolidation.plateau_min_gap=200
+  - id: plateau_trigger_t0p02
+    overrides:
+      - controller.enabled=false
+      - train.trainable=lora
+      - controller.consolidation.trigger=plateau
+      - controller.consolidation.plateau_window=200
+      - controller.consolidation.plateau_tolerance=0.02
+      - controller.consolidation.plateau_min_gap=200
+  - id: molf_style_a0p3
+    overrides:
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_high=0.3
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: molf_style_a0p5
+    overrides:
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_high=0.5
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: molf_style_a0p7
+    overrides:
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_high=0.7
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false

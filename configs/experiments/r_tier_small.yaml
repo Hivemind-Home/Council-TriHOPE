@@ -1,0 +1,34 @@
+# E2 — does the no-write tier earn its place? R+F+P vs F+P vs P-only, with
+# R as a deferral (replay on) and as a terminal action (replay off).
+# Report new-domain loss, old-domain retention and steps-to-recover on
+# code_revisit (analysis.tables.budget_curve).
+#   python scripts/run_experiment.py configs/experiments/r_tier_small.yaml
+experiment: r_tier_small_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+runs:
+  - id: trihope_replay
+    # Identical to baselines_small/trihope; duplicated so E2 is complete on
+    # its own (skip with --only if E1 already ran).
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+  - id: trihope_r_terminal
+    # R writes nothing and is never read back — the pre-T2 behaviour and
+    # the "less forgetting because less learning" confound made explicit.
+    overrides:
+      - controller.retrieval.replay_on_hit=false
+  - id: trihope_no_hash_replay
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.ablation.disable_signals=[repetition_hash]
+  - id: fp_only
+    # Two-tier F/P: the R branch disabled, R-routed batches fall to F.
+    overrides:
+      - controller.ablation.disable_stores=[R]
+  - id: p_only
+    # Everything is permanent: every selected block opens fully and every
+    # adapter is flagged for the next merge sweep.
+    overrides:
+      - controller.debug.policy_override=always_p
