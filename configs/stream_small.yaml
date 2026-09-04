@@ -237,6 +237,9 @@ checkpoint:
 eval:
   enabled: true
   interval: 250
+  # 50-step resolution inside code_revisit so steps-to-recover (E2/E3) is
+  # measurable; everywhere else the 250-step interval keeps eval cheap.
+  interval_by_phase: {code_revisit: 50}
   max_batches: 16
   split: validation
   batch_size: 2

@@ -164,8 +164,16 @@ def write_run_summary(
     ledger_totals: Optional[dict[str, Any]] = None,
     interrupted: bool = False,
     extra: Optional[dict[str, Any]] = None,
+    permanent_writes: Optional[dict[str, Any]] = None,
+    indexed_coords: Optional[int] = None,
+    active_fraction_mean: Optional[float] = None,
 ) -> Path:
-    """Write ``run_summary.json`` into ``run_dir`` (best-effort, atomic-ish)."""
+    """Write ``run_summary.json`` into ``run_dir`` (best-effort, atomic-ish).
+
+    ``permanent_writes`` / ``indexed_coords`` / ``active_fraction_mean`` are
+    the budget-axis numbers of the paper's Figure 1 (task T7); all optional
+    so older callers keep working.
+    """
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
@@ -182,6 +190,12 @@ def write_run_summary(
         payload["retention"] = retention
     if ledger_totals:
         payload["ledger_totals"] = ledger_totals
+    if permanent_writes is not None:
+        payload["permanent_writes"] = permanent_writes
+    if indexed_coords is not None:
+        payload["indexed_coords"] = int(indexed_coords)
+    if active_fraction_mean is not None:
+        payload["active_fraction_mean"] = float(active_fraction_mean)
     if extra:
         payload["extra"] = extra
     path = run_dir / "run_summary.json"

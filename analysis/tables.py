@@ -27,7 +27,7 @@ def action_share_by_phase(runs: list[RunData]) -> pd.DataFrame:
         if run.events.empty:
             continue
         decisions = run.events[run.events["type"] == "decision"].copy()
-        if decisions.empty:
+        if decisions.empty or "action" not in decisions.columns:
             continue
         decisions["phase"] = decisions["step"].map(run.phase_of_step)
         for phase, group in decisions.groupby("phase"):
@@ -111,8 +111,8 @@ def p_selection_stats(runs: list[RunData]) -> pd.DataFrame:
     """When does P fire, and what do the signals look like at those moments?"""
     rows = []
     for run in runs:
-        if run.events.empty:
-            continue
+        if run.events.empty or "action" not in run.events.columns:
+            continue  # controller-off runs emit no decisions
         p_events = run.events[
             (run.events["type"] == "decision") & (run.events["action"] == "P")
         ]
@@ -177,6 +177,136 @@ def adapter_reuse_aulc(
     if not rows:
         return pd.DataFrame()
     return _agg(pd.DataFrame(rows), ["spec_id", "phase"], ["aulc", "final_loss"])
+
+
+def _run_config(run: RunData) -> dict:
+    if run.events.empty or "type" not in run.events.columns:
+        return {}
+    rows = run.events[run.events["type"] == "run_config"]
+    if rows.empty:
+        return {}
+    return {k: v for k, v in rows.iloc[0].to_dict().items() if pd.notna(v) or isinstance(v, dict)}
+
+
+def threshold_tag(run: RunData) -> str:
+    """Compact operating-point label from the ``run_config`` event.
+
+    Read from the trace, not parsed out of the spec id, so a sweep manifest
+    can name its runs however it likes. Empty when no trace exists.
+    """
+    cfg = _run_config(run)
+    if not cfg:
+        return ""
+    mode = str(cfg.get("policy_mode") or "rfp")
+    override = cfg.get("policy_override")
+    thr = cfg.get("thresholds") or {}
+    cons = cfg.get("consolidation") or {}
+    parts = [mode if not override else f"{mode}:{override}"]
+    if mode == "adam_score":
+        parts.append(f"A{cfg.get('adam_score_high')}")
+    elif mode == "surprise_only":
+        parts.append(f"S{thr.get('surprise_high')}")
+    elif mode == "rfp":
+        parts.append(f"S{thr.get('surprise_high')}_R{thr.get('repetition_low')}")
+    if str(cons.get("trigger", "signals")) == "plateau":
+        parts.append(f"plateau{cons.get('plateau_tolerance')}")
+    return "_".join(str(p) for p in parts)
+
+
+def steps_to_recover(
+    run: RunData,
+    domain: str = "code",
+    phase: str = "code_revisit",
+    own_phase: str = "code_recurrent",
+    tolerance: float = 0.05,
+) -> Optional[int]:
+    """Steps into ``phase`` until ``eval/{domain}/loss`` is back within
+    ``tolerance`` (relative) of its value at the end of ``own_phase``.
+
+    ``None`` when the run never recovers inside the phase, or when the
+    baseline / eval rows are missing. Resolution is the eval interval in
+    effect during the phase (``eval.interval_by_phase``).
+    """
+    history = (run.summary.get("retention") or {}).get("history") or []
+    baseline = None
+    for entry in history:
+        if entry.get("phase") == own_phase:
+            baseline = (entry.get("loss") or {}).get(domain)
+    if baseline is None or run.metrics.empty:
+        return None
+    col = f"eval/{domain}/loss"
+    if col not in run.metrics.columns:
+        return None
+    start = None
+    for s, name in run.phases:
+        if name == phase:
+            start = s
+    if start is None:
+        return None
+    df = run.metrics[run.metrics[col].notna()].sort_values("step")
+    if "phase" in df.columns:
+        in_phase = df[df["step"].map(run.phase_of_step) == phase]
+    else:
+        in_phase = df[df["step"] >= start]
+    bar = float(baseline) * (1.0 + tolerance)
+    hit = in_phase[in_phase[col] <= bar]
+    if hit.empty:
+        return None
+    return int(hit.iloc[0]["step"]) - int(start)
+
+
+def budget_curve(
+    runs: list[RunData],
+    recover_domain: str = "code",
+    recover_phase: str = "code_revisit",
+    recover_own_phase: str = "code_recurrent",
+) -> pd.DataFrame:
+    """Figure 1's table: forgetting vs. permanent writes, one row per
+    (spec, operating point), mean±std over seeds.
+
+    ``permanent_writes`` counts (coordinate, step) write events on base
+    weights — P actions on base params, LoRA→base merges (the merged block's
+    base numel), and, for unmasked runs, every trainable base coordinate
+    every step — as written into ``run_summary.json["permanent_writes"]``.
+    """
+    rows = []
+    for run in runs:
+        pw = run.summary.get("permanent_writes") or {}
+        rec: dict = {
+            "spec_id": run.spec_id,
+            "seed": run.seed,
+            "threshold_tag": threshold_tag(run),
+            "permanent_writes": pw.get("total"),
+            "p_action_coords": pw.get("p_action_coords"),
+            "merged_coords": pw.get("merged_coords"),
+            "active_fraction_mean": run.summary.get("active_fraction_mean"),
+            "replayed_total": ((run.summary.get("extra") or {}).get("retrieval") or {}).get(
+                "replayed_total"
+            ),
+        }
+        history = (run.summary.get("retention") or {}).get("history") or []
+        deltas: list[float] = []
+        worst: Optional[float] = None
+        for entry in history:
+            for _d, delta in (entry.get("retention_delta") or {}).items():
+                deltas.append(float(delta))
+                worst = delta if worst is None else max(worst, delta)
+        rec["worst_retention_delta"] = worst
+        rec["mean_retention_delta"] = float(np.mean(deltas)) if deltas else None
+        if history:
+            for d, loss in (history[-1].get("loss") or {}).items():
+                rec[f"final_loss_{d}"] = loss
+        rec["steps_to_recover_code"] = steps_to_recover(
+            run, recover_domain, recover_phase, recover_own_phase
+        )
+        rows.append(rec)
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    value_cols = [c for c in df.columns if c not in ("spec_id", "seed", "threshold_tag")]
+    for c in value_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return _agg(df, ["spec_id", "threshold_tag"], value_cols)
 
 
 def damage_recovery(runs: list[RunData]) -> pd.DataFrame:

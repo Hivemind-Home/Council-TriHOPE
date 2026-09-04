@@ -529,6 +529,28 @@ def run_training_loop(
             p for m in module_index for p in m.params
         )
 
+    # Budget accounting (T7). ``indexed_coords`` is the denominator of the
+    # active fraction; with masking off (controller disabled, or
+    # optim.masked=false) every TRAINABLE indexed coordinate is open every
+    # step and every trainable BASE coordinate is a permanent write.
+    indexed_coords = sum(m.num_params for m in module_index)
+    unmasked_open_coords = (
+        0
+        if masked_updates
+        else sum(p.numel() for m in module_index for p in m.params if p.requires_grad)
+    )
+    unmasked_base_coords = (
+        0
+        if masked_updates
+        else sum(
+            p.numel()
+            for m in module_index
+            if m.id.param_type == "P"
+            for p in m.params
+            if p.requires_grad
+        )
+    )
+
     # Stores
     r_store = RetrievalStore(max_size=ctrl_config.repetition.buffer_size)
     f_store = FastStore(
@@ -631,6 +653,10 @@ def run_training_loop(
         lora_sparsity_threshold=float(eval_cfg_raw.get("lora_sparsity_threshold", 1e-4)),
         at_phase_boundaries=bool(eval_cfg_raw.get("at_phase_boundaries", True)),
         on_consolidation=bool(eval_cfg_raw.get("on_consolidation", False)),
+        interval_by_phase={
+            str(k): int(v)
+            for k, v in (_as_container(eval_cfg_raw.get("interval_by_phase")) or {}).items()
+        },
         exact_match_enabled=bool(em_raw.get("enabled", False)),
         exact_match_domains=list(em_raw.get("domains", ["math"])),
         exact_match_samples=int(em_raw.get("num_samples", 64)),
@@ -1312,6 +1338,7 @@ def run_training_loop(
         # replay state survives a step boundary except the R-store itself
         # (already checkpointed). Trigger inputs are all rank-synced.
         replayed: list[tuple[int, tuple[tuple[str, int], ...]]] = []
+        replay_coords = 0
         if replay_enabled and write_metrics["actions"]:
             with profiler.timer.section("replay"):
                 eligible = [
@@ -1397,9 +1424,14 @@ def run_training_loop(
                             scaler.update()
                         finally:
                             optimizer.clear_masks()
+                        replay_coords += int(rep_write_metrics["coords_opened"])
                         for det in rep_write_metrics["actions"]:
                             ledger.record_action(
-                                det["module"], det["store"], step, det["coords_opened"]
+                                det["module"],
+                                det["store"],
+                                step,
+                                det["coords_opened"],
+                                replay=True,
                             )
                             # A distinct event type: ``decision`` records stay
                             # one-per-Top-M-module-per-step and the action
@@ -1430,6 +1462,10 @@ def run_training_loop(
                 (step, "replay", tuple(replayed)), what="replay decisions"
             )
         replay_count = len(replayed)
+        ledger.record_step(
+            write_metrics["coords_opened"] + replay_coords + unmasked_open_coords,
+            unmasked_base_coords,
+        )
 
         # Tier 2: catch drift that has not yet flipped a discrete decision.
         every = dist.cfg.assert_rank_consistency
@@ -1448,7 +1484,12 @@ def run_training_loop(
             mids: list[ModuleId], forced: bool, trigger: str = "signals"
         ) -> None:
             for mid in mids:
-                ledger.record_consolidation(str(mid), step)
+                # A merge rewrites the block's base weights wholesale: its
+                # permanent-write cost is the base numel of the paired P
+                # module (Figure 1's budget axis).
+                base_mod = module_map.get(ModuleId(mid.layer, mid.block_type, "P"))
+                merged_coords = base_mod.num_params if base_mod is not None else 0
+                ledger.record_consolidation(str(mid), step, merged_coords=merged_coords)
                 sig = module_signals.get(mid)
                 event_trace.emit(
                     {
@@ -1456,6 +1497,7 @@ def run_training_loop(
                         "step": step,
                         "module": str(mid),
                         "trigger": trigger,
+                        "merged_coords": merged_coords,
                         "strategy": ctrl_config.consolidation.merge_strategy,
                         "pre_signals": (
                             {
@@ -1565,10 +1607,13 @@ def run_training_loop(
             )
             if next_differs or step == steps - 1:
                 boundary_phase = stream_schedule.phase_at(step)
+        eval_interval = eval_config.interval_by_phase.get(
+            current_phase or "", eval_config.interval
+        )
         interval_due = (
-            eval_config.interval > 0
+            eval_interval > 0
             and step > 0
-            and (step % eval_config.interval == 0 or step == steps - 1)
+            and (step % eval_interval == 0 or step == steps - 1)
         )
         consolidation_due = bool(consolidated) and eval_config.on_consolidation
         if (
@@ -1730,12 +1775,27 @@ def run_training_loop(
     if current_phase is not None:
         profiler.on_phase_end(current_phase)
     if run_dir is not None and is_main:
+        totals = ledger.totals()
+        permanent_writes = {
+            "p_action_coords": int(totals.get("p_coords_opened", 0)),
+            "merged_coords": int(totals.get("merged_coords", 0)),
+            "unmasked_base_coords_total": int(totals.get("unmasked_base_coords", 0)),
+        }
+        permanent_writes["total"] = sum(permanent_writes.values())
+        trained_steps = int(totals.get("steps", 0))
         write_run_summary(
             run_dir,
             profiler=profiler,
             final_metrics=final_metrics,
             retention=phase_tracker.retention_table() if phase_tracker else None,
-            ledger_totals=ledger.totals(),
+            ledger_totals=totals,
+            permanent_writes=permanent_writes,
+            indexed_coords=indexed_coords,
+            active_fraction_mean=(
+                totals.get("coords_opened", 0) / (trained_steps * indexed_coords)
+                if trained_steps and indexed_coords
+                else 0.0
+            ),
             interrupted=bool(_interrupted["flag"]),
             extra={
                 **(

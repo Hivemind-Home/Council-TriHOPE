@@ -77,14 +77,9 @@ def _json_default(obj: Any) -> Any:
     return str(obj)
 
 
-class ModuleLedger:
-    """Cumulative per-module write counters, checkpointed as ``ledger.pt``.
-
-    Answers "how often has L3.ffn.F been opened, when last, how many
-    coordinates total" without replaying the whole event trace.
-    """
-
-    _EMPTY = {
+def _new_entry() -> dict[str, int]:
+    """Fresh per-module counters (a factory, never a shared template)."""
+    return {
         "r_count": 0,
         "f_count": 0,
         "p_count": 0,
@@ -93,50 +88,118 @@ class ModuleLedger:
         "total_coords_opened": 0,
         "consolidations": 0,
         "last_consolidated_step": -1,
+        # Permanent-write accounting (task T7, the budget axis of Figure 1):
+        # coordinates opened by P actions on the block's BASE weights, and
+        # base coordinates rewritten by LoRA→base merges of this block.
+        "p_coords_opened": 0,
+        "merged_coords": 0,
+        # F writes that came from an R-store replay (T2); they are also
+        # counted in f_count, so subtract to get policy-only F writes.
+        "replay_count": 0,
     }
+
+
+def _new_global() -> dict[str, int]:
+    """Run-level counters that no single module owns."""
+    return {
+        # Steps that trained (skipped steps excluded).
+        "steps": 0,
+        # Σ over steps of coordinates open that step (controller-indexed
+        # params only), whatever opened them: masks, or — with masking off —
+        # every trainable indexed coordinate. Divided by steps × indexed
+        # coordinates this is the mean active fraction.
+        "coords_opened": 0,
+        # Σ over steps of base coordinates that updated WITHOUT a mask
+        # (controller off / optim.masked=false): the permanent-write count
+        # of a full-FT run, which has no P actions to count.
+        "unmasked_base_coords": 0,
+    }
+
+
+class ModuleLedger:
+    """Cumulative per-module write counters, checkpointed as ``ledger.pt``.
+
+    Answers "how often has L3.ffn.F been opened, when last, how many
+    coordinates total" without replaying the whole event trace.
+    """
+
+    _EMPTY = _new_entry()  # kept for callers that read the field list
 
     def __init__(self) -> None:
         self._modules: dict[str, dict[str, int]] = {}
+        self._global: dict[str, int] = _new_global()
 
     def _entry(self, module: str) -> dict[str, int]:
         if module not in self._modules:
-            self._modules[module] = dict(self._EMPTY)
+            self._modules[module] = _new_entry()
         return self._modules[module]
 
     def record_action(
-        self, module: str, store: str, step: int, coords_opened: int = 0
+        self,
+        module: str,
+        store: str,
+        step: int,
+        coords_opened: int = 0,
+        *,
+        replay: bool = False,
     ) -> None:
         entry = self._entry(module)
         key = f"{store.lower()}_count"
         if key in entry:
             entry[key] += 1
+        if replay:
+            entry["replay_count"] += 1
         if coords_opened > 0:
             entry["times_opened"] += 1
             entry["last_opened_step"] = int(step)
             entry["total_coords_opened"] += int(coords_opened)
+            if store == "P" and module.endswith(".P"):
+                entry["p_coords_opened"] += int(coords_opened)
 
-    def record_consolidation(self, module: str, step: int) -> None:
+    def record_consolidation(
+        self, module: str, step: int, *, merged_coords: int = 0
+    ) -> None:
         entry = self._entry(module)
         entry["consolidations"] += 1
         entry["last_consolidated_step"] = int(step)
+        entry["merged_coords"] += int(merged_coords)
+
+    def record_step(self, coords_opened: int, unmasked_base_coords: int = 0) -> None:
+        """Close one trained step (run-level active-fraction / budget sums)."""
+        self._global["steps"] += 1
+        self._global["coords_opened"] += int(coords_opened)
+        self._global["unmasked_base_coords"] += int(unmasked_base_coords)
 
     def summary(self) -> dict[str, dict[str, int]]:
         """Per-module counters, sorted by module name."""
         return {k: dict(v) for k, v in sorted(self._modules.items())}
 
     def totals(self) -> dict[str, int]:
-        out = {"r_count": 0, "f_count": 0, "p_count": 0, "consolidations": 0}
+        out = {
+            "r_count": 0,
+            "f_count": 0,
+            "p_count": 0,
+            "consolidations": 0,
+            "p_coords_opened": 0,
+            "merged_coords": 0,
+            "replay_count": 0,
+        }
         for entry in self._modules.values():
             for key in out:
-                out[key] += entry[key]
+                out[key] += entry.get(key, 0)
+        out.update(self._global)
         return out
 
     # -- serialisation ----------------------------------------------------
 
     def state_dict(self) -> dict:
-        return {"modules": {k: dict(v) for k, v in self._modules.items()}}
+        return {
+            "modules": {k: dict(v) for k, v in self._modules.items()},
+            "global": dict(self._global),
+        }
 
     def load_state_dict(self, state: dict) -> None:
         self._modules = {
-            k: {**self._EMPTY, **v} for k, v in state.get("modules", {}).items()
+            k: {**_new_entry(), **v} for k, v in state.get("modules", {}).items()
         }
+        self._global = {**_new_global(), **state.get("global", {})}

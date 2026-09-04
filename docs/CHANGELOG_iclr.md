@@ -126,3 +126,52 @@ deviation from the task document with the reason.
   touch the same hunks of `controller/config.py`, `policy.py`,
   `writer.py` and `training.py`; the changelog entries above are still
   separate. Every later task has its own commit.
+- T2 acceptance on real data (CPU, `stream_smoke ++controller.retrieval.
+  replay_on_hit=true`, 70 steps, 186 s): 280 decisions (R 213 / F 62 /
+  P 5), 22 parked rows replayed (88 module-level F writes) at steps
+  34–39 (math_recurrent) and 53–69 (medical_recurrent / math_revisit),
+  origins 4–51; zero replays in `novel_inject`, as predicted. Final loss
+  4.8209 vs the 5.0543 reference run without replay in
+  `docs/experiments.md`.
+- T0.4 / T2 resume acceptance on real data: resuming the replay-enabled
+  `stream_smoke` run from `checkpoint.resume_from=50` finishes at
+  `4.8209028244018555`, identical to the uninterrupted run to the last
+  digit (the checkpoint carried the popped R-store and `replayed_total`).
+
+## T7 — budget accounting, Pareto figure, multi-experiment report
+
+- `ModuleLedger`: per-module entries now come from a factory (no shared
+  template) and gain `p_coords_opened` (P actions on base weights),
+  `merged_coords` (base numel rewritten by each merge), `replay_count`;
+  run-level counters `steps`, `coords_opened` (Σ open indexed coordinates
+  per step — masks, or every trainable indexed coordinate when masking is
+  off), `unmasked_base_coords` (full-FT's permanent writes). All
+  checkpointed in `ledger.pt`; old ledgers load with zeros.
+- `training.py`: `ledger.record_step(...)` every trained step;
+  `_trace_merges` charges the merged block's base numel and puts
+  `merged_coords` on the `consolidation` event; `run_summary.json` gains
+  `permanent_writes {p_action_coords, merged_coords,
+  unmasked_base_coords_total, total}`, `indexed_coords`,
+  `active_fraction_mean` (additive kwargs on `write_run_summary`).
+- `eval.interval_by_phase: {phase: steps}` (pure function of (step,
+  phase), rank-agreeing); `stream_small.yaml` sets `{code_revisit: 50}`.
+- `analysis/tables.py`: `threshold_tag` (operating point from the
+  `run_config` event, not the spec id), `steps_to_recover` (first in-phase
+  eval within 5 % of the own-phase loss; `None` if never), `budget_curve`
+  (per (spec, tag), mean±std over seeds: permanent writes, active
+  fraction, worst/mean retention delta, final per-domain loss,
+  steps-to-recover, replayed_total). `analysis/figures.py`:
+  `pareto_figure` (symlog x — LoRA-only sits at zero writes; two panels:
+  worst retention delta and mean final loss). `analysis/run_report.py`
+  accepts several experiment dirs and prefixes spec ids with the
+  experiment name (`e1/trihope`) so E1 and the sweep share one figure.
+- Bug fixed on the way: `action_share_by_phase`, `p_selection_stats`,
+  `plot_action_composition`, `plot_p_timeline` crashed on runs with no
+  `decision` events (every controller-off run: full_ft, lora_only,
+  plateau_trigger). They now skip such runs.
+- Tests: `tests/test_budget_curve.py` (+7).
+- Deviation: `permanent_writes` is defined as (coordinate, step) write
+  events on base weights, so full-FT's count is trainable-base-numel ×
+  steps rather than "number of P actions" — the doc left the unit open,
+  and this is the only definition under which full FT, LoRA-only and the
+  merge-based controllers sit on one axis.
