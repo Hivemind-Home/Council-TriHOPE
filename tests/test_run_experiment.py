@@ -124,6 +124,7 @@ class TestManifestFilesParse:
             "headline",
             "r_tier_small",
             "budget_sweep_small",
+            "bad_teacher_small",
         ],
     )
     def test_checked_in_manifest(self, name: str) -> None:

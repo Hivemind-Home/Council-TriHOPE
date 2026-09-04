@@ -241,3 +241,59 @@ deviation from the task document with the reason.
   (3) `confidence` defaults to `null` (keep the row's own): the doc's 0.2
   would make E5 measure the confidence gate rather than the routing; 0.2
   is the separate `trihope_lowconf` arm in `bad_teacher_small.yaml` (T5).
+
+## T5 — teacher attribution, ledger completeness, pre-merge tagging, selective rollback
+
+- `ModuleLedger` (`tracing.py`): per-module `attribution {teacher: coords}`
+  accumulated by `record_action(..., teacher=)` for every F/P/replay
+  write (pending evidence since the last merge for F modules; cumulative
+  direct base writes for P modules); `record_consolidation(...)` returns
+  and clears it and charges each teacher its share of `merged_coords`;
+  per-teacher totals (`teacher_summary()`, written to
+  `run_summary.ledger_totals.teachers`); `pending_attribution`,
+  `attribution_share`, `clear_pending`. Entries come from factories, so
+  the nested dicts never alias; legacy ledgers load clean.
+- `consolidation` events carry `attribution` and `attribution_share`;
+  `pre_merge` checkpoints carry `pending_modules` + their attribution in
+  `meta.json`. Every decision's teacher is the rank-synced representative
+  teacher (`DistContext.broadcast_int`, inert at world size 1) and is part
+  of the tier-1 rank-consistency payload.
+- `DebugConfig.block_p_for_teachers` / `block_min_share`: a listed
+  teacher's P actions are demoted to F (also under overrides); on resume
+  every adapter whose pending attribution is dominated by a listed teacher
+  is reset (`reset_lora`, optimizer state zeroed, flag dropped, attribution
+  cleared, `lora_a` broadcast under DDP) with a `rollback_reset` event; the
+  signal sweep refuses blocked modules (`ConsolidationScheduler.blocked`,
+  `unflag`).
+- `checkpoint.save_before_phases: [phase]` → tagged `pre_phase_<name>`
+  save at the last step before the phase; `train.skip_step_ranges:
+  [[lo, hi]]` → the sampler does not yield those steps and the loop emits
+  `skipped_step reason=skip_range` (no forward, no eval, no checkpoint);
+  stored in checkpoint `extra`, warned on mismatch, digest unchanged.
+- `analysis.tables.teacher_attribution` / `containment`,
+  `analysis.figures.containment_bars`, wired into `run_report`.
+- `scripts/rollback_teacher.py`: selective rollback (first merge with
+  `attribution_share[teacher] ≥ --min-share` → its `pre_merge` dir →
+  resume the original Hydra overrides with the block list) and
+  `--baseline full_restore` (the `pre_phase_<phase>` dir + the phase
+  skipped); writes `rollback_summary.json` comparing final losses and
+  retention against the original run. `--dry-run` prints the plan.
+- `configs/experiments/bad_teacher_small.yaml` (E5, 3 seeds): trihope,
+  trihope_nogate, trihope_lowconf (confidence 0.2), full_ft, lora_only,
+  molf_style — all with the corrupted stream, `checkpoint_before_merge`,
+  `keep_tagged=0`, `save_before_phases=[math_recurrent]`;
+  `gradient_routing` is added by T6. `run_experiment.expand_matrix`
+  flattens YAML-anchor override lists.
+- Tests: `tests/test_attribution.py` (+4), `tests/test_ledger_completeness.py`
+  (+2: support(θ_T − θ_0) over controller-indexed params ⊆ ∪ staged
+  masks; after a forced merge, changes outside masks only on merged
+  blocks), `tests/test_rollback.py` (+8), manifest parse list extended.
+- **Deviations.** (1) Rollback also resets the blocked teacher's dominated
+  adapters on restore — demoting P→F alone would leave its F-writes in
+  adapters that a later clean P action merges wholesale. (2) Skipped
+  steps skip eval too, so the skipped phase's own-phase loss is not
+  recorded (the full-restore counterfactual never trains on it; retention
+  on the other domains is what the comparison reads). (3) Merges without
+  attribution (empty adapters) are ignored by the rollback point search.
+  (4) Ledger completeness is asserted as ⊆ (a coordinate opened with an
+  exactly-zero update does not move) plus the merged-block exception.

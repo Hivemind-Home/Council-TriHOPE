@@ -174,6 +174,39 @@ def pareto_figure(df: pd.DataFrame, out: Path) -> Optional[Path]:
     return out
 
 
+def containment_bars(df: pd.DataFrame, out: Path) -> Optional[Path]:
+    """E5 containment: per method, where the corrupted teacher's actions
+    went (R / F / P shares) and how many base coordinates it reached
+    (directly + attributed merges). ``df`` is :func:`tables.containment`."""
+    if df is None or df.empty or "r_share_mean" not in df.columns:
+        return None
+    specs = list(df["spec_id"])
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    x = range(len(specs))
+    bottom = [0.0] * len(specs)
+    for store in ("R", "F", "P"):
+        vals = df[f"{store.lower()}_share_mean"].fillna(0).to_numpy(dtype=float)
+        axes[0].bar(x, vals, bottom=bottom, color=_STORE_COLORS[store], label=store)
+        bottom = [b + v for b, v in zip(bottom, vals)]
+    axes[0].set_xticks(list(x), specs, rotation=30, ha="right", fontsize=8)
+    axes[0].set_ylabel("share of the corrupted teacher's actions (%)")
+    axes[0].set_title("Containment: where its updates went")
+    axes[0].legend(fontsize=8)
+    direct = df["coords_P_direct_mean"].fillna(0).to_numpy(dtype=float)
+    merged = df["merged_coords_attributed_mean"].fillna(0).to_numpy(dtype=float)
+    axes[1].bar(x, direct, color=_STORE_COLORS["P"], label="direct base writes")
+    axes[1].bar(x, merged, bottom=direct, color="#B279A2", label="merged (attributed)")
+    axes[1].set_xticks(list(x), specs, rotation=30, ha="right", fontsize=8)
+    axes[1].set_yscale("symlog", linthresh=1e3)
+    axes[1].set_ylabel("base coordinates reached")
+    axes[1].set_title("Permanent footprint of the corrupted teacher")
+    axes[1].legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
 def plot_signal_traces(run: RunData, out: Path) -> Optional[Path]:
     """Mean routing signals over time from the metrics stream."""
     cols = {

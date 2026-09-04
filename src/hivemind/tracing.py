@@ -99,6 +99,31 @@ def _new_entry() -> dict[str, int]:
     }
 
 
+def _new_entry_with_attribution() -> dict:
+    """Per-module counters plus the teacher attribution of what the module
+    currently holds (task T5): ``attribution[teacher] = coordinates opened``
+    by that teacher's F/P writes. For F-type modules it is *pending* — the
+    evidence inside the adapter since its last merge, returned and cleared
+    by :meth:`ModuleLedger.record_consolidation` so the merge event can say
+    who wrote it. For P-type modules it is the cumulative direct base
+    writes per teacher."""
+    entry: dict = _new_entry()
+    entry["attribution"] = {}
+    return entry
+
+
+def _new_teacher_entry() -> dict[str, int]:
+    return {
+        "r_count": 0,
+        "f_count": 0,
+        "p_count": 0,
+        "replay_count": 0,
+        "coords_F": 0,       # adapter coordinates opened by this teacher
+        "coords_P": 0,       # base coordinates opened directly (P on a P module)
+        "merged_coords": 0,  # base coordinates this teacher's adapter evidence was merged into
+    }
+
+
 def _new_global() -> dict[str, int]:
     """Run-level counters that no single module owns."""
     return {
@@ -126,13 +151,20 @@ class ModuleLedger:
     _EMPTY = _new_entry()  # kept for callers that read the field list
 
     def __init__(self) -> None:
-        self._modules: dict[str, dict[str, int]] = {}
+        self._modules: dict[str, dict] = {}
         self._global: dict[str, int] = _new_global()
+        self._teachers: dict[str, dict[str, int]] = {}
 
-    def _entry(self, module: str) -> dict[str, int]:
+    def _entry(self, module: str) -> dict:
         if module not in self._modules:
-            self._modules[module] = _new_entry()
+            self._modules[module] = _new_entry_with_attribution()
         return self._modules[module]
+
+    def _teacher(self, teacher: str) -> dict[str, int]:
+        key = str(teacher or "")
+        if key not in self._teachers:
+            self._teachers[key] = _new_teacher_entry()
+        return self._teachers[key]
 
     def record_action(
         self,
@@ -142,6 +174,7 @@ class ModuleLedger:
         coords_opened: int = 0,
         *,
         replay: bool = False,
+        teacher: str = "",
     ) -> None:
         entry = self._entry(module)
         key = f"{store.lower()}_count"
@@ -149,20 +182,64 @@ class ModuleLedger:
             entry[key] += 1
         if replay:
             entry["replay_count"] += 1
+        t = self._teacher(teacher)
+        if key in t:
+            t[key] += 1
+        if replay:
+            t["replay_count"] += 1
         if coords_opened > 0:
             entry["times_opened"] += 1
             entry["last_opened_step"] = int(step)
             entry["total_coords_opened"] += int(coords_opened)
             if store == "P" and module.endswith(".P"):
                 entry["p_coords_opened"] += int(coords_opened)
+                t["coords_P"] += int(coords_opened)
+            else:
+                t["coords_F"] += int(coords_opened)
+            # Who wrote what this module currently holds.
+            attr = entry["attribution"]
+            attr[str(teacher or "")] = attr.get(str(teacher or ""), 0) + int(coords_opened)
 
     def record_consolidation(
         self, module: str, step: int, *, merged_coords: int = 0
-    ) -> None:
+    ) -> dict[str, int]:
+        """Record a merge; return (and clear) the module's pending attribution.
+
+        The returned ``{teacher: coords}`` is what the merge made permanent
+        — the ledger side of the paper's Corollary 3. Each teacher is also
+        charged its share of ``merged_coords``.
+        """
         entry = self._entry(module)
         entry["consolidations"] += 1
         entry["last_consolidated_step"] = int(step)
         entry["merged_coords"] += int(merged_coords)
+        attribution: dict[str, int] = dict(entry["attribution"])
+        total = sum(attribution.values())
+        if total > 0 and merged_coords:
+            for teacher, coords in attribution.items():
+                self._teacher(teacher)["merged_coords"] += int(
+                    round(merged_coords * coords / total)
+                )
+        entry["attribution"] = {}
+        return attribution
+
+    def pending_attribution(self, module: str) -> dict[str, int]:
+        return dict(self._modules.get(module, {}).get("attribution", {}))
+
+    def attribution_share(self, module: str, teacher: str) -> float:
+        attr = self.pending_attribution(module)
+        total = sum(attr.values())
+        return attr.get(str(teacher), 0) / total if total else 0.0
+
+    def clear_pending(self, module: str) -> dict[str, int]:
+        entry = self._entry(module)
+        old = dict(entry["attribution"])
+        entry["attribution"] = {}
+        return old
+
+    def teacher_summary(self) -> dict[str, dict[str, int]]:
+        """Per-teacher counters, sorted by teacher name."""
+        return {k: dict(v) for k, v in sorted(self._teachers.items())}
 
     def record_step(self, coords_opened: int, unmasked_base_coords: int = 0) -> None:
         """Close one trained step (run-level active-fraction / budget sums)."""
@@ -194,12 +271,22 @@ class ModuleLedger:
 
     def state_dict(self) -> dict:
         return {
-            "modules": {k: dict(v) for k, v in self._modules.items()},
+            "modules": {
+                k: {**v, "attribution": dict(v.get("attribution", {}))}
+                for k, v in self._modules.items()
+            },
             "global": dict(self._global),
+            "teachers": {k: dict(v) for k, v in self._teachers.items()},
         }
 
     def load_state_dict(self, state: dict) -> None:
-        self._modules = {
-            k: {**_new_entry(), **v} for k, v in state.get("modules", {}).items()
-        }
+        self._modules = {}
+        for k, v in state.get("modules", {}).items():
+            entry = _new_entry_with_attribution()
+            entry.update(v)
+            entry["attribution"] = dict(v.get("attribution", {}))
+            self._modules[k] = entry
         self._global = {**_new_global(), **state.get("global", {})}
+        self._teachers = {
+            k: {**_new_teacher_entry(), **v} for k, v in state.get("teachers", {}).items()
+        }

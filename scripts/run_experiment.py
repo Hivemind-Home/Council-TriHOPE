@@ -78,7 +78,13 @@ def expand_matrix(manifest: dict) -> list[ResolvedRun]:
         if spec_id in seen_ids:
             raise ValueError(f"Duplicate run id '{spec_id}' in manifest")
         seen_ids.add(spec_id)
-        spec_overrides = [str(o) for o in spec.get("overrides", [])]
+        # A YAML anchor (``- *common``) splices a nested list; flatten one level.
+        spec_overrides: list[str] = []
+        for o in spec.get("overrides", []):
+            if isinstance(o, (list, tuple)):
+                spec_overrides.extend(str(x) for x in o)
+            else:
+                spec_overrides.append(str(o))
         for seed in seeds:
             run_id = f"{spec_id}-seed{seed}"
             run_dir = out_root / run_id

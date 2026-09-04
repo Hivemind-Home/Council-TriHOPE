@@ -50,6 +50,8 @@ def generate_report(exp_dir: "Path | list[Path]", out_dir: Path) -> Path:
         "adapter_reuse_aulc": tables.adapter_reuse_aulc,
         "damage_recovery": tables.damage_recovery,
         "budget_curve": tables.budget_curve,
+        "teacher_attribution": tables.teacher_attribution,
+        "containment": tables.containment,
     }
     built: dict[str, object] = {}
     for name, builder in table_builders.items():
@@ -80,6 +82,14 @@ def generate_report(exp_dir: "Path | list[Path]", out_dir: Path) -> Path:
             pareto = None
         if pareto:
             fig_paths.append(pareto)
+    if "containment" in built:
+        try:
+            bars = figures.containment_bars(built["containment"], out_dir / "containment_bars.png")
+        except Exception as exc:  # noqa: BLE001
+            sections.append(f"_containment_bars.png failed: {exc}_\n")
+            bars = None
+        if bars:
+            fig_paths.append(bars)
     for run in runs:
         safe_id = run.run_id.replace("/", "__")
         for fn, suffix in (

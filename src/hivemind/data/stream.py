@@ -565,6 +565,11 @@ class StreamBatchSampler(Sampler[list[int]]):
         self.start_step = int(start_step)
         self.rank = int(rank)
         self.world_size = max(1, int(world_size))
+        # ``train.skip_step_ranges``: inclusive [lo, hi] step ranges the loop
+        # does not train on (the full-restore counterfactual of E5). The
+        # schedule — and so the digest — is unchanged; these steps are
+        # simply not yielded, and the loop emits a ``skipped_step`` for each.
+        self.skip_ranges: list[tuple[int, int]] = []
         if self.world_size > 1 and schedule.batch_size % self.world_size:
             raise ValueError(
                 f"data.batch_size={schedule.batch_size} is the GLOBAL batch and must "
@@ -575,8 +580,13 @@ class StreamBatchSampler(Sampler[list[int]]):
             )
         self.per_rank = schedule.batch_size // self.world_size
 
+    def is_skipped(self, step: int) -> bool:
+        return any(lo <= step <= hi for lo, hi in self.skip_ranges)
+
     def __iter__(self) -> Iterator[list[int]]:
         for step in range(self.start_step, self.schedule.total_steps):
+            if self.is_skipped(step):
+                continue
             idx = self.schedule.indices_for_step(step)
             if self.world_size == 1:
                 yield idx
@@ -585,4 +595,8 @@ class StreamBatchSampler(Sampler[list[int]]):
                 yield idx[lo : lo + self.per_rank]
 
     def __len__(self) -> int:
-        return self.schedule.total_steps - self.start_step
+        return sum(
+            1
+            for step in range(self.start_step, self.schedule.total_steps)
+            if not self.is_skipped(step)
+        )

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import contextlib
 from collections import deque
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import torch
 import torch.nn as nn
@@ -165,6 +165,15 @@ class ConsolidationScheduler:
         if mid.param_type == "F":
             self._pending_p.add(mid)
 
+    def unflag(self, mid: ModuleId) -> None:
+        """Drop a module from the pending set (selective rollback)."""
+        self._pending_p.discard(mid)
+
+    #: Optional predicate; a module for which it returns True is never
+    #: merged by the signal sweep (selective rollback: its pending evidence
+    #: is dominated by a blocked teacher). Set by the training loop.
+    blocked: Optional[Callable[[ModuleId], bool]] = None
+
     @property
     def pending_p(self) -> set[ModuleId]:
         return set(self._pending_p)
@@ -237,6 +246,8 @@ class ConsolidationScheduler:
         for mid in candidates:
             if mid.param_type != "F":
                 continue
+            if self.blocked is not None and self.blocked(mid):
+                continue  # blocked teacher dominates this adapter (rollback)
             sig = module_signals.get(mid)
             if sig is None:
                 # No fresh signal for this module — keep it pending; we'll

@@ -285,6 +285,14 @@ class DebugConfig:
 
     force_consolidate_steps: list[int] = field(default_factory=list)
     policy_override: str | None = None  # None | always_p | always_f | always_r | random_matched
+    # Selective rollback (task T5): a P action is demoted to F while the
+    # batch's teacher is listed, and on resume every module whose pending
+    # attribution is dominated (share ≥ block_min_share) by a listed teacher
+    # has its adapter reset and its consolidation flag dropped — the
+    # blocked teacher's tentative evidence is discarded instead of being
+    # merged by a later, clean P action.
+    block_p_for_teachers: list[str] = field(default_factory=list)
+    block_min_share: float = 0.5
     random_shares_path: str | None = None
     random_shares_spec_id: str = "trihope"
     random_unit: str = "module"  # module | step
@@ -302,6 +310,10 @@ class DebugConfig:
                 f"Unknown random_unit '{self.random_unit}'; allowed: module | step"
             )
         self.force_consolidate_steps = [int(s) for s in self.force_consolidate_steps]
+        self.block_p_for_teachers = [str(t) for t in self.block_p_for_teachers]
+        if not 0.0 <= float(self.block_min_share) <= 1.0:
+            raise ValueError("block_min_share must be in [0, 1]")
+        self.block_min_share = float(self.block_min_share)
 
 
 @dataclass

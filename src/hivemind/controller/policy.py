@@ -122,6 +122,7 @@ class RFPPolicy:
         *,
         step: int | None = None,
         phase: str | None = None,
+        teacher_name: str | None = None,
     ) -> list[StoreAction]:
         """Determine R/F/P routing for each selected module.
 
@@ -140,6 +141,8 @@ class RFPPolicy:
                 override reads it — it seeds the draw).
             phase: current stream phase name (selects the share row for
                 ``random_matched``; ``None`` → uniform).
+            teacher_name: the batch's (rank-synced) teacher; a P action is
+                demoted to F while it is in ``debug.block_p_for_teachers``.
 
         Returns:
             List of StoreAction for selected modules.
@@ -171,6 +174,14 @@ class RFPPolicy:
                         store = "R"
                     elif store == "P":
                         store = "F"
+            # Selective rollback: a blocked teacher may still write fast
+            # weights, never permanent ones (applies to overrides too).
+            if (
+                store == "P"
+                and teacher_name is not None
+                and teacher_name in self.debug.block_p_for_teachers
+            ):
+                store = "F"
             actions.append(StoreAction(
                 module_id=sig.module_id,
                 store=store,

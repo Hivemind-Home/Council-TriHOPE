@@ -309,6 +309,128 @@ def budget_curve(
     return _agg(df, ["spec_id", "threshold_tag"], value_cols)
 
 
+def _corrupted_tag(run: RunData) -> Optional[str]:
+    cfg = _run_config(run)
+    block = cfg.get("corrupt_teacher") if cfg else None
+    if isinstance(block, dict) and block.get("enabled"):
+        return str(block.get("tag"))
+    return None
+
+
+def teacher_attribution(runs: list[RunData]) -> pd.DataFrame:
+    """Who wrote how much where (task T5.1).
+
+    One row per (run, seed, teacher, phase): R/F/P action counts, replayed
+    F writes, coordinates opened in adapters (F) and directly in base
+    weights (P on a P-type module), and the consolidations attributed to
+    the teacher — each merge's ``attribution_share`` (the share of the
+    merged adapter's evidence that teacher wrote, carried on the
+    ``consolidation`` event by the ledger) summed over merges, plus the
+    base coordinates that share represents.
+    """
+    rows = []
+    for run in runs:
+        if run.events.empty or "type" not in run.events.columns:
+            continue
+        ev = run.events
+        acc: dict[tuple[str, str], dict[str, float]] = {}
+
+        def _get(teacher: str, phase: str) -> dict[str, float]:
+            key = (teacher, phase)
+            if key not in acc:
+                acc[key] = {
+                    "R_count": 0, "F_count": 0, "P_count": 0, "replay_count": 0,
+                    "coords_opened_F": 0, "coords_opened_P": 0,
+                    "consolidations_attributed": 0.0, "merged_coords_attributed": 0.0,
+                }
+            return acc[key]
+
+        if "action" in ev.columns:
+            decisions = ev[ev["type"] == "decision"]
+            for _, d in decisions.iterrows():
+                teacher = str(d.get("teacher") or "")
+                phase = str(run.phase_of_step(int(d["step"])) or "")
+                rec = _get(teacher, phase)
+                action = str(d.get("action"))
+                rec[f"{action}_count"] = rec.get(f"{action}_count", 0) + 1
+                coords = int(d.get("coords_opened") or 0)
+                module = str(d.get("module") or "")
+                if action == "P" and module.endswith(".P"):
+                    rec["coords_opened_P"] += coords
+                elif coords:
+                    rec["coords_opened_F"] += coords
+            replays = ev[ev["type"] == "replay"]
+            for _, d in replays.iterrows():
+                teacher = str(d.get("teacher") or "")
+                phase = str(run.phase_of_step(int(d["step"])) or "")
+                rec = _get(teacher, phase)
+                rec["replay_count"] += 1
+                rec["coords_opened_F"] += int(d.get("coords_opened") or 0)
+        merges = ev[ev["type"] == "consolidation"]
+        if "attribution_share" in merges.columns:
+            for _, m in merges.iterrows():
+                shares = m.get("attribution_share")
+                if not isinstance(shares, dict):
+                    continue
+                phase = str(run.phase_of_step(int(m["step"])) or "")
+                merged = float(m.get("merged_coords") or 0.0)
+                for teacher, share in shares.items():
+                    rec = _get(str(teacher), phase)
+                    rec["consolidations_attributed"] += float(share)
+                    rec["merged_coords_attributed"] += merged * float(share)
+        for (teacher, phase), rec in acc.items():
+            rows.append({"run": run.run_id, "spec_id": run.spec_id, "seed": run.seed,
+                         "teacher": teacher, "phase": phase, **rec})
+    return pd.DataFrame(rows)
+
+
+def containment(runs: list[RunData], teacher: Optional[str] = None) -> pd.DataFrame:
+    """Where did the corrupted teacher's influence end up? (task T5.1)
+
+    Per run: the share of that teacher's actions routed R / F / P, the base
+    coordinates it wrote directly, and the consolidations / base
+    coordinates attributed to it — then mean±std over seeds per spec. The
+    teacher defaults to the run's ``corrupt_teacher.tag``; runs without one
+    are skipped.
+    """
+    attr = teacher_attribution(runs)
+    if attr.empty:
+        return pd.DataFrame()
+    rows = []
+    for run in runs:
+        tag = teacher or _corrupted_tag(run)
+        if not tag:
+            continue
+        sub = attr[(attr["run"] == run.run_id) & (attr["teacher"] == tag)]
+        counts = sub[["R_count", "F_count", "P_count"]].sum() if len(sub) else None
+        total = float(counts.sum()) if counts is not None else 0.0
+        rows.append(
+            {
+                "spec_id": run.spec_id,
+                "seed": run.seed,
+                "teacher": tag,
+                "actions": total,
+                "r_share": (counts["R_count"] / total * 100) if total else None,
+                "f_share": (counts["F_count"] / total * 100) if total else None,
+                "p_share": (counts["P_count"] / total * 100) if total else None,
+                "coords_P_direct": float(sub["coords_opened_P"].sum()) if len(sub) else 0.0,
+                "consolidations_attributed": (
+                    float(sub["consolidations_attributed"].sum()) if len(sub) else 0.0
+                ),
+                "merged_coords_attributed": (
+                    float(sub["merged_coords_attributed"].sum()) if len(sub) else 0.0
+                ),
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    value_cols = [c for c in df.columns if c not in ("spec_id", "seed", "teacher")]
+    for c in value_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return _agg(df, ["spec_id", "teacher"], value_cols)
+
+
 def damage_recovery(runs: list[RunData]) -> pd.DataFrame:
     """Forced-merge damage: eval macro-loss right after each forced merge vs
     right before, and steps until it recovers to the pre-merge level."""
