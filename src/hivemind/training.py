@@ -772,11 +772,13 @@ def run_training_loop(
                 "repetition_medium": ctrl_config.policy.repetition_medium,
                 "stability_high_C": ctrl_config.policy.stability_high_C,
                 "stability_low_V": ctrl_config.policy.stability_low_V,
+                "stability_source": ctrl_config.policy.stability_source,
             },
             "consolidation": {
                 "period": ctrl_config.consolidation.period,
                 "min_repetition": ctrl_config.consolidation.min_repetition,
                 "min_stability_C": ctrl_config.consolidation.min_stability_C,
+                "stability_mode": ctrl_config.consolidation.stability_mode,
                 "strategy": ctrl_config.consolidation.merge_strategy,
             },
         }

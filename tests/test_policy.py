@@ -107,3 +107,44 @@ def test_zero_grad_modules_skipped():
 
     actions = policy.decide(signals)
     assert len(actions) == 0
+
+
+def _sustained_policy(source: str) -> RFPPolicy:
+    return RFPPolicy(PolicyConfig(
+        top_m_modules=4,
+        surprise_high=2.0,
+        repetition_low=0.3,
+        repetition_medium=0.5,
+        stability_high_C=0.5,
+        stability_low_V=0.3,
+        stability_source=source,
+    ))
+
+
+def test_sustained_source_reads_c_bar_for_p():
+    """Low instant C but high sustained C̄ → P under `sustained`, F under `instant`."""
+    mid = ModuleId(0, "attn", "F")
+    sig = ModuleSignals(
+        module_id=mid, grad_norm=1.0, surprise=1.0, repetition=0.8,
+        stability_C=0.1, stability_C_sustained=0.9, stability_V=0.1,
+    )
+    assert _sustained_policy("sustained").decide({mid: sig})[0].store == "P"
+    assert _sustained_policy("instant").decide({mid: sig})[0].store == "F"
+
+
+def test_sustained_source_leaves_r_and_f_untouched():
+    """The R branch never looks at C, so the source cannot change an R/F decision."""
+    mid = ModuleId(0, "ffn", "F")
+    novel = ModuleSignals(
+        module_id=mid, grad_norm=1.0, surprise=5.0, repetition=0.1,
+        stability_C=0.9, stability_C_sustained=0.1, stability_V=0.1,
+    )
+    for source in ("instant", "sustained"):
+        assert _sustained_policy(source).decide({mid: novel})[0].store == "R"
+
+
+def test_invalid_stability_source_raises():
+    import pytest
+
+    with pytest.raises(ValueError, match="stability_source"):
+        PolicyConfig(stability_source="bogus")

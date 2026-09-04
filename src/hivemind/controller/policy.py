@@ -131,7 +131,13 @@ class RFPPolicy:
         disabled_stores = self.ablation.disable_stores
         S = sig.surprise
         R = sig.repetition
-        C = sig.stability_C
+        # P reads either the instantaneous cosine or its sustained EMA C̄
+        # (PolicyConfig.stability_source); R and F never look at C.
+        C = (
+            sig.stability_C_sustained
+            if cfg.stability_source == "sustained"
+            else sig.stability_C
+        )
         V = sig.stability_V
 
         # P: recurring AND stable

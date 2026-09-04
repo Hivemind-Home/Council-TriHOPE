@@ -115,15 +115,19 @@ controller:
     repetition_medium: 0.5
     stability_high_C: 0.5
     stability_low_V: 0.3
+    # P compares the SUSTAINED cosine C̄ (EMA) against stability_high_C —
+    # see stream_small.yaml; `stability_instant` in ablation_grid.yaml is
+    # the control.
+    stability_source: sustained
   consolidation:
-    period: 1000
-    min_stability_C: 0.7
-    min_repetition: 0.6
     # Re-validate merges on the SUSTAINED cosine C̄ (EMA), not the
     # instantaneous cosine at the exact period boundary. Faithful to the
-    # "stable for multiple windows" criterion — lets genuinely-stable
-    # modules consolidate without lowering the strict 0.7 bar. Flip to
-    # ``instant`` to reproduce the original (P≈0) behaviour for the ablation.
+    # "stable for multiple windows" criterion. Period and bar match
+    # stream_small (T1); the strict 0.7/0.6/1000 values survive as the
+    # `consolidation_strict` ablation.
+    period: 250
+    min_stability_C: 0.4
+    min_repetition: 0.4
     stability_mode: sustained
     merge_strategy: direct
     checkpoint_before_merge: false

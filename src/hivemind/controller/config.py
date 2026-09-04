@@ -54,6 +54,23 @@ class PolicyConfig:
     repetition_medium: float = 0.5
     stability_high_C: float = 0.5
     stability_low_V: float = 0.3
+    # Which directional-stability signal the P branch compares against
+    # ``stability_high_C``:
+    # - ``instant``   : C = cos(g_t, m_{t-1}) at this step. Noise at any single
+    #   step on real text, so P effectively never fires (the original
+    #   behaviour and the default).
+    # - ``sustained`` : the EMA C̄ of that cosine (StabilityConfig.c_ema_alpha).
+    #   Paper motivation: a module is promoted when it has been directionally
+    #   consistent over a sustained window, not when one batch happens to be
+    #   aligned — and it is the answer to the "cos(g, m) is noisy" critique.
+    stability_source: str = "instant"
+
+    def __post_init__(self) -> None:
+        if self.stability_source not in ("instant", "sustained"):
+            raise ValueError(
+                f"Unknown policy.stability_source '{self.stability_source}'; "
+                "allowed: 'instant' | 'sustained'"
+            )
 
 
 @dataclass

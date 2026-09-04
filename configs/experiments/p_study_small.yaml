@@ -24,10 +24,10 @@ seeds: [1337]
 cleanup_checkpoints: keep_final
 runs:
   - id: p_study
+    # period 250 / min C̄ 0.4 / min R 0.4 / sustained C̄ are the stream_small
+    # defaults since T1; only the routing thresholds and the merge
+    # checkpoints are spec-specific now.
     overrides:
-      - controller.consolidation.period=250
-      - controller.consolidation.min_stability_C=0.4
-      - controller.consolidation.min_repetition=0.4
       - controller.consolidation.checkpoint_before_merge=true
       - controller.policy.repetition_medium=0.35
       - controller.policy.stability_high_C=0.35

@@ -78,6 +78,7 @@ controller:
     eps: 1.0e-8
   stability:
     ema_alpha: 0.1
+    c_ema_alpha: 0.1          # EMA of cos(g, m) → the sustained C̄ read by policy + consolidation
     warmup_threshold: 1.0e-6
     eps: 1.0e-8
   repetition:
@@ -98,10 +99,19 @@ controller:
     repetition_medium: 0.5
     stability_high_C: 0.5
     stability_low_V: 0.3
+    # P compares the SUSTAINED cosine C̄ (EMA) against stability_high_C. The
+    # instantaneous cosine is noise at any single step on real text, so with
+    # `instant` P never fires and the consolidation study is a null result.
+    # `stability_instant` in ablation_grid.yaml is the control.
+    stability_source: sustained
   consolidation:
-    period: 1000
-    min_stability_C: 0.7
-    min_repetition: 0.6
+    # Re-validation reads C̄ too, every 250 steps, at the p_study thresholds
+    # (0.4/0.4) so P fires measurably inside the 6000-step stream. The strict
+    # values (0.7/0.6/1000) survive as the `consolidation_strict` ablation.
+    period: 250
+    min_stability_C: 0.4
+    min_repetition: 0.4
+    stability_mode: sustained
     merge_strategy: direct
     checkpoint_before_merge: false
   writer:

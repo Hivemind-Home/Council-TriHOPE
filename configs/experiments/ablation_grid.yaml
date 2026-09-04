@@ -34,3 +34,16 @@ runs:
     overrides: [controller.writer.top_k_fraction=0.25]
   - id: topk_100
     overrides: [controller.writer.top_k_fraction=1.0]
+  - id: stability_instant
+    # T1 control: the P branch and the merge re-validation read the
+    # INSTANTANEOUS cosine instead of the sustained EMA C̄ (the pre-T1
+    # behaviour, under which P essentially never fires on real text).
+    overrides:
+      - controller.policy.stability_source=instant
+      - controller.consolidation.stability_mode=instant
+  - id: consolidation_strict
+    # T1 control: the strict pre-T1 consolidation bar and period.
+    overrides:
+      - controller.consolidation.min_stability_C=0.7
+      - controller.consolidation.min_repetition=0.6
+      - controller.consolidation.period=1000
