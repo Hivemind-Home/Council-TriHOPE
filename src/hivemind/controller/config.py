@@ -73,6 +73,12 @@ class PolicyConfig:
     #   m²/v (``stability_adam``): P when ≥ adam_score_high, else F; never R.
     #   Pair with ``WriterConfig.flag_p_for_consolidation=false`` and
     #   ``consolidation.period=0`` — MoLF has no merge.
+    # - ``teacher_partition`` : Gradient-Routing-style (Cloud et al. 2024).
+    #   The LoRA rank is split into one contiguous slice per registered
+    #   teacher; every F-type module opens exactly the batch teacher's slice
+    #   (base closed, no consolidation). Uses the teacher LABEL — which
+    #   TriHOPE never reads — and is the E5 baseline whose "unlearning" is
+    #   ablating a slice (``DebugConfig.ablate_teacher_slice``).
     mode: str = "rfp"
     adam_score_high: float = 0.5
 
@@ -89,7 +95,7 @@ class PolicyConfig:
 
 
 #: Controller families selectable through ``PolicyConfig.mode``.
-POLICY_MODES = ("rfp", "surprise_only", "adam_score")
+POLICY_MODES = ("rfp", "surprise_only", "adam_score", "teacher_partition")
 
 
 @dataclass
@@ -293,6 +299,12 @@ class DebugConfig:
     # merged by a later, clean P action.
     block_p_for_teachers: list[str] = field(default_factory=list)
     block_min_share: float = 0.5
+    # Gradient-routing ablation (T6): ``{step: int, teacher: str}`` zeroes
+    # that teacher's rank slice (rows of A, columns of B) in every adapter
+    # right after the optimizer step at ``step``, together with the slice's
+    # optimizer state. A zeroed slice is dead thereafter (its gradients
+    # vanish), which is exactly Gradient Routing's "remove the region".
+    ablate_teacher_slice: dict | None = None
     random_shares_path: str | None = None
     random_shares_spec_id: str = "trihope"
     random_unit: str = "module"  # module | step
@@ -311,6 +323,13 @@ class DebugConfig:
             )
         self.force_consolidate_steps = [int(s) for s in self.force_consolidate_steps]
         self.block_p_for_teachers = [str(t) for t in self.block_p_for_teachers]
+        if self.ablate_teacher_slice is not None:
+            raw = dict(self.ablate_teacher_slice)
+            if "step" not in raw or "teacher" not in raw:
+                raise ValueError(
+                    "ablate_teacher_slice needs {step: int, teacher: str}"
+                )
+            self.ablate_teacher_slice = {"step": int(raw["step"]), "teacher": str(raw["teacher"])}
         if not 0.0 <= float(self.block_min_share) <= 1.0:
             raise ValueError("block_min_share must be in [0, 1]")
         self.block_min_share = float(self.block_min_share)

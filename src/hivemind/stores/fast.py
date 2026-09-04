@@ -42,6 +42,35 @@ class FastStore:
             granularity=self.top_k_granularity,  # type: ignore[arg-type]
         )
 
+    @staticmethod
+    def slice_bounds(rank: int, teacher_index: int, num_teachers: int) -> tuple[int, int]:
+        """Contiguous rank slice ``[lo, hi)`` reserved for one teacher.
+
+        Width ``rank // num_teachers``; the remainder (``rank % num_teachers``
+        components) stays unused so every teacher gets the same budget.
+        """
+        k = int(num_teachers)
+        if k <= 0 or int(rank) < k:
+            raise ValueError(
+                f"teacher_partition needs lora.rank >= number of teachers "
+                f"({int(rank)} < {k}); raise model.lora.rank."
+            )
+        width = int(rank) // k
+        lo = int(teacher_index) * width
+        return lo, lo + width
+
+    def compute_slice_masks(
+        self, adapter: LoRAAdapter, teacher_index: int, num_teachers: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Masks opening exactly one teacher's rank slice (rows of A, columns
+        of B), disjoint across teachers and independent of the gradient."""
+        lo, hi = self.slice_bounds(adapter.rank, teacher_index, num_teachers)
+        sel = torch.zeros(adapter.rank, dtype=torch.bool, device=adapter.lora_a.device)
+        sel[lo:hi] = True
+        mask_a = sel.unsqueeze(1).expand_as(adapter.lora_a)
+        mask_b = sel.to(adapter.lora_b.device).unsqueeze(0).expand_as(adapter.lora_b)
+        return mask_a, mask_b
+
     def get_lora_modules_for_block(
         self, model: nn.Module, layer_idx: int, block_type: str
     ) -> list[LoRAAdapter]:

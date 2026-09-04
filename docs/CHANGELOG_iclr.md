@@ -297,3 +297,30 @@ deviation from the task document with the reason.
   attribution (empty adapters) are ignored by the rollback point search.
   (4) Ledger completeness is asserted as ⊆ (a coordinate opened with an
   exactly-zero update does not move) plus the merged-block exception.
+
+## T6 — gradient-routing baseline (E5)
+
+- `PolicyConfig.mode="teacher_partition"`: every F-type module gets an F
+  action carrying `StoreAction.teacher_slot = (teacher_index, K)`; no
+  Top-M, no signals in the decision, no R, no P. `decide` takes
+  `teacher_index=` / `num_teachers=` (the rank-synced representative
+  teacher and the registry size, tag included).
+- `FastStore.slice_bounds` / `compute_slice_masks`: contiguous rank slice
+  of width `rank // K` per teacher (remainder unused; error if `rank < K`);
+  `WriteExecutor._execute_f(..., teacher_slot=)` opens exactly that
+  slice's A rows / B columns instead of Top-K.
+- `MaskedAdamW.reset_state_for_coords(param, mask)`: masked counterpart of
+  `reset_state_for_params` (moments, AMSGrad max, coordinate counter
+  zeroed on the mask, untouched elsewhere; `step` unchanged; `step()` not
+  modified).
+- `DebugConfig.ablate_teacher_slice: {step, teacher}`: after the optimizer
+  step at `step`, the teacher's slice is zeroed in every adapter with its
+  optimizer state (an `ablation` event records `coords_zeroed`). A zeroed
+  A row makes the slice's gradients vanish, so the region is dead — GR's
+  "remove the region" — with no RNG and identical on every rank; the hook
+  runs before the step's checkpoint so a resume never repeats it.
+- `bad_teacher_small.yaml` gains `gradient_routing` (rank 16 / 5 teachers →
+  3 components each; ablation at step 3649, the end of `math_recurrent`).
+- Tests: `tests/test_gradient_routing.py` (+6).
+- Deviation: the ablation zeroes rather than re-initialises the slice (no
+  RNG, DDP-trivial, and the dead slice is the honest GR semantics).

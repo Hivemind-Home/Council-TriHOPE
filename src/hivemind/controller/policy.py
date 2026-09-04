@@ -86,6 +86,9 @@ class StoreAction:
     stability_adam: float = 0.0
     grad_norm: float = 0.0
     repetition_components: dict[str, float] = field(default_factory=dict)
+    # Gradient-routing (``mode="teacher_partition"``): ``(teacher_index,
+    # num_teachers)`` — the writer opens only that teacher's rank slice.
+    teacher_slot: tuple[int, int] | None = None
 
 
 class RFPPolicy:
@@ -123,6 +126,8 @@ class RFPPolicy:
         step: int | None = None,
         phase: str | None = None,
         teacher_name: str | None = None,
+        teacher_index: int | None = None,
+        num_teachers: int | None = None,
     ) -> list[StoreAction]:
         """Determine R/F/P routing for each selected module.
 
@@ -143,11 +148,17 @@ class RFPPolicy:
                 ``random_matched``; ``None`` → uniform).
             teacher_name: the batch's (rank-synced) teacher; a P action is
                 demoted to F while it is in ``debug.block_p_for_teachers``.
+            teacher_index / num_teachers: the batch teacher's registry
+                index and the registry size — ``teacher_partition`` mode
+                routes on the label alone.
 
         Returns:
             List of StoreAction for selected modules.
         """
         ab = self.ablation
+
+        if self.config.mode == "teacher_partition":
+            return self._teacher_partition(module_signals, teacher_index, num_teachers)
 
         # Step 1: Select Top-M modules by gradient norm
         selected = self.select_top_m(module_signals)
@@ -215,6 +226,41 @@ class RFPPolicy:
             reverse=True,
         )
         return [s for s in sorted_modules[:top_m] if s.grad_norm != 0.0]
+
+    def _teacher_partition(
+        self,
+        module_signals: dict[ModuleId, ModuleSignals],
+        teacher_index: int | None,
+        num_teachers: int | None,
+    ) -> list[StoreAction]:
+        """Gradient Routing: every F-type module opens the batch teacher's
+        rank slice. No Top-M, no signals in the decision, no P, no R."""
+        if teacher_index is None or not num_teachers:
+            raise ValueError(
+                "policy.mode=teacher_partition needs teacher_index and num_teachers"
+            )
+        slot = (int(teacher_index), int(num_teachers))
+        actions: list[StoreAction] = []
+        for sig in sorted(
+            module_signals.values(),
+            key=lambda s: (s.module_id.layer, s.module_id.block_type, s.module_id.param_type),
+        ):
+            if sig.module_id.param_type != "F" or sig.grad_norm == 0.0:
+                continue
+            actions.append(StoreAction(
+                module_id=sig.module_id,
+                store="F",
+                surprise=sig.surprise,
+                repetition=sig.repetition,
+                stability_C=sig.stability_C,
+                stability_C_sustained=sig.stability_C_sustained,
+                stability_V=sig.stability_V,
+                stability_adam=sig.stability_adam,
+                grad_norm=sig.grad_norm,
+                repetition_components=dict(sig.repetition_components or {}),
+                teacher_slot=slot,
+            ))
+        return actions
 
     def _random_store(self, step: int, phase: str | None, module_rank: int) -> str:
         """Budget-matched random label (``policy_override="random_matched"``).

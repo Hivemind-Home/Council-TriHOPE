@@ -118,7 +118,7 @@ class WriteExecutor:
                 metrics["r_count"] += 1
 
             elif action.store == "F":
-                coords_opened = self._execute_f(mod, masks)
+                coords_opened = self._execute_f(mod, masks, teacher_slot=action.teacher_slot)
                 metrics["f_count"] += 1
 
             elif action.store == "P":
@@ -171,12 +171,16 @@ class WriteExecutor:
         self,
         mod: ModuleInfo,
         masks: dict[nn.Parameter, "torch.Tensor | bool"],
+        teacher_slot: tuple[int, int] | None = None,
     ) -> int:
         """F-store action: open Top-K LoRA rank components.
 
         For F-type modules (LoRA params), opens the selected components.
         For P-type modules routed to F, opens nothing (base params don't
         get fast updates). Returns the number of coordinates opened.
+
+        With ``teacher_slot=(index, K)`` (gradient routing) the opened
+        components are the teacher's fixed rank slice instead of Top-K.
         """
         if mod.id.param_type != "F":
             return 0
@@ -186,7 +190,10 @@ class WriteExecutor:
             self.model, mod.id.layer, mod.id.block_type
         )
         for adapter in adapters:
-            mask_a, mask_b = self.f_store.compute_top_k_masks(adapter)
+            if teacher_slot is not None:
+                mask_a, mask_b = self.f_store.compute_slice_masks(adapter, *teacher_slot)
+            else:
+                mask_a, mask_b = self.f_store.compute_top_k_masks(adapter)
             masks[adapter.lora_a] = mask_a
             masks[adapter.lora_b] = mask_b
             opened += int(mask_a.sum().item()) + int(mask_b.sum().item())

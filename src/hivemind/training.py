@@ -1364,6 +1364,8 @@ def run_training_loop(
                 step=step,
                 phase=current_phase,
                 teacher_name=teacher_name_repr if teacher_name_repr else None,
+                teacher_index=teacher_idx_repr,
+                num_teachers=len(registry.teachers),
             )
             if controller_enabled
             else []
@@ -1590,6 +1592,41 @@ def run_training_loop(
                 (step, "replay", tuple(replayed)), what="replay decisions"
             )
         replay_count = len(replayed)
+
+        # Gradient-routing ablation (T6): kill one teacher's rank slice.
+        # After the optimizer step and before this step's checkpoint, so a
+        # save at this step already contains it and a resume never repeats
+        # it. No RNG, identical on every rank.
+        ablate = ctrl_config.debug.ablate_teacher_slice
+        if ablate is not None and step == ablate["step"]:
+            names = [t.name for t in registry.teachers]
+            if ablate["teacher"] not in names:
+                raise ValueError(
+                    f"ablate_teacher_slice.teacher={ablate['teacher']!r} is not a "
+                    f"registered teacher ({names})"
+                )
+            t_idx = names.index(ablate["teacher"])
+            zeroed = 0
+            with torch.no_grad():
+                for mid in consolidator.all_f_modules():
+                    for ad in consolidator._get_lora_adapters(mid):
+                        mask_a, mask_b = f_store.compute_slice_masks(
+                            ad, t_idx, len(registry.teachers)
+                        )
+                        ad.lora_a.masked_fill_(mask_a, 0)
+                        ad.lora_b.masked_fill_(mask_b, 0)
+                        optimizer.reset_state_for_coords(ad.lora_a, mask_a)
+                        optimizer.reset_state_for_coords(ad.lora_b, mask_b)
+                        zeroed += int(mask_a.sum().item()) + int(mask_b.sum().item())
+            event_trace.emit(
+                {
+                    "type": "ablation",
+                    "step": step,
+                    "teacher": ablate["teacher"],
+                    "teacher_index": t_idx,
+                    "coords_zeroed": zeroed,
+                }
+            )
         ledger.record_step(
             write_metrics["coords_opened"] + replay_coords + unmasked_open_coords,
             unmasked_base_coords,

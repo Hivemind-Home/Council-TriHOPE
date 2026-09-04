@@ -57,3 +57,18 @@ runs:
       - controller.consolidation.period=0
       - controller.writer.flag_p_for_consolidation=false
       - controller.ablation.use_teacher_confidence=false
+  - id: gradient_routing
+    # Gradient Routing (Cloud et al. 2024) with teacher labels: rank 16 is
+    # split into one 3-component slice per registered teacher (4 domains +
+    # the corrupted tag; one component unused), every adapter opens only the
+    # batch teacher's slice, base stays closed, no merge. "Unlearning" = the
+    # corrupted teacher's slice is zeroed at the end of math_recurrent
+    # (step 3649). Containment is 100 % in F by construction; the question
+    # is damage and recovery after the ablation.
+    overrides:
+      - *common
+      - controller.policy.mode=teacher_partition
+      - controller.consolidation.period=0
+      - controller.ablation.use_teacher_confidence=false
+      - controller.retrieval.replay_on_hit=false
+      - "controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_corrupted}"
