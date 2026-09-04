@@ -1,6 +1,6 @@
 # TriHOPE training pipeline and test commands — 2026-09-04
 
-Branch `iclr2027-push` (10 commits on top of `main` @ `8dc4917`).
+Branch `iclr2027-push` (12 commits on top of `main` @ `8dc4917`).
 Everything below was verified on 2026-09-04 on a CPU box against real
 Hugging Face Layer-C data via `stream_smoke`; the GPU campaign itself has
 not been run yet. Machine assumed: one 96 GB GPU, cache-mode teachers (no
@@ -11,10 +11,19 @@ student). Companion docs: `docs/GPU_RUNBOOK.md` (tiers and budgets),
 
 ---
 
+## 0. Before leaving the dev box
+
+The branch lives only on the dev machine until it is pushed:
+
+```bash
+git push -u origin iclr2027-push        # on the dev box
+```
+
 ## 1. Setup (once)
 
 ```bash
 git fetch origin && git checkout iclr2027-push
+git log --oneline -1                     # expect the "docs: dated training-pipeline…" commit or later
 python -m venv .venv && source .venv/bin/activate      # or your env
 pip install -e ".[dev,data,analysis]"
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # must print True
@@ -27,9 +36,13 @@ Datasets download automatically from the Hugging Face hub on first use
 ## 2. Tests (before anything touches the GPU)
 
 ```bash
-python -m pytest tests/ -q                     # expected: 499 passed (the 2 GPU-only tests run here)
+python -m pytest tests/ -q                     # expected: 499 passed, 0 skipped (497 + 2 GPU-only tests)
 ruff check src tests analysis scripts          # expected: All checks passed!
 ```
+
+If `pip install` fails on `bitsandbytes` or `kernels` (both only needed
+for live teachers / FP8 checkpoints), install without them:
+`pip install -e ".[dev,analysis]" datasets transformers huggingface_hub pyarrow accelerate`.
 
 Test groups worth knowing:
 
@@ -42,24 +55,37 @@ Test groups worth knowing:
 | `pytest tests/test_distributed_equivalence.py tests/test_distributed_replay.py -q` | two-rank gloo: identical decisions, replay row + teacher index synced |
 | `pytest tests/test_budget_curve.py tests/test_analysis.py -q` | Figure 1 tables and the report |
 
-## 3. Smoke checks on real data (~2 min each on GPU)
+## 3. Smoke checks on real data (3–5 min each; they run on CPU by design)
+
+`stream_smoke` pins `train.device: cpu` so the reference losses below are
+reproducible on any machine — do not move it to CUDA. Each command gets
+its own directory under `runs/smoke/`: the event log is append-mode, so
+runs that share a directory would mix their traces.
 
 ```bash
 # 3a. baseline behaviour — must end at EXACTLY this loss (reference from docs/experiments.md)
-python train.py --config-name stream_smoke
+python train.py --config-name stream_smoke \
+    ++run.dir=runs/smoke/plain ++checkpoint.dir=runs/smoke/plain/ckpt \
+    ++logging.path=runs/smoke/plain/metrics.jsonl ++logging.events_path=runs/smoke/plain/events.jsonl
 #     ... Training complete. Final loss: 5.054330348968506
 
-# 3b. replay on — expect replay events in the recurrent phases, none in novel_inject
-python train.py --config-name stream_smoke ++controller.retrieval.replay_on_hit=true
-#     reference on CPU: 22 rows replayed, final loss 4.8209028244018555
+# 3b. replay on — expect replays in the recurrent phases, none in novel_inject
+python train.py --config-name stream_smoke ++controller.retrieval.replay_on_hit=true \
+    ++run.dir=runs/smoke/replay ++checkpoint.dir=runs/smoke/replay/ckpt \
+    ++logging.path=runs/smoke/replay/metrics.jsonl ++logging.events_path=runs/smoke/replay/events.jsonl
+#     reference: 22 rows replayed, final loss 4.8209028244018555 (verified 2026-09-04; last digits may differ by platform)
 
 # 3c. bit-exact resume with replay on — final loss identical to 3b to the last digit
 python train.py --config-name stream_smoke ++controller.retrieval.replay_on_hit=true \
-    checkpoint.resume_from=50
+    ++checkpoint.resume_from=50 \
+    ++run.dir=runs/smoke/resume ++checkpoint.dir=runs/smoke/replay/ckpt \
+    ++logging.path=runs/smoke/resume/metrics.jsonl ++logging.events_path=runs/smoke/resume/events.jsonl
 
 # 3d. corrupted-teacher stream — decisions attributed to the tag, digest changes
 python train.py --config-name stream_smoke ++data.corrupt_teacher.enabled=true \
-    ++data.corrupt_teacher.tag=math_teacher_corrupted ++controller.retrieval.replay_on_hit=true
+    ++data.corrupt_teacher.tag=math_teacher_corrupted ++controller.retrieval.replay_on_hit=true \
+    ++run.dir=runs/smoke/corrupt ++checkpoint.dir=runs/smoke/corrupt/ckpt \
+    ++logging.path=runs/smoke/corrupt/metrics.jsonl ++logging.events_path=runs/smoke/corrupt/events.jsonl
 
 # 3e. config gate for the real stream (metadata only, ~1 min, no download)
 python -m hivemind preflight --config-name stream_small --metadata-only
@@ -68,17 +94,26 @@ for m in baselines_small r_tier_small budget_sweep_small p_study_small ablation_
 done
 ```
 
-Inspect a smoke run with:
+Inspect any smoke run (replace the directory):
 
 ```bash
 python - <<'PY'
 import json, collections
-ev = [json.loads(l) for l in open("logs/stream_smoke_events.jsonl")]
+d = "runs/smoke/replay"
+ev = [json.loads(l) for l in open(f"{d}/events.jsonl")]
 print(collections.Counter(e["action"] for e in ev if e["type"] == "decision"))
 print("replays:", sum(e["type"] == "replay" for e in ev),
-      "merges:", sum(e["type"] == "consolidation" for e in ev))
+      "merges:", sum(e["type"] == "consolidation" for e in ev),
+      "teachers:", collections.Counter(e["teacher"] for e in ev if e["type"] == "decision"))
+print(json.load(open(f"{d}/run_summary.json"))["extra"])
 PY
 ```
+
+Expected: 3a prints the reference loss to the last digit; 3b shows
+`replays: 88` (22 rows × 4 modules) and `replayed_total: 22`, with no
+replay at steps 40–44 (`novel_inject`); 3c prints the same final loss as
+3b; 3d shows `math_teacher_corrupted` among the teachers and a different
+`stream_digest` from 3b.
 
 ## 4. The first proper training run
 
@@ -154,11 +189,13 @@ python -m analysis.run_report runs/baselines_small_v1
 
 # Tier 2 — E5 bad teacher + rollback (21 runs + rollbacks)
 python scripts/run_experiment.py configs/experiments/bad_teacher_small.yaml --concurrent 3
-for seed in 1337 2024 7; do for spec in trihope gradient_routing; do
-  r=runs/bad_teacher_small_v1/$spec-seed$seed
+for seed in 1337 2024 7; do
+  r=runs/bad_teacher_small_v1/trihope-seed$seed
   python scripts/rollback_teacher.py --run $r --teacher math_teacher_corrupted --out $r-rollback
   python scripts/rollback_teacher.py --run $r --teacher math_teacher_corrupted --baseline full_restore --out $r-fullrestore
-done; done
+  g=runs/bad_teacher_small_v1/gradient_routing-seed$seed
+  python scripts/rollback_teacher.py --run $g --teacher math_teacher_corrupted --baseline full_restore --out $g-fullrestore
+done
 python -m analysis.run_report runs/bad_teacher_small_v1
 
 # Tier 3 — E2 / E3 / E4 + signal ablations (15 + 22 + 5 + 11 runs)
@@ -174,7 +211,10 @@ python -m analysis.run_report runs/p_study_small_v1
 `rollback_teacher.py` exits 0 with "nothing to roll back (containment
 held)" when no merge is attributed ≥ `--min-share` (default 0.5) to the
 corrupted teacher — that is a result, not an error; lower `--min-share`
-(e.g. 0.3) to roll back a partially attributed merge.
+(e.g. 0.3) to roll back a partially attributed merge. `gradient_routing`
+never merges, so only `full_restore` applies to it; its "unlearning" is
+the slice ablation already inside the run (the `ablation` event at step
+3649).
 
 ## 6. What each experiment produces
 
