@@ -13,7 +13,7 @@ produces.
 
 ```bash
 pip install -e ".[data,analysis]"     # + [logging] for wandb
-python -m pytest tests/ -q            # 248 tests, CPU-only, ~10s
+python -m pytest tests/ -q            # 499 tests, CPU-only, ~30s
 ```
 
 Datasets (public, HuggingFace hub, downloaded automatically on first use):

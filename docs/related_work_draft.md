@@ -1,14 +1,12 @@
-# Related work (draft, ~560 words)
+# Related work (draft)
 
 **Multi-teacher distillation decides who teaches.** Distillation transfers
-a teacher's predictive behaviour into a student (Bucila et al., 2006;
-Hinton et al., 2015), and with several teachers the supervision itself
-becomes selective: adaptive weighting by performance or distance (Yang et
-al., 2025), recovery of signal from mixture-of-experts components (Kim et
-al., 2025), or routing of teacher knowledge through LoRA experts (Feng et
-al., 2025). All of these decide *whose* target the student follows; the
-resulting gradient then enters the weights through an ordinary optimizer
-step. That the teacher may be untrusted is a recognised threat: Hong et al.
+a teacher's behaviour into a student (Hinton et al., 2015), and with
+several teachers the supervision itself becomes selective — weighting by
+performance or distance (Yang et al., 2025), mixture-of-experts recovery
+(Kim et al., 2025), routed LoRA experts (Feng et al., 2025). All decide
+*whose* target the student follows; the gradient then enters the weights
+through an ordinary optimizer step. That the teacher may be untrusted is a recognised threat: Hong et al.
 (2023) show a backdoored teacher's behaviour transfers through data-free
 distillation at over 90 % attack success and suppress the transfer at
 training time. We do not attempt prevention; we make every permanent write
@@ -16,9 +14,8 @@ attributable to the teacher that caused it and revertible afterwards.
 
 **Continual learning decides how much to change.** Sequential updates
 erase earlier behaviour (McCloskey & Cohen, 1989; Kirkpatrick et al.,
-2017), and the remedies — regularisation, replay, parameter isolation —
-share one question: is the evidence strong enough to change durable
-parameters? Attribution-guided fine-tuning (Liu et al., 2026) gates each
+2017), and every remedy asks the same question: is the evidence strong
+enough to change durable parameters? Attribution-guided fine-tuning (Liu et al., 2026) gates each
 weight's gradient by an LRP *importance* score computed offline per task;
 Gradient Routing (Cloud et al., 2024) confines a labelled data source to a
 chosen subregion with a user-supplied backward mask and ablates it to
@@ -39,13 +36,10 @@ adapter into a single running LoRA with a 1/√i schedule at task boundaries;
 sparse memory finetuning (Lin et al., 2025) writes only the memory slots a
 batch activates more than pretraining did; STABLE (Hoy & Celik, 2025)
 accepts, rescales or rejects each LoRA→base merge against a forgetting
-budget measured on previously edited anchors. Each is two-store — one
-written tier and one frozen or merged-into tier — and decides *where* an
-update lands once, from a global loss, a task boundary, a usage count, or
-an extrinsic probe.
+budget measured on previously edited anchors. Each is two-store and decides *where* an update lands once, from a global
+loss, a task boundary, a usage count, or an extrinsic probe.
 
-**Optimizer state as evidence.** Adam's moments summarise recent learning
-dynamics (Kingma & Ba, 2015), and several lines read them. Nested Learning
+**Optimizer state as evidence.** Several lines read Adam's moments (Kingma & Ba, 2015). Nested Learning
 (Behrouz et al., 2025) recasts momentum and Adam as associative memories
 over gradients and organises memory into levels of fixed update frequency;
 Titans (Behrouz et al., 2024) defines surprise as the gradient of a memory

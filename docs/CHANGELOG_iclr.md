@@ -387,3 +387,24 @@ deviation from the task document with the reason.
   (`stable_gate`, MoLF's momentum tracking, no real-stream runs on this
   CPU box), and every deviation. Final suite: 498 passed, 2 GPU-only skips;
   ruff clean.
+
+## Audit pass (after T10)
+
+- Ground-rule checks re-run explicitly: `git diff main --
+  src/hivemind/optim/masked_adamw.py` adds only `reset_state_for_coords`
+  (`step` untouched); `python -m hivemind preflight --config-name
+  stream_small --metadata-only` and the same for `stream_headline` pass
+  with the new config blocks; ruff clean.
+- **Defaults reproduce the pre-branch behaviour on real data:** a plain
+  `stream_smoke` on this branch ends at `5.054330348968506`, the reference
+  value recorded in `docs/experiments.md` before any of this work.
+- **DDP paths exercised:** new `tests/test_distributed_replay.py` (two
+  gloo ranks, shards padded to different lengths) checks that every rank
+  receives rank 0's replay row and the synced teacher index; and the real
+  loop ran under `torch.distributed.run` with two gloo ranks,
+  `assert_rank_consistency=1`, replay and the corrupted teacher on — 70
+  steps, no divergence, 22 rows replayed and 80 corrupted-teacher
+  decisions, identical to the single-process run.
+- `docs/related_work_draft.md` trimmed to the 500–600 word budget; test
+  counts in `CLAUDE.md` / `docs/experiments.md` refreshed (498 → 499 with
+  the new DDP test).
