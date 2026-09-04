@@ -31,6 +31,8 @@ from typing import Any, Iterator, Optional
 import numpy as np
 from torch.utils.data import Sampler
 
+from .corruption import CorruptionPlan, CorruptionSpec
+
 
 @dataclass
 class RecurrenceSpec:
@@ -170,6 +172,7 @@ class StreamSchedule:
         batch_size: int,
         seed: int,
         data_identity: Optional[dict[str, Any]] = None,
+        corruption: Optional[CorruptionSpec] = None,
     ) -> None:
         if not cfg.phases:
             raise ValueError("StreamSchedule requires at least one phase")
@@ -179,6 +182,14 @@ class StreamSchedule:
         # Folded into config_digest so the resume guard notices a changed
         # corpus, not just a changed phase list. See config_digest().
         self.data_identity = data_identity or {}
+        # Corrupted-teacher stream (T4): which rows are served with a bad
+        # teacher, decided here because only the schedule knows which rows
+        # a phase serves. ``None``/disabled → the clean stream, digest
+        # unchanged.
+        self.corruption = corruption if (corruption and corruption.enabled) else None
+        self.corrupted_indices: set[int] = set()
+        self.corruption_partner: dict[int, int] = {}
+        self.corrupted_rows_by_phase: dict[str, int] = {}
 
         self.total_steps = sum(p.steps for p in cfg.phases)
         self._phase_starts: list[int] = []
@@ -251,6 +262,97 @@ class StreamSchedule:
             assert len(batches) == phase.steps
             self._batches.extend(batches)
             step += phase.steps
+
+        if self.corruption is not None:
+            self._build_corruption(dataset)
+
+    def _build_corruption(self, dataset: Any) -> None:
+        """Select the corrupted rows of the named phase, batch-coherently.
+
+        ``round(fraction × num_buckets)`` whole bucket subsets plus
+        ``round(fraction × n_other_steps)`` whole background/novel steps are
+        corrupted, so every batch of the phase is teacher-pure. The union
+        of their rows is ``corrupted_indices``; ``shuffle`` mode pairs each
+        corrupted row with another corrupted row (a cyclic shift of a
+        shuffled order — a derangement) whose teacher text it will take.
+        """
+        spec = self.corruption
+        assert spec is not None
+        names = [p.name for p in self.cfg.phases]
+        if spec.phase not in names:
+            raise ValueError(
+                f"corrupt_teacher.phase={spec.phase!r} is not a stream phase "
+                f"(have {names})"
+            )
+        pi = names.index(spec.phase)
+        phase = self.cfg.phases[pi]
+        phase_domains = list(phase.domains) if phase.domains else [phase.domain]
+        if spec.domain not in phase_domains:
+            raise ValueError(
+                f"corrupt_teacher.domain={spec.domain!r} is not served by phase "
+                f"{spec.phase!r} (domains: {phase_domains})"
+            )
+        rng = self._rng(pi, tag=99)
+        start = self._phase_starts[pi]
+        phase_steps = range(start, start + phase.steps)
+
+        chosen_rows: set[int] = set()
+        bucket_rows: set[int] = set()
+        subsets = self._phase_buckets.get(phase.name, {})
+        if subsets:
+            keys = sorted(subsets)
+            n_buckets = int(round(spec.fraction * len(keys)))
+            picked = list(rng.choice(keys, size=n_buckets, replace=False)) if n_buckets else []
+            for key in picked:
+                chosen_rows.update(int(i) for i in subsets[str(key)])
+            for key in keys:
+                bucket_rows.update(int(i) for i in subsets[key])
+        # Background / novel steps: any step of the phase whose batch is not
+        # a bucket revisit. Each such row is served once in the phase, so
+        # corrupting the step and corrupting its rows are the same thing.
+        other_steps = [
+            s for s in phase_steps
+            if not any(int(i) in bucket_rows for i in self._batches[s])
+        ]
+        n_other = int(round(spec.fraction * len(other_steps)))
+        if n_other:
+            picked_steps = rng.choice(other_steps, size=n_other, replace=False)
+            for s in picked_steps:
+                chosen_rows.update(int(i) for i in self._batches[int(s)])
+        self.corrupted_indices = chosen_rows
+
+        if spec.mode == "shuffle" and len(chosen_rows) >= 2:
+            order = [int(i) for i in rng.permutation(sorted(chosen_rows))]
+            self.corruption_partner = {
+                order[i]: order[(i + 1) % len(order)] for i in range(len(order))
+            }
+        else:
+            self.corruption_partner = {}
+
+        # Static per-phase count of served corrupted rows (a row corrupted
+        # here can be re-drawn as background by a later mixed phase; the
+        # leak is reported rather than hidden).
+        counts: dict[str, int] = {p.name: 0 for p in self.cfg.phases}
+        for s, batch in enumerate(self._batches):
+            n = sum(1 for i in batch if int(i) in chosen_rows)
+            if n:
+                counts[self.phase_at(s).name] += n
+        self.corrupted_rows_by_phase = counts
+
+    def corruption_plan(self) -> Optional[CorruptionPlan]:
+        if self.corruption is None:
+            return None
+        return CorruptionPlan(
+            spec=self.corruption,
+            corrupted=set(self.corrupted_indices),
+            partner_of=dict(self.corruption_partner),
+        )
+
+    def is_corrupted_step(self, step: int) -> bool:
+        """True when the batch served at ``step`` carries a corrupted row."""
+        if not self.corrupted_indices:
+            return False
+        return any(int(i) in self.corrupted_indices for i in self._batches[step])
 
     def _background_pool(
         self,
@@ -417,6 +519,9 @@ class StreamSchedule:
             "phases": [asdict(p) for p in self.cfg.phases],
             "data": self.data_identity,
         }
+        if self.corruption is not None:
+            # Only when enabled: every clean checkpoint keeps its digest.
+            payload["corruption"] = self.corruption.digest_payload()
         try:
             blob = json.dumps(payload, sort_keys=True)
         except TypeError as exc:
@@ -460,6 +565,11 @@ class StreamBatchSampler(Sampler[list[int]]):
         self.start_step = int(start_step)
         self.rank = int(rank)
         self.world_size = max(1, int(world_size))
+        # ``train.skip_step_ranges``: inclusive [lo, hi] step ranges the loop
+        # does not train on (the full-restore counterfactual of E5). The
+        # schedule — and so the digest — is unchanged; these steps are
+        # simply not yielded, and the loop emits a ``skipped_step`` for each.
+        self.skip_ranges: list[tuple[int, int]] = []
         if self.world_size > 1 and schedule.batch_size % self.world_size:
             raise ValueError(
                 f"data.batch_size={schedule.batch_size} is the GLOBAL batch and must "
@@ -470,8 +580,13 @@ class StreamBatchSampler(Sampler[list[int]]):
             )
         self.per_rank = schedule.batch_size // self.world_size
 
+    def is_skipped(self, step: int) -> bool:
+        return any(lo <= step <= hi for lo, hi in self.skip_ranges)
+
     def __iter__(self) -> Iterator[list[int]]:
         for step in range(self.start_step, self.schedule.total_steps):
+            if self.is_skipped(step):
+                continue
             idx = self.schedule.indices_for_step(step)
             if self.world_size == 1:
                 yield idx
@@ -480,4 +595,8 @@ class StreamBatchSampler(Sampler[list[int]]):
                 yield idx[lo : lo + self.per_rank]
 
     def __len__(self) -> int:
-        return self.schedule.total_steps - self.start_step
+        return sum(
+            1
+            for step in range(self.start_step, self.schedule.total_steps)
+            if not self.is_skipped(step)
+        )

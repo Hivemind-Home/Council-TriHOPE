@@ -64,6 +64,7 @@ class WriteExecutor:
         teacher_id: int = 0,
         teacher_name: str = "",
         teacher_output_text: str = "",
+        sample: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], dict[nn.Parameter, "torch.Tensor | bool"]]:
         """Execute all routing actions.
 
@@ -78,6 +79,11 @@ class WriteExecutor:
             teacher_name: registered teacher name (e.g. "qwen3_coder_30b_a3b").
             teacher_output_text: teacher's text answer for this sample —
                 the cheap stand-in for "teacher soft targets".
+            sample: optional representative-row tensors (``input_ids``,
+                ``labels``, ``kd_row_mask``, ``teacher_confidence``) stored
+                on R entries so they can be replayed into the fast store
+                later (``RetrievalConfig.replay_on_hit``). ``None`` keeps
+                the pre-replay entry layout.
 
         Returns:
             ``(metrics, masks)``: write statistics (including a per-action
@@ -107,11 +113,12 @@ class WriteExecutor:
                     teacher_id=teacher_id,
                     teacher_name=teacher_name,
                     teacher_output_text=teacher_output_text,
+                    sample=sample,
                 )
                 metrics["r_count"] += 1
 
             elif action.store == "F":
-                coords_opened = self._execute_f(mod, masks)
+                coords_opened = self._execute_f(mod, masks, teacher_slot=action.teacher_slot)
                 metrics["f_count"] += 1
 
             elif action.store == "P":
@@ -138,6 +145,7 @@ class WriteExecutor:
         teacher_id: int = 0,
         teacher_name: str = "",
         teacher_output_text: str = "",
+        sample: dict[str, Any] | None = None,
     ) -> None:
         """R-store action: no weight update, store in retrieval memory.
 
@@ -145,6 +153,7 @@ class WriteExecutor:
         their weights, moments, and counters bit-identical.
         """
         if embedding is not None:
+            sample = sample or {}
             self.r_store.add(RetrievalEntry(
                 embedding=embedding.detach().cpu(),
                 teacher_id=int(teacher_id),
@@ -152,18 +161,26 @@ class WriteExecutor:
                 step=int(step),
                 teacher_name=str(teacher_name),
                 teacher_output_text=str(teacher_output_text),
+                input_ids=sample.get("input_ids"),
+                labels=sample.get("labels"),
+                kd_row_mask=sample.get("kd_row_mask"),
+                teacher_confidence=sample.get("teacher_confidence"),
             ))
 
     def _execute_f(
         self,
         mod: ModuleInfo,
         masks: dict[nn.Parameter, "torch.Tensor | bool"],
+        teacher_slot: tuple[int, int] | None = None,
     ) -> int:
         """F-store action: open Top-K LoRA rank components.
 
         For F-type modules (LoRA params), opens the selected components.
         For P-type modules routed to F, opens nothing (base params don't
         get fast updates). Returns the number of coordinates opened.
+
+        With ``teacher_slot=(index, K)`` (gradient routing) the opened
+        components are the teacher's fixed rank slice instead of Top-K.
         """
         if mod.id.param_type != "F":
             return 0
@@ -173,7 +190,10 @@ class WriteExecutor:
             self.model, mod.id.layer, mod.id.block_type
         )
         for adapter in adapters:
-            mask_a, mask_b = self.f_store.compute_top_k_masks(adapter)
+            if teacher_slot is not None:
+                mask_a, mask_b = self.f_store.compute_slice_masks(adapter, *teacher_slot)
+            else:
+                mask_a, mask_b = self.f_store.compute_top_k_masks(adapter)
             masks[adapter.lora_a] = mask_a
             masks[adapter.lora_b] = mask_b
             opened += int(mask_a.sum().item()) + int(mask_b.sum().item())
@@ -197,6 +217,10 @@ class WriteExecutor:
             masks[p] = MaskedAdamW.FULLY_OPEN
             opened += p.numel()
 
-        if mod.id.param_type == "F" and self.consolidator is not None:
+        if (
+            mod.id.param_type == "F"
+            and self.consolidator is not None
+            and self.config.flag_p_for_consolidation
+        ):
             self.consolidator.flag_for_consolidation(mod.id)
         return opened

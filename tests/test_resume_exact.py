@@ -116,6 +116,34 @@ def _cfg(
     )
 
 
+def _replay_cfg(tmp_path: Path, steps: int, resume_from: str | None = None) -> OmegaConf:
+    """The resume config plus the R-store replay trigger from test_replay.py.
+
+    One synthetic teacher (one bucket), momentum/retrieval repetition off and
+    ``bucket_smoothing_k=0.5`` → step 0 routes R, step 1 routes F and replays
+    the parked row, so the checkpoint at the split carries a mutated R-store
+    and the resumed half must reproduce the reference bit for bit.
+    """
+    cfg = _cfg(tmp_path, steps, resume_from)
+    cfg.teachers.num_teachers = 1
+    cfg.controller = OmegaConf.create(
+        {
+            "policy": {
+                "top_m_modules": 4,
+                "surprise_high": 2.0,
+                "repetition_low": 0.4,
+                "repetition_medium": 0.9,
+                "stability_high_C": 0.99,
+            },
+            "repetition": {"bucket_smoothing_k": 0.5},
+            "ablation": {"disable_signals": ["repetition_mom", "repetition_ret"]},
+            "consolidation": {"period": 0},
+            "retrieval": {"replay_on_hit": True, "hit_threshold": 1},
+        }
+    )
+    return cfg
+
+
 def _read_losses(path: Path) -> dict[int, float]:
     out: dict[int, float] = {}
     for line in path.read_text().strip().splitlines():
@@ -160,6 +188,40 @@ class TestBitExactResume:
             for ln in (part_dir / "events.jsonl").read_text().strip().splitlines()
         ]
         assert any(e["type"] == "resume" and e["step"] == n for e in events)
+
+    def test_resume_matches_uninterrupted_with_replay(self, tmp_path: Path) -> None:
+        n, total = 4, 8
+        device = torch.device("cpu")
+
+        ref_dir = tmp_path / "ref"
+        ref_dir.mkdir()
+        run_training_loop(_replay_cfg(ref_dir, steps=total), device=device)
+        ref_losses = _read_losses(ref_dir / "metrics.jsonl")
+        ref_events = [
+            json.loads(ln)
+            for ln in (ref_dir / "events.jsonl").read_text().strip().splitlines()
+        ]
+        # The replay must land BEFORE the split, so the checkpoint carries the
+        # mutated (popped) R-store and its replayed_total counter.
+        assert any(e["type"] == "replay" and e["step"] < n for e in ref_events)
+
+        part_dir = tmp_path / "part"
+        part_dir.mkdir()
+        run_training_loop(_replay_cfg(part_dir, steps=n), device=device)
+        stores = torch.load(
+            part_dir / "ckpt" / f"step_{n - 1:08d}" / "stores.pt", weights_only=False
+        )
+        assert stores["replayed_total"] == 1
+        run_training_loop(
+            _replay_cfg(part_dir, steps=total, resume_from="latest"), device=device
+        )
+        resumed_losses = _read_losses(part_dir / "metrics.jsonl")
+
+        assert set(resumed_losses) == set(ref_losses)
+        for step in sorted(ref_losses):
+            assert resumed_losses[step] == pytest.approx(
+                ref_losses[step], abs=0.0
+            ), f"loss diverged at step {step}"
 
     def test_resumed_checkpoint_state_matches_reference(self, tmp_path: Path) -> None:
         n, total = 6, 12

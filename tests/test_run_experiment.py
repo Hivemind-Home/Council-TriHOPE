@@ -117,7 +117,15 @@ class TestManifestFilesParse:
 
     @pytest.mark.parametrize(
         "name",
-        ["baselines_small", "ablation_grid", "p_study_small", "headline"],
+        [
+            "baselines_small",
+            "ablation_grid",
+            "p_study_small",
+            "headline",
+            "r_tier_small",
+            "budget_sweep_small",
+            "bad_teacher_small",
+        ],
     )
     def test_checked_in_manifest(self, name: str) -> None:
         path = Path(__file__).parent.parent / "configs" / "experiments" / f"{name}.yaml"
@@ -195,3 +203,54 @@ class TestLaunchModes:
         with _pytest.raises(SystemExit):
             main([str(manifest), "--parallel-gpus", "2", "--nproc-per-node", "2"])
         assert "pick one" in capsys.readouterr().err
+
+
+class TestConcurrentSharedGpu:
+    def test_concurrent_is_exclusive_with_the_other_modes(self, tmp_path, capsys):
+        import pytest as _pytest
+        from run_experiment import main
+
+        manifest = tmp_path / "m.yaml"
+        manifest.write_text(
+            "experiment: e\nbase_config: stream_small\nruns:\n  - id: a\n"
+        )
+        with _pytest.raises(SystemExit):
+            main([str(manifest), "--concurrent", "3", "--parallel-gpus", "2"])
+        assert "pick one" in capsys.readouterr().err
+
+    def test_concurrent_dispatches_without_pinning(self, tmp_path, monkeypatch):
+        """Every launch in shared-GPU mode inherits the parent's visibility
+        (gpu=None) and at most N run at once."""
+        import threading
+
+        import run_experiment as re_mod
+
+        manifest = tmp_path / "m.yaml"
+        manifest.write_text(
+            "experiment: e\nbase_config: stream_small\noutput_root: "
+            f"{tmp_path / 'runs'}\nseeds: [1, 2, 3, 4]\nruns:\n  - id: a\n"
+        )
+        seen: list[int | None] = []
+        active = {"n": 0, "peak": 0}
+        lock = threading.Lock()
+
+        def fake_launch(run, base_config, resume=False, nproc=1, gpu=None):
+            with lock:
+                seen.append(gpu)
+                active["n"] += 1
+                active["peak"] = max(active["peak"], active["n"])
+            import time as _t
+
+            _t.sleep(0.05)
+            run.run_dir.mkdir(parents=True, exist_ok=True)
+            (run.run_dir / "run_summary.json").write_text("{}")
+            re_mod._write_status(run, "done", exit_code=0)
+            with lock:
+                active["n"] -= 1
+            return 0
+
+        monkeypatch.setattr(re_mod, "launch", fake_launch)
+        code = re_mod.main([str(manifest), "--concurrent", "2", "--no-preflight"])
+        assert code == 0
+        assert seen == [None] * 4
+        assert active["peak"] <= 2

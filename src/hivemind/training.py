@@ -27,14 +27,15 @@ from .controller.config import (
     DebugConfig,
     PolicyConfig,
     RepetitionConfig,
+    RetrievalConfig,
     StabilityConfig,
     SurpriseConfig,
     WriterConfig,
 )
 from .controller.consolidation import ConsolidationScheduler
 from .controller.module_index import ModuleId, build_module_index
-from .controller.policy import RFPPolicy
-from .controller.signals import SignalComputer
+from .controller.policy import RFPPolicy, StoreAction
+from .controller.signals import ModuleSignals, SignalComputer
 from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
 from .data.collate import EmptyBatchError
@@ -253,7 +254,69 @@ def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
         writer=WriterConfig(**_sub_config(ctrl, "writer")),
         ablation=AblationConfig(**_sub_config(ctrl, "ablation")),
         debug=DebugConfig(**_sub_config(ctrl, "debug")),
+        retrieval=RetrievalConfig(**_sub_config(ctrl, "retrieval")),
     )
+
+
+def _capture_replay_sample(
+    batch: dict[str, Any], dist: DistContext, device: torch.device
+) -> dict[str, Any]:
+    """Representative row (row 0) of the batch, for R-store replay.
+
+    Mirrors the choice already made for ``bucket_id`` / ``embedding``: row 0
+    of the global batch. Under DDP that row lives on rank 0 only (contiguous
+    sharding), and each rank pads to its own shard's length, so the row is
+    broadcast from rank 0 — unconditionally, every step, so the collective
+    can never depend on a per-rank decision. Tensors are returned on CPU;
+    the R-store keeps them there.
+
+    ``kd_row_mask`` is ``None`` on the synthetic path (the replay computes KD
+    against the live teacher, as the main step does) and ``0.0`` for HF
+    batches: cached logits are not stored, so a replayed HF row is CE-only.
+    """
+    ids = batch["input_ids"]
+    labels = batch.get("labels")
+    conf = batch.get("teacher_confidence")
+    kd_row_mask = None if batch.get("teacher_logits") is None else 0.0
+    if dist.enabled:
+        T = int(ids.shape[1]) if dist.is_main else 0
+        has_labels = labels is not None
+        conf_val = None
+        if dist.is_main and isinstance(conf, torch.Tensor) and conf.numel() > 0:
+            conf_val = float(conf[0].item())
+        T, has_labels, kd_row_mask, conf_val = dist.broadcast_obj(
+            (T, has_labels, kd_row_mask, conf_val), src=0
+        )
+        coll = dist._coll_device()
+        row_ids = (
+            ids[0].detach().to(coll)
+            if dist.is_main
+            else torch.empty(T, dtype=torch.long, device=coll)
+        )
+        dist.broadcast_tensor_(row_ids)
+        row_labels = None
+        if has_labels:
+            row_labels = (
+                labels[0].detach().to(coll)
+                if dist.is_main
+                else torch.empty(T, dtype=torch.long, device=coll)
+            )
+            dist.broadcast_tensor_(row_labels)
+        return {
+            "input_ids": row_ids.cpu(),
+            "labels": None if row_labels is None else row_labels.cpu(),
+            "kd_row_mask": kd_row_mask,
+            "teacher_confidence": conf_val,
+        }
+    conf_val = None
+    if isinstance(conf, torch.Tensor) and conf.numel() > 0:
+        conf_val = float(conf[0].item())
+    return {
+        "input_ids": ids[0].detach().cpu(),
+        "labels": None if labels is None else labels[0].detach().cpu(),
+        "kd_row_mask": kd_row_mask,
+        "teacher_confidence": conf_val,
+    }
 
 
 def run_training_loop(
@@ -337,11 +400,22 @@ def run_training_loop(
                 f"[warn] teachers.teacher_ids has no entry for {missing_ids}; "
                 "those domains can only route by domain name."
             )
+        # Corrupted-teacher stream (T4): register the tag as its own cache
+        # teacher (same domain, distinct name) so MetadataRouter resolves it
+        # by name and every decision / R entry is attributed to it.
+        corrupt_raw = _as_container(cfg.data.get("corrupt_teacher")) or {}
+        extra_teachers = (
+            [(str(corrupt_raw.get("tag", "math_teacher_corrupted")),
+              str(corrupt_raw.get("domain", "math")))]
+            if corrupt_raw.get("enabled")
+            else []
+        )
         teachers = create_hf_cache_teachers(
             domains=domains,
             teacher_ids=teacher_ids,
             vocab_size=cfg.model.vocab_size,
             device=device,
+            extra=extra_teachers,
         )
     else:
         num_teachers = teachers_cfg.get("num_teachers", 2)
@@ -371,9 +445,12 @@ def run_training_loop(
 
     # Router
     if router_kind == "metadata":
-        domain_to_index = {
-            getattr(t.model, "domain", ""): i for i, t in enumerate(registry.teachers)
-        }
+        # First teacher wins per domain: the corrupted tag shares a domain
+        # with the clean teacher, and a row with an unknown teacher_id must
+        # fall back to the CLEAN one.
+        domain_to_index: dict[str, int] = {}
+        for i, t in enumerate(registry.teachers):
+            domain_to_index.setdefault(getattr(t.model, "domain", ""), i)
         # Live teachers: a routing miss silently distils a domain through the
         # wrong expert, so refuse. Cache teachers all return zeros, so a miss
         # cannot change the loss — keep the tolerant fallback there.
@@ -449,11 +526,15 @@ def run_training_loop(
         ctrl_config.policy,
         ablation=ctrl_config.ablation,
         override=ctrl_config.debug.policy_override,
+        debug=ctrl_config.debug,
+        seed=int(seed),
     )
     controller_enabled = ctrl_config.enabled
     masked_updates = masked_updates and controller_enabled
     p_store_disabled = "P" in ctrl_config.ablation.disable_stores
     force_steps = set(ctrl_config.debug.force_consolidate_steps)
+    replay_cfg = ctrl_config.retrieval
+    replay_enabled = bool(replay_cfg.replay_on_hit) and controller_enabled
 
     if masked_updates:
         # Controller-indexed params (attn/ffn base + LoRA) default to closed;
@@ -461,6 +542,28 @@ def run_training_loop(
         optimizer.register_controller_params(
             p for m in module_index for p in m.params
         )
+
+    # Budget accounting (T7). ``indexed_coords`` is the denominator of the
+    # active fraction; with masking off (controller disabled, or
+    # optim.masked=false) every TRAINABLE indexed coordinate is open every
+    # step and every trainable BASE coordinate is a permanent write.
+    indexed_coords = sum(m.num_params for m in module_index)
+    unmasked_open_coords = (
+        0
+        if masked_updates
+        else sum(p.numel() for m in module_index for p in m.params if p.requires_grad)
+    )
+    unmasked_base_coords = (
+        0
+        if masked_updates
+        else sum(
+            p.numel()
+            for m in module_index
+            if m.id.param_type == "P"
+            for p in m.params
+            if p.requires_grad
+        )
+    )
 
     # Stores
     r_store = RetrievalStore(max_size=ctrl_config.repetition.buffer_size)
@@ -498,7 +601,17 @@ def run_training_loop(
         keep_tagged=int(ckpt_cfg_raw.get("keep_tagged", 4)),
         resume_from=ckpt_cfg_raw.get("resume_from"),
         allow_partial_load=bool(ckpt_cfg_raw.get("allow_partial_load", False)),
+        save_before_phases=[
+            str(p) for p in (_as_container(ckpt_cfg_raw.get("save_before_phases")) or [])
+        ],
     )
+    # ``train.skip_step_ranges: [[lo, hi], ...]`` — steps consumed but not
+    # trained on (E5's full-restore counterfactual). The stream digest does
+    # not cover it on purpose: the batch sequence is unchanged.
+    skip_ranges: list[tuple[int, int]] = [
+        (int(lo), int(hi))
+        for lo, hi in (_as_container(train_cfg.get("skip_step_ranges")) or [])
+    ]
     # Only rank 0 writes: the tmp->rename->symlink sequence is not safe to
     # run concurrently against one directory. Every rank still loads.
     ckpt_manager = CheckpointManager(ckpt_cfg, is_main=is_main)
@@ -564,6 +677,10 @@ def run_training_loop(
         lora_sparsity_threshold=float(eval_cfg_raw.get("lora_sparsity_threshold", 1e-4)),
         at_phase_boundaries=bool(eval_cfg_raw.get("at_phase_boundaries", True)),
         on_consolidation=bool(eval_cfg_raw.get("on_consolidation", False)),
+        interval_by_phase={
+            str(k): int(v)
+            for k, v in (_as_container(eval_cfg_raw.get("interval_by_phase")) or {}).items()
+        },
         exact_match_enabled=bool(em_raw.get("enabled", False)),
         exact_match_domains=list(em_raw.get("domains", ["math"])),
         exact_match_samples=int(em_raw.get("num_samples", 64)),
@@ -735,6 +852,15 @@ def run_training_loop(
                     "Resuming would silently change the data order."
                 )
             dataloader.batch_sampler.start_step = start_step
+            saved_skip = (meta.get("extra") or {}).get("skip_step_ranges")
+            if saved_skip is not None and [list(r) for r in skip_ranges] != [
+                list(r) for r in saved_skip
+            ]:
+                print(
+                    f"[warn] train.skip_step_ranges changed since the checkpoint "
+                    f"({saved_skip} -> {skip_ranges}); the stream order is unchanged "
+                    "but the trained steps differ."
+                )
         saved_ws = int((meta.get("extra") or {}).get("world_size", 1))
         if saved_ws != dist.world_size and not dist.cfg.allow_world_size_change:
             raise RuntimeError(
@@ -748,6 +874,40 @@ def run_training_loop(
         )
         if is_main:
             print(f"Resumed from {resume_path} at step {start_step}.")
+
+        # Selective rollback (T5): a blocked teacher's *tentative* evidence
+        # must not survive the restore either — a later, clean P action
+        # would merge the whole adapter, corrupted rows included. Every
+        # F-module whose pending attribution is dominated by a blocked
+        # teacher is reset (adapter re-initialised, its optimizer state
+        # zeroed, its consolidation flag dropped, its attribution cleared).
+        blocked_teachers = list(ctrl_config.debug.block_p_for_teachers)
+        if blocked_teachers:
+            for mid in consolidator.all_f_modules():
+                name = str(mid)
+                share = sum(
+                    ledger.attribution_share(name, t) for t in blocked_teachers
+                )
+                if share < ctrl_config.debug.block_min_share:
+                    continue
+                attribution = ledger.clear_pending(name)
+                adapters = consolidator._get_lora_adapters(mid)
+                for ad in adapters:
+                    ad.reset_lora()
+                optimizer.reset_state_for_params(
+                    [p for ad in adapters for p in ad.lora_params]
+                )
+                consolidator.unflag(mid)
+                consolidator._sync_after_merge(mid)
+                event_trace.emit(
+                    {
+                        "type": "rollback_reset",
+                        "step": start_step,
+                        "module": name,
+                        "attribution": attribution,
+                        "blocked_teachers": blocked_teachers,
+                    }
+                )
 
     # One self-describing config event per (re)start so the trace can be
     # analyzed without the Hydra config at hand.
@@ -766,21 +926,59 @@ def run_training_loop(
                 "disable_stores": list(ctrl_config.ablation.disable_stores),
                 "use_teacher_confidence": ctrl_config.ablation.use_teacher_confidence,
             },
+            "policy_mode": ctrl_config.policy.mode,
+            "policy_override": ctrl_config.debug.policy_override,
+            "adam_score_high": ctrl_config.policy.adam_score_high,
             "thresholds": {
                 "surprise_high": ctrl_config.policy.surprise_high,
                 "repetition_low": ctrl_config.policy.repetition_low,
                 "repetition_medium": ctrl_config.policy.repetition_medium,
                 "stability_high_C": ctrl_config.policy.stability_high_C,
                 "stability_low_V": ctrl_config.policy.stability_low_V,
+                "stability_source": ctrl_config.policy.stability_source,
             },
             "consolidation": {
                 "period": ctrl_config.consolidation.period,
                 "min_repetition": ctrl_config.consolidation.min_repetition,
                 "min_stability_C": ctrl_config.consolidation.min_stability_C,
+                "stability_mode": ctrl_config.consolidation.stability_mode,
                 "strategy": ctrl_config.consolidation.merge_strategy,
+                "trigger": ctrl_config.consolidation.trigger,
+                "plateau_window": ctrl_config.consolidation.plateau_window,
+                "plateau_tolerance": ctrl_config.consolidation.plateau_tolerance,
             },
+            "retrieval": {
+                "replay_on_hit": replay_enabled,
+                "hit_threshold": replay_cfg.hit_threshold,
+                "replay_batches": replay_cfg.replay_batches,
+            },
+            "corrupt_teacher": (
+                {
+                    **stream_schedule.corruption.digest_payload(),
+                    "corrupted_rows": len(stream_schedule.corrupted_indices),
+                    "corrupted_rows_by_phase": dict(
+                        stream_schedule.corrupted_rows_by_phase
+                    ),
+                }
+                if stream_schedule is not None and stream_schedule.corruption is not None
+                else None
+            ),
         }
     )
+
+    if ctrl_config.debug.block_p_for_teachers:
+        _blocked = list(ctrl_config.debug.block_p_for_teachers)
+        _min_share = ctrl_config.debug.block_min_share
+
+        def _is_blocked(mid: ModuleId) -> bool:
+            return (
+                sum(ledger.attribution_share(str(mid), t) for t in _blocked) >= _min_share
+            )
+
+        consolidator.blocked = _is_blocked
+
+    if stream_schedule is not None and skip_ranges:
+        dataloader.batch_sampler.skip_ranges = list(skip_ranges)
 
     data_iter = iter(dataloader)
 
@@ -859,6 +1057,11 @@ def run_training_loop(
             tag="pre_merge",
             extra={
                 "reason": "pre_merge",
+                "pending_modules": sorted(str(m) for m in consolidator.pending_p),
+                "attribution": {
+                    str(m): ledger.pending_attribution(str(m))
+                    for m in sorted(consolidator.pending_p, key=str)
+                },
                 **(
                     {
                         "stream_digest": stream_schedule.config_digest(),
@@ -911,10 +1114,31 @@ def run_training_loop(
                             {"type": "phase_memory", "step": step - 1, **mem}
                         )
                 event_trace.emit(
-                    {"type": "phase_start", "step": step, "phase": phase_name}
+                    {
+                        "type": "phase_start",
+                        "step": step,
+                        "phase": phase_name,
+                        "corrupted_rows": int(
+                            stream_schedule.corrupted_rows_by_phase.get(phase_name, 0)
+                        ),
+                    }
                 )
                 profiler.on_phase_start(phase_name)
                 current_phase = phase_name
+
+        # Steps inside train.skip_step_ranges are consumed by the sampler
+        # (not yielded) and not trained on: no forward, no eval, no
+        # checkpoint — the phase simply never happened to this model.
+        if stream_schedule is not None and dataloader.batch_sampler.is_skipped(step):
+            event_trace.emit(
+                {"type": "skipped_step", "step": step, "reason": "skip_range"}
+            )
+            profiler.step_end(tokens_in_step=0)
+            last_step = step
+            if dist.all_reduce_max_int(1 if _interrupted["flag"] else 0):
+                _interrupted["flag"] = True
+                break
+            continue
 
         # Get batch
         raw = None
@@ -1094,6 +1318,12 @@ def run_training_loop(
             conf_count=conf_count,
             conf_local_mean=conf_local_mean,
         )
+        # Representative row for R-store replay (T2). Captured every step
+        # when replay is on — under DDP it is a collective, and a collective
+        # must not sit behind a branch on the (not yet computed) actions.
+        replay_sample = (
+            _capture_replay_sample(batch, dist, device) if replay_enabled else None
+        )
 
         with profiler.timer.section("signals"):
             module_signals = (
@@ -1107,15 +1337,6 @@ def run_training_loop(
                 else {}
             )
 
-        # === Step 9: R/F/P routing policy ===
-        policy_section = profiler.timer.section("policy_write")
-        policy_section.__enter__()
-        actions = (
-            policy.decide(module_signals, teacher_confidence=conf_mean)
-            if controller_enabled
-            else []
-        )
-
         # Resolve the teacher info for the representative (first) sample —
         # mirrors the choice already made for ``embedding`` and ``bucket_id``
         # above so the R-store entry is consistent. Theory 101 §7 lists
@@ -1123,12 +1344,32 @@ def run_training_loop(
         teacher_idx_repr = (
             int(teacher_indices[0].item()) if teacher_indices.numel() > 0 else 0
         )
+        # Rank 0's first row is the global batch's first row; the index feeds
+        # the (rank-0-checkpointed) ledger, so every rank must carry it.
+        teacher_idx_repr = dist.broadcast_int(teacher_idx_repr)
         teacher_name_repr = ""
         if 0 <= teacher_idx_repr < len(registry.teachers):
             teacher_name_repr = str(registry.teachers[teacher_idx_repr].name)
         teacher_text_repr = ""
         if meta and meta.get("teacher_output_text"):
             teacher_text_repr = str(meta["teacher_output_text"][0] or "")
+
+        # === Step 9: R/F/P routing policy ===
+        policy_section = profiler.timer.section("policy_write")
+        policy_section.__enter__()
+        actions = (
+            policy.decide(
+                module_signals,
+                teacher_confidence=conf_mean,
+                step=step,
+                phase=current_phase,
+                teacher_name=teacher_name_repr if teacher_name_repr else None,
+                teacher_index=teacher_idx_repr,
+                num_teachers=len(registry.teachers),
+            )
+            if controller_enabled
+            else []
+        )
 
         # === Step 10: Execute writes (build open-authorization masks) ===
         write_metrics, write_masks = writer.execute(
@@ -1140,13 +1381,18 @@ def run_training_loop(
             teacher_id=teacher_idx_repr,
             teacher_name=teacher_name_repr,
             teacher_output_text=teacher_text_repr,
+            sample=replay_sample,
         )
 
         # Trace every routing decision + update the per-module ledger.
         action_by_module = {str(a.module_id): a for a in actions}
         for det in write_metrics["actions"]:
             ledger.record_action(
-                det["module"], det["store"], step, det["coords_opened"]
+                det["module"],
+                det["store"],
+                step,
+                det["coords_opened"],
+                teacher=teacher_name_repr,
             )
             act = action_by_module.get(det["module"])
             if act is None:
@@ -1185,6 +1431,7 @@ def run_training_loop(
             (
                 step,
                 bucket_id,
+                teacher_name_repr,
                 None if conf_mean is None else round(conf_mean, 12),
                 tuple(
                     (d["module"], d["store"], d["coords_opened"])
@@ -1208,6 +1455,183 @@ def run_training_loop(
                 # next step.
                 optimizer.clear_masks()
 
+        # === Step 11b: R-store replay (deferral, not deletion) ===
+        # When the current bucket has been parked in R on enough EARLIER
+        # steps and the controller now routes it somewhere other than R (the
+        # pattern has started recurring), the parked representative rows are
+        # replayed into the fast store as extra F micro-steps INSIDE this
+        # step index. Running them here rather than substituting the next
+        # stream batch keeps ``step == stream index``, which the phase map,
+        # eval schedule, force_consolidate_steps, checkpoints and DDP
+        # sharding all rely on. The queue is drained within the step, so no
+        # replay state survives a step boundary except the R-store itself
+        # (already checkpointed). Trigger inputs are all rank-synced.
+        replayed: list[tuple[int, tuple[tuple[str, int], ...]]] = []
+        replay_coords = 0
+        if replay_enabled and write_metrics["actions"]:
+            with profiler.timer.section("replay"):
+                eligible = [
+                    s for s in r_store.distinct_steps_for_bucket(bucket_id) if s < step
+                ]
+                any_non_r = any(d["store"] != "R" for d in write_metrics["actions"])
+                if len(eligible) >= replay_cfg.hit_threshold and any_non_r:
+                    for entry in r_store.pop_for_bucket(
+                        bucket_id, replay_cfg.replay_batches
+                    ):
+                        if entry.input_ids is None:
+                            continue  # parked before replay was enabled
+                        rep_tokens = entry.input_ids.to(device).unsqueeze(0)
+                        rep_labels = (
+                            entry.labels.to(device).unsqueeze(0)
+                            if entry.labels is not None
+                            else None
+                        )
+                        rep_tidx = torch.tensor([int(entry.teacher_id)], device=device)
+                        rep_mask = (
+                            None
+                            if entry.kd_row_mask is None
+                            else torch.tensor([float(entry.kd_row_mask)], device=device)
+                        )
+                        rep_conf = (
+                            None
+                            if entry.teacher_confidence is None
+                            else torch.tensor(
+                                [float(entry.teacher_confidence)], device=device
+                            )
+                        )
+                        rep_teacher_logits = batch_teacher_forward(
+                            rep_tokens, rep_tidx, registry.teachers, cfg.model.vocab_size
+                        )
+                        optimizer.zero_grad()
+                        with autocast_ctx:
+                            rep_logits = model_fwd(rep_tokens)
+                            rep_reg = compute_total_regularization(
+                                student, reg_config, consistency_forward=None
+                            )
+                            rep_loss, _rep_loss_metrics = compute_distillation_objective(
+                                teacher_logits=rep_teacher_logits,
+                                student_logits=rep_logits,
+                                targets=rep_tokens,
+                                config=distill_config,
+                                reg_loss=rep_reg,
+                                labels=rep_labels,
+                                teacher_logits_mask=rep_mask,
+                                teacher_confidence=rep_conf,
+                            )
+                        scaler.scale(rep_loss).backward()
+                        scaler.unscale_(optimizer)
+                        # Top-M F-type modules by raw gradient norm — a pure
+                        # function of the grads; no stateful tracker sees
+                        # the replay. Base (P-type) modules are excluded:
+                        # replay_target is the fast store.
+                        rep_signals: dict[ModuleId, ModuleSignals] = {}
+                        for m in module_index:
+                            if m.id.param_type != "F":
+                                continue
+                            grads = [
+                                p.grad.detach().flatten()
+                                for p in m.params
+                                if p.grad is not None
+                            ]
+                            if not grads:
+                                continue
+                            rep_signals[m.id] = ModuleSignals(
+                                module_id=m.id,
+                                grad_norm=torch.cat(grads).norm().item(),
+                            )
+                        rep_actions = [
+                            StoreAction(module_id=s.module_id, store="F", grad_norm=s.grad_norm)
+                            for s in policy.select_top_m(rep_signals)
+                        ]
+                        rep_write_metrics, rep_masks = writer.execute(
+                            actions=rep_actions, module_map=module_map, step=step
+                        )
+                        if masked_updates:
+                            optimizer.set_masks(rep_masks)
+                        try:
+                            scaler.step(optimizer)
+                            scaler.update()
+                        finally:
+                            optimizer.clear_masks()
+                        replay_coords += int(rep_write_metrics["coords_opened"])
+                        for det in rep_write_metrics["actions"]:
+                            ledger.record_action(
+                                det["module"],
+                                det["store"],
+                                step,
+                                det["coords_opened"],
+                                replay=True,
+                                teacher=entry.teacher_name,
+                            )
+                            # A distinct event type: ``decision`` records stay
+                            # one-per-Top-M-module-per-step and the action
+                            # shares (the source of random_routing's budget)
+                            # stay uncontaminated.
+                            event_trace.emit(
+                                {
+                                    "type": "replay",
+                                    "step": step,
+                                    "origin_step": int(entry.step),
+                                    "module": det["module"],
+                                    "action": det["store"],
+                                    "coords_opened": det["coords_opened"],
+                                    "bucket_id": bucket_id,
+                                    "teacher": entry.teacher_name,
+                                }
+                            )
+                        replayed.append(
+                            (
+                                int(entry.step),
+                                tuple(
+                                    (d["module"], d["coords_opened"])
+                                    for d in rep_write_metrics["actions"]
+                                ),
+                            )
+                        )
+            dist.assert_rank_consistent(
+                (step, "replay", tuple(replayed)), what="replay decisions"
+            )
+        replay_count = len(replayed)
+
+        # Gradient-routing ablation (T6): kill one teacher's rank slice.
+        # After the optimizer step and before this step's checkpoint, so a
+        # save at this step already contains it and a resume never repeats
+        # it. No RNG, identical on every rank.
+        ablate = ctrl_config.debug.ablate_teacher_slice
+        if ablate is not None and step == ablate["step"]:
+            names = [t.name for t in registry.teachers]
+            if ablate["teacher"] not in names:
+                raise ValueError(
+                    f"ablate_teacher_slice.teacher={ablate['teacher']!r} is not a "
+                    f"registered teacher ({names})"
+                )
+            t_idx = names.index(ablate["teacher"])
+            zeroed = 0
+            with torch.no_grad():
+                for mid in consolidator.all_f_modules():
+                    for ad in consolidator._get_lora_adapters(mid):
+                        mask_a, mask_b = f_store.compute_slice_masks(
+                            ad, t_idx, len(registry.teachers)
+                        )
+                        ad.lora_a.masked_fill_(mask_a, 0)
+                        ad.lora_b.masked_fill_(mask_b, 0)
+                        optimizer.reset_state_for_coords(ad.lora_a, mask_a)
+                        optimizer.reset_state_for_coords(ad.lora_b, mask_b)
+                        zeroed += int(mask_a.sum().item()) + int(mask_b.sum().item())
+            event_trace.emit(
+                {
+                    "type": "ablation",
+                    "step": step,
+                    "teacher": ablate["teacher"],
+                    "teacher_index": t_idx,
+                    "coords_zeroed": zeroed,
+                }
+            )
+        ledger.record_step(
+            write_metrics["coords_opened"] + replay_coords + unmasked_open_coords,
+            unmasked_base_coords,
+        )
+
         # Tier 2: catch drift that has not yet flipped a discrete decision.
         every = dist.cfg.assert_rank_consistency
         if every and step % every == 0:
@@ -1221,15 +1645,33 @@ def run_training_loop(
         consolidator.record_batch(tokens)
         consolidated = []
 
-        def _trace_merges(mids: list[ModuleId], forced: bool) -> None:
+        def _trace_merges(
+            mids: list[ModuleId], forced: bool, trigger: str = "signals"
+        ) -> None:
             for mid in mids:
-                ledger.record_consolidation(str(mid), step)
+                # A merge rewrites the block's base weights wholesale: its
+                # permanent-write cost is the base numel of the paired P
+                # module (Figure 1's budget axis).
+                base_mod = module_map.get(ModuleId(mid.layer, mid.block_type, "P"))
+                merged_coords = base_mod.num_params if base_mod is not None else 0
+                attribution = ledger.record_consolidation(
+                    str(mid), step, merged_coords=merged_coords
+                )
+                attr_total = sum(attribution.values())
                 sig = module_signals.get(mid)
                 event_trace.emit(
                     {
                         "type": "consolidation",
                         "step": step,
                         "module": str(mid),
+                        "trigger": trigger,
+                        "merged_coords": merged_coords,
+                        "attribution": attribution,
+                        "attribution_share": (
+                            {t: c / attr_total for t, c in attribution.items()}
+                            if attr_total
+                            else {}
+                        ),
                         "strategy": ctrl_config.consolidation.merge_strategy,
                         "pre_signals": (
                             {
@@ -1252,9 +1694,12 @@ def run_training_loop(
             and not p_store_disabled
             and consolidator.should_check(step)
         ):
+            # Save before ANY merge that is about to happen — the legacy
+            # no-flags sweep merges too, and a merge without a pre_merge
+            # checkpoint cannot be rolled back.
             if (
                 ctrl_config.consolidation.checkpoint_before_merge
-                and consolidator.pending_p
+                and consolidator.select(module_signals)
             ):
                 _pre_merge_save(step)
             consolidated = consolidator.consolidate(module_signals)
@@ -1266,8 +1711,28 @@ def run_training_loop(
             if ctrl_config.consolidation.checkpoint_before_merge:
                 _pre_merge_save(step)
             forced_merged = consolidator.force_consolidate()
-            _trace_merges(forced_merged, forced=True)
+            _trace_merges(forced_merged, forced=True, trigger="forced")
             consolidated = consolidated + forced_merged
+
+        # Loss-plateau trigger (Online-LoRA-style baseline). Deliberately
+        # outside the ``controller_enabled`` gates: the `plateau_trigger`
+        # spec runs with the controller off and every adapter open. Every
+        # rank feeds its own shard loss to the detector, but only rank 0's
+        # verdict counts (per-rank losses differ), agreed through one int
+        # collective, and the window is reset everywhere on a fire.
+        if ctrl_config.consolidation.trigger == "plateau" and not p_store_disabled:
+            fired_local = consolidator.plateau_fired(
+                float(loss_metrics.get("loss/total", 0.0)), step
+            )
+            fire = dist.all_reduce_max_int(1 if (fired_local and is_main) else 0)
+            if fire:
+                if consolidator.plateau is not None:
+                    consolidator.plateau.reset(step)
+                if ctrl_config.consolidation.checkpoint_before_merge:
+                    _pre_merge_save(step)
+                plateau_merged = consolidator.force_consolidate()
+                _trace_merges(plateau_merged, forced=False, trigger="plateau")
+                consolidated = consolidated + plateau_merged
         consolidation_section.__exit__(None, None, None)
 
         # === Step 13: Logging ===
@@ -1284,6 +1749,7 @@ def run_training_loop(
                 "write/f_count": write_metrics["f_count"],
                 "write/p_count": write_metrics["p_count"],
                 "write/coords_opened": write_metrics["coords_opened"],
+                "write/replay_count": replay_count,
                 "signals/surprise_mean": sum(surprises) / max(len(surprises), 1),
                 "signals/repetition_mean": sum(repetitions) / max(len(repetitions), 1),
                 "signals/stability_C_mean": sum(stabilities) / max(len(stabilities), 1),
@@ -1318,10 +1784,13 @@ def run_training_loop(
             )
             if next_differs or step == steps - 1:
                 boundary_phase = stream_schedule.phase_at(step)
+        eval_interval = eval_config.interval_by_phase.get(
+            current_phase or "", eval_config.interval
+        )
         interval_due = (
-            eval_config.interval > 0
+            eval_interval > 0
             and step > 0
-            and (step % eval_config.interval == 0 or step == steps - 1)
+            and (step % eval_interval == 0 or step == steps - 1)
         )
         consolidation_due = bool(consolidated) and eval_config.on_consolidation
         if (
@@ -1427,6 +1896,39 @@ def run_training_loop(
                 pbar.set_postfix_str(f"val_loss={macro:.3f}", refresh=False)
             dist.barrier()
 
+        # Tagged ``pre_phase_<name>`` save at the last step before a listed
+        # phase (after the boundary eval, so the tracker state is complete).
+        if (
+            ckpt_cfg.enabled
+            and ckpt_cfg.save_before_phases
+            and stream_schedule is not None
+            and step + 1 < steps
+        ):
+            next_phase = stream_schedule.phase_at(step + 1).name
+            if next_phase != current_phase and next_phase in ckpt_cfg.save_before_phases:
+                event_trace.flush()
+                ckpt_manager.save(
+                    step=step,
+                    student=student,
+                    optimizer=optimizer,
+                    signal_computer=signal_computer,
+                    r_store=r_store,
+                    consolidator=consolidator,
+                    forgetting=forgetting_tracker,
+                    ledger=ledger,
+                    sampler=data_sampler,
+                    phase_eval=phase_tracker,
+                    tag=f"pre_phase_{next_phase}",
+                    extra={
+                        "reason": "pre_phase",
+                        "phase": next_phase,
+                        "stream_digest": stream_schedule.config_digest(),
+                        "world_size": dist.world_size,
+                        "skip_step_ranges": [list(r) for r in skip_ranges],
+                    },
+                )
+                dist.barrier()
+
         # Checkpoint
         if (
             ckpt_cfg.enabled
@@ -1452,6 +1954,7 @@ def run_training_loop(
                         {
                             "stream_digest": stream_schedule.config_digest(),
                             "world_size": dist.world_size,
+                            "skip_step_ranges": [list(r) for r in skip_ranges],
                         }
                         if stream_schedule is not None
                         else {}
@@ -1483,21 +1986,57 @@ def run_training_loop(
     if current_phase is not None:
         profiler.on_phase_end(current_phase)
     if run_dir is not None and is_main:
+        totals = ledger.totals()
+        permanent_writes = {
+            "p_action_coords": int(totals.get("p_coords_opened", 0)),
+            "merged_coords": int(totals.get("merged_coords", 0)),
+            "unmasked_base_coords_total": int(totals.get("unmasked_base_coords", 0)),
+        }
+        permanent_writes["total"] = sum(permanent_writes.values())
+        trained_steps = int(totals.get("steps", 0))
         write_run_summary(
             run_dir,
             profiler=profiler,
             final_metrics=final_metrics,
             retention=phase_tracker.retention_table() if phase_tracker else None,
-            ledger_totals=ledger.totals(),
-            interrupted=bool(_interrupted["flag"]),
-            extra=(
-                {
-                            "stream_digest": stream_schedule.config_digest(),
-                            "world_size": dist.world_size,
-                        }
-                if stream_schedule is not None
-                else None
+            ledger_totals={**totals, "teachers": ledger.teacher_summary()},
+            permanent_writes=permanent_writes,
+            indexed_coords=indexed_coords,
+            active_fraction_mean=(
+                totals.get("coords_opened", 0) / (trained_steps * indexed_coords)
+                if trained_steps and indexed_coords
+                else 0.0
             ),
+            interrupted=bool(_interrupted["flag"]),
+            extra={
+                **(
+                    {
+                        "stream_digest": stream_schedule.config_digest(),
+                        "world_size": dist.world_size,
+                    }
+                    if stream_schedule is not None
+                    else {}
+                ),
+                "retrieval": {
+                    "replay_on_hit": replay_enabled,
+                    "replayed_total": int(r_store.replayed_total),
+                    "buffer_size": int(r_store.size),
+                },
+                **(
+                    {
+                        "corrupt_teacher": {
+                            **stream_schedule.corruption.digest_payload(),
+                            "corrupted_rows": len(stream_schedule.corrupted_indices),
+                            "corrupted_rows_by_phase": dict(
+                                stream_schedule.corrupted_rows_by_phase
+                            ),
+                        }
+                    }
+                    if stream_schedule is not None
+                    and stream_schedule.corruption is not None
+                    else {}
+                ),
+            },
         )
 
     event_trace.close()

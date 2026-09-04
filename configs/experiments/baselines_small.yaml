@@ -1,13 +1,31 @@
-# Group A — baselines on the small-profile stream (paper Table 1 analogue).
-#   python scripts/run_experiment.py configs/experiments/baselines_small.yaml
+# E1 — controller comparison on the small-profile stream (the paper's
+# make-or-break experiment; reframe §5 E1, task T3/T8).
+#
+# Same stream, same student, same LoRA budget; only the write policy varies.
+# Run order (the random_routing control needs trihope's action shares):
+#   python scripts/run_experiment.py configs/experiments/baselines_small.yaml --only trihope
+#   python -m analysis.run_report runs/baselines_small_v1
+#   python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resume
 experiment: baselines_small_v1
 base_config: stream_small
 output_root: runs
-seeds: [1337]                 # 1-seed validation pass first; rerun with [1337, 2024, 7]
+seeds: [1337, 2024, 7]
 cleanup_checkpoints: keep_final
 runs:
   - id: trihope
-    overrides: []
+    # Full R/F/P from m/v, with the R tier as a DEFERRAL (parked rows are
+    # replayed into F on recurrence — T2). This is the headline controller.
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+  - id: trihope_no_hash
+    # Headline candidate #2: recurrence from label-free evidence only
+    # (momentum cosine + retrieval hits); the bucket-id frequency counter —
+    # dataset metadata, and for novel batches a unique id handed over by the
+    # schedule itself — is switched off. If this matches trihope, the
+    # "reading the optimizer" claim survives the metadata-oracle objection.
+    overrides:
+      - controller.retrieval.replay_on_hit=true
+      - controller.ablation.disable_signals=[repetition_hash]
   - id: full_ft
     overrides:
       - controller.enabled=false
@@ -18,15 +36,64 @@ runs:
       - controller.enabled=false
       - train.trainable=lora
   - id: no_retrieval
+    # R branch disabled — R-routed batches fall through to F.
     overrides:
       - controller.ablation.disable_stores=[R]
   - id: no_consolidation
+    # P branch + periodic sweep disabled; R still defers/replays.
     overrides:
+      - controller.retrieval.replay_on_hit=true
       - controller.ablation.disable_stores=[P]
+  - id: surprise_gate
+    # Titans-style: route on surprise alone (R if high, F otherwise; never
+    # P). Replay on, so its R tier means the same thing as trihope's.
+    overrides:
+      - controller.policy.mode=surprise_only
+      - controller.retrieval.replay_on_hit=true
+  - id: molf_style
+    # MoLF-style two-tier routing (arXiv:2605.07111): per block the dense
+    # expert (base weights) and the LoRA expert compete on the expected
+    # preconditioned descent score Σ m²/(√v+ε)/N and the winner alone
+    # updates (P = base fully, F = the whole adapter); every block routes
+    # every step; no R tier, no merge, no TriHOPE confidence gate (it would
+    # demote MoLF's P to F on low-confidence medical rows). Not reproduced:
+    # MoLF's "universal momentum tracking" (losers' moments keep advancing
+    # on a shared clock) — Theorem 1 keeps closed coordinates untouched.
+    overrides:
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=epd_argmax
+      - controller.writer.top_k_fraction=1.0
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: plateau_trigger
+    # Online-LoRA-style (Wei et al., WACV 2025): every adapter always open;
+    # when the training loss plateaus AFTER a loss peak (window 200, tol 1 %,
+    # peak = window mean up by > its std), merge every adapter into base and
+    # start fresh adapters (the merge re-initialises them).
+    overrides:
+      - controller.enabled=false
+      - train.trainable=lora
+      - controller.consolidation.trigger=plateau
+      - controller.consolidation.plateau_window=200
+      - controller.consolidation.plateau_tolerance=0.01
+      - controller.consolidation.plateau_min_gap=200
+      - controller.consolidation.plateau_require_peak=true
+  - id: random_routing
+    # The control that proves the signals carry information: the same
+    # per-phase R/F/P shares as trihope, assignment drawn at random.
+    # Requires the trihope run + analysis.run_report to have produced the
+    # shares file first (see the run order above); a missing file falls
+    # back to uniform thirds with a warning.
+    overrides:
+      - controller.debug.policy_override=random_matched
+      - controller.debug.random_shares_path=runs/baselines_small_v1/analysis/action_share_by_phase.csv
+      - controller.debug.random_shares_spec_id=trihope
+      - controller.retrieval.replay_on_hit=true
   - id: gold_ce
     # Supervise on the dataset's own target_text wherever has_gold_label is
-    # set, instead of always distilling the teacher trace. That flag is 100%
-    # true on code and 78% on medical, so this is a genuinely different
-    # objective — reported as an ablation rather than made the default.
+    # set (100 % of code, 78 % of medical) — a different objective, kept as
+    # an ablation.
     overrides:
       - data.gold_policy=gold_when_available

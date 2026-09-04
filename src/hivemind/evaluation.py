@@ -43,6 +43,11 @@ class EvaluationConfig:
     lora_sparsity_threshold: float = 1e-4
     at_phase_boundaries: bool = True   # eval at the last step of each stream phase
     on_consolidation: bool = False     # eval right after any F→P merge
+    #: Per-phase override of ``interval`` (``{phase_name: steps}``), e.g. a
+    #: 50-step interval inside ``code_revisit`` so steps-to-recover has the
+    #: resolution the paper needs without paying for it everywhere. A pure
+    #: function of (step, phase), so every rank agrees on when eval runs.
+    interval_by_phase: dict[str, int] = field(default_factory=dict)
     # Gold-label exact-match probes (generation; phase boundaries only).
     exact_match_enabled: bool = False
     exact_match_domains: list[str] = field(default_factory=lambda: ["math"])

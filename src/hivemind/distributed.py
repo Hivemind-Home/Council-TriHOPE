@@ -217,6 +217,20 @@ class DistContext:
         dist.broadcast_object_list(box, src=src)
         return box[0]
 
+    def broadcast_int(self, value: int, src: int = 0) -> int:
+        """Rank ``src``'s integer on every rank (inert at world size 1).
+
+        Used for the representative teacher index: ``teacher_indices[0]`` is
+        rank-local (each rank's first shard row), and once it feeds the
+        ledger — checkpointed from rank 0 only — and the gradient-routing
+        slice choice, every rank must agree on it.
+        """
+        if not self.enabled:
+            return int(value)
+        t = torch.tensor([int(value)], dtype=torch.long, device=self._coll_device())
+        dist.broadcast(t, src=src)
+        return int(t.item())
+
     def all_reduce_max_int(self, value: int) -> int:
         if not self.enabled:
             return int(value)

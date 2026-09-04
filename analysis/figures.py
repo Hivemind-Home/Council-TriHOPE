@@ -67,8 +67,8 @@ def plot_action_composition(run: RunData, out: Path, window: int = 100) -> Optio
     if run.events.empty:
         return None
     decisions = run.events[run.events["type"] == "decision"]
-    if decisions.empty:
-        return None
+    if decisions.empty or "action" not in decisions.columns:
+        return None  # controller-off runs emit no decisions
     shares = (
         pd.crosstab(decisions["step"], decisions["action"])
         .reindex(columns=["R", "F", "P"], fill_value=0)
@@ -98,7 +98,7 @@ def plot_action_composition(run: RunData, out: Path, window: int = 100) -> Optio
 
 def plot_p_timeline(run: RunData, out: Path) -> Optional[Path]:
     """P decisions and consolidation events over the stream."""
-    if run.events.empty:
+    if run.events.empty or "action" not in run.events.columns:
         return None
     p_dec = run.events[
         (run.events["type"] == "decision") & (run.events["action"] == "P")
@@ -121,6 +121,86 @@ def plot_p_timeline(run: RunData, out: Path) -> Optional[Path]:
     ax.set_xlabel("step")
     ax.set_title(f"Permanent-memory timeline — {run.run_id}")
     ax.legend(fontsize=8, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
+def pareto_figure(df: pd.DataFrame, out: Path) -> Optional[Path]:
+    """Figure 1: worst retention delta (left) and new-domain loss (right)
+    against permanent writes, one marker per (spec, operating point),
+    mean ± std over seeds. The x-axis is ``symlog`` because the LoRA-only
+    controllers sit at exactly zero permanent writes.
+
+    ``df`` is the output of :func:`analysis.tables.budget_curve`.
+    """
+    if df is None or df.empty or "permanent_writes_mean" not in df.columns:
+        return None
+    loss_cols = [c for c in df.columns if c.startswith("final_loss_") and c.endswith("_mean")]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    specs = sorted(df["spec_id"].unique())
+    cmap = plt.get_cmap("tab10")
+    for i, spec in enumerate(specs):
+        sub = df[df["spec_id"] == spec]
+        x = sub["permanent_writes_mean"].to_numpy(dtype=float)
+        xerr = sub.get("permanent_writes_std", pd.Series([0.0] * len(sub))).fillna(0).to_numpy()
+        y = sub["worst_retention_delta_mean"].to_numpy(dtype=float)
+        yerr = (
+            sub.get("worst_retention_delta_std", pd.Series([0.0] * len(sub)))
+            .fillna(0)
+            .to_numpy()
+        )
+        axes[0].errorbar(
+            x, y, xerr=xerr, yerr=yerr, fmt="o", color=cmap(i % 10), label=spec, capsize=2
+        )
+        for xi, yi, tag in zip(x, y, sub["threshold_tag"]):
+            if tag:
+                axes[0].annotate(str(tag), (xi, yi), fontsize=5, alpha=0.7)
+        if loss_cols:
+            new_loss = sub[loss_cols].mean(axis=1).to_numpy(dtype=float)
+            axes[1].errorbar(x, new_loss, xerr=xerr, fmt="s", color=cmap(i % 10), label=spec)
+    for ax in axes:
+        ax.set_xscale("symlog", linthresh=1e3)
+        ax.set_xlabel("permanent writes (coordinate·steps on base weights)")
+    axes[0].set_ylabel("worst retention delta (↓)")
+    axes[0].set_title("Forgetting vs. permanent-write budget")
+    axes[1].set_ylabel("mean final eval loss (↓)")
+    axes[1].set_title("Plasticity vs. permanent-write budget")
+    axes[0].legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
+def containment_bars(df: pd.DataFrame, out: Path) -> Optional[Path]:
+    """E5 containment: per method, where the corrupted teacher's actions
+    went (R / F / P shares) and how many base coordinates it reached
+    (directly + attributed merges). ``df`` is :func:`tables.containment`."""
+    if df is None or df.empty or "r_share_mean" not in df.columns:
+        return None
+    specs = list(df["spec_id"])
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    x = range(len(specs))
+    bottom = [0.0] * len(specs)
+    for store in ("R", "F", "P"):
+        vals = df[f"{store.lower()}_share_mean"].fillna(0).to_numpy(dtype=float)
+        axes[0].bar(x, vals, bottom=bottom, color=_STORE_COLORS[store], label=store)
+        bottom = [b + v for b, v in zip(bottom, vals)]
+    axes[0].set_xticks(list(x), specs, rotation=30, ha="right", fontsize=8)
+    axes[0].set_ylabel("share of the corrupted teacher's actions (%)")
+    axes[0].set_title("Containment: where its updates went")
+    axes[0].legend(fontsize=8)
+    direct = df["coords_P_direct_mean"].fillna(0).to_numpy(dtype=float)
+    merged = df["merged_coords_attributed_mean"].fillna(0).to_numpy(dtype=float)
+    axes[1].bar(x, direct, color=_STORE_COLORS["P"], label="direct base writes")
+    axes[1].bar(x, merged, bottom=direct, color="#B279A2", label="merged (attributed)")
+    axes[1].set_xticks(list(x), specs, rotation=30, ha="right", fontsize=8)
+    axes[1].set_yscale("symlog", linthresh=1e3)
+    axes[1].set_ylabel("base coordinates reached")
+    axes[1].set_title("Permanent footprint of the corrupted teacher")
+    axes[1].legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(out, dpi=150)
     plt.close(fig)

@@ -102,6 +102,27 @@ class StabilityTracker:
         ratio = (m.pow(2) / (v + eps)).sum().item() / d_j
         return max(0.0, min(1.0, ratio))
 
+    def compute_epd(
+        self,
+        adam_m_prev: torch.Tensor,
+        adam_v_prev: torch.Tensor,
+    ) -> float:
+        """MoLF's expected preconditioned descent per parameter (arXiv:2605.07111,
+        Eq. 4, learning rate factored out): (1/d_j) · Σ m² / (√v + ε).
+
+        Read from the pre-update moments (MoLF scores the post-update ones;
+        the difference is one step of EMA) — the per-block statistic the
+        ``adam_score`` baseline's ``epd_argmax`` rule compares between the
+        dense (base) and LoRA experts of a block.
+        """
+        eps = self.config.eps
+        m = adam_m_prev.float().flatten()
+        v = adam_v_prev.float().flatten()
+        d_j = m.numel()
+        if d_j == 0:
+            return 0.0
+        return (m.pow(2) / (v.sqrt() + eps)).sum().item() / d_j
+
     def update_windowed_variance(self, grad_norm: float) -> float:
         """Windowed gradient variance: V_t(j).
 

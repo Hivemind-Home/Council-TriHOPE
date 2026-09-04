@@ -39,7 +39,7 @@ import random
 import re
 import shutil
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
@@ -65,6 +65,9 @@ class CheckpointConfig:
     keep_last: int = 3
     keep_tagged: int = 4  # cap for tagged (e.g. pre_merge rollback) dirs
     resume_from: Optional[str] = None  # "latest" | "{step}" | absolute path
+    # Tagged ``pre_phase_<name>`` save at the last step before each listed
+    # stream phase (E5's full-restore counterfactual resumes from it).
+    save_before_phases: list[str] = field(default_factory=list)
     # Escape hatch for the key-mismatch guard in ``load()``. Leave false:
     # a mismatch means the checkpoint does not describe this model, and
     # silently loading nothing is far worse than stopping.

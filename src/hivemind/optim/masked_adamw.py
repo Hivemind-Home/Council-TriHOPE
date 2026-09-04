@@ -311,6 +311,28 @@ class MaskedAdamW(AdamW):
                 state["max_exp_avg_sq"].zero_()
             state["coord_step"] = torch.zeros((), dtype=torch.float32, device=p.device)
 
+    def reset_state_for_coords(self, param: nn.Parameter, mask: torch.Tensor) -> None:
+        """Zero the optimizer state of the coordinates where ``mask`` is True.
+
+        The masked counterpart of :meth:`reset_state_for_params` (used by the
+        gradient-routing ablation, which kills one teacher's rank slice):
+        moments, the AMSGrad maximum and the coordinate-local update counter
+        are zeroed on the slice and left bit-identical elsewhere. ``step`` is
+        untouched. A read/modify helper only — :meth:`step` is unchanged.
+        """
+        state = self.state.get(param)
+        if not state:
+            return
+        mask_b = mask.to(device=param.device, dtype=torch.bool).expand_as(param)
+        for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq"):
+            if key in state:
+                state[key].masked_fill_(mask_b, 0)
+        cs = state["coord_step"]
+        if cs.dim() == 0:
+            cs = torch.full_like(param, float(cs.item()), dtype=torch.float32)
+            state["coord_step"] = cs
+        cs.masked_fill_(mask_b, 0)
+
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------

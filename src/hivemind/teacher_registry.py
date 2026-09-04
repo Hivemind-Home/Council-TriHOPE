@@ -156,8 +156,13 @@ def create_hf_cache_teachers(
     teacher_ids: dict[str, str] | None,
     vocab_size: int,
     device: torch.device,
+    *,
+    extra: list[tuple[str, str]] | None = None,
 ) -> list[TeacherInfo]:
-    """One ``CacheBackedTeacher`` per domain.
+    """One ``CacheBackedTeacher`` per domain, plus ``extra`` ``(name, domain)``
+    teachers appended AFTER the per-domain ones (the corrupted-teacher tag of
+    the E5 stream: same domain, distinct name, so attribution can tell the
+    two apart while the domain fallback still resolves to the clean one).
 
     ``teacher_ids`` maps domain → teacher_id. When absent we fall back to
     ``"{domain}_teacher"``, which matches nothing in the Layer B/C data;
@@ -182,6 +187,14 @@ def create_hf_cache_teachers(
         for p in model.parameters():
             p.requires_grad = False
         teachers.append(TeacherInfo(name=tid, model=model))
+    for name, domain in extra or []:
+        model = CacheBackedTeacher(
+            teacher_id=str(name), domain=str(domain), vocab_size=vocab_size
+        ).to(device)
+        model.eval()
+        for p in model.parameters():
+            p.requires_grad = False
+        teachers.append(TeacherInfo(name=str(name), model=model))
     return teachers
 
 

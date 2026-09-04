@@ -1,0 +1,75 @@
+# E5 — bad-teacher attribution and selective rollback (the uniqueness
+# pillar; reframe §5 E5, tasks T4/T5/T6). The math teacher is corrupted on
+# half of math_recurrent (whole buckets + whole background steps, teacher
+# text shuffled between corrupted rows); every method sees the same stream.
+#
+#   python scripts/run_experiment.py configs/experiments/bad_teacher_small.yaml --concurrent 3
+#   python scripts/rollback_teacher.py --run runs/bad_teacher_small_v1/trihope-seed1337 \
+#       --teacher math_teacher_corrupted --out runs/bad_teacher_small_v1/trihope-seed1337-rollback
+#   python scripts/rollback_teacher.py --run ... --baseline full_restore --out ...-fullrestore
+#   python -m analysis.run_report runs/bad_teacher_small_v1
+experiment: bad_teacher_small_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_common: &common
+  - data.corrupt_teacher.enabled=true
+  - controller.consolidation.checkpoint_before_merge=true
+  - checkpoint.keep_tagged=0                      # keep EVERY pre_merge / pre_phase checkpoint
+  - checkpoint.save_before_phases=[math_recurrent]
+runs:
+  - id: trihope
+    overrides:
+      - *common
+      - controller.retrieval.replay_on_hit=true
+  - id: trihope_nogate
+    # Containment from the optimizer signals alone: the teacher-confidence
+    # policy gate off (the loss-level CE weighting stays, as for everyone).
+    overrides:
+      - *common
+      - controller.retrieval.replay_on_hit=true
+      - controller.ablation.use_teacher_confidence=false
+  - id: trihope_lowconf
+    # The doc's original arm: corrupted rows also carry confidence 0.2, so
+    # the confidence gate is exercised on top of the routing.
+    overrides:
+      - *common
+      - controller.retrieval.replay_on_hit=true
+      - data.corrupt_teacher.confidence=0.2
+  - id: full_ft
+    overrides:
+      - *common
+      - controller.enabled=false
+      - model.lora.rank=0
+      - train.trainable=all
+  - id: lora_only
+    overrides:
+      - *common
+      - controller.enabled=false
+      - train.trainable=lora
+  - id: molf_style
+    overrides:
+      - *common
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=epd_argmax
+      - controller.writer.top_k_fraction=1.0
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: gradient_routing
+    # Gradient Routing (Cloud et al. 2024) with teacher labels: rank 16 is
+    # split into one 3-component slice per registered teacher (4 domains +
+    # the corrupted tag; one component unused), every adapter opens only the
+    # batch teacher's slice, base stays closed, no merge. "Unlearning" = the
+    # corrupted teacher's slice is zeroed at the end of math_recurrent
+    # (step 3649). Containment is 100 % in F by construction; the question
+    # is damage and recovery after the ablation.
+    overrides:
+      - *common
+      - controller.policy.mode=teacher_partition
+      - controller.consolidation.period=0
+      - controller.ablation.use_teacher_confidence=false
+      - controller.retrieval.replay_on_hit=false
+      - "controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_corrupted}"

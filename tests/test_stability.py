@@ -1,5 +1,6 @@
 """Tests for stability signals."""
 
+import pytest
 import torch
 
 from hivemind.controller.config import StabilityConfig
@@ -153,3 +154,12 @@ def test_sustained_C_survives_state_dict_roundtrip():
     legacy = StabilityTracker(StabilityConfig())
     legacy.load_state_dict({"_ema_norm": 1.0, "_ema_norm_sq": 1.0, "_initialized": True})
     assert legacy.sustained_C == 0.0
+
+
+def test_epd_score_matches_the_molf_formula():
+    tr = StabilityTracker()
+    m = torch.tensor([1.0, -2.0, 0.5])
+    v = torch.tensor([4.0, 1.0, 0.25])
+    expected = ((m**2) / (v.sqrt() + tr.config.eps)).sum().item() / 3
+    assert tr.compute_epd(m, v) == pytest.approx(expected)
+    assert tr.compute_epd(torch.empty(0), torch.empty(0)) == 0.0

@@ -6,7 +6,7 @@ Multi-Teacher Knowledge Distillation with Tri-Store (R/F/P) Memory Routing.
 
 ```bash
 pip install -e ".[dev,data]"
-python -m pytest tests/ -q                        # 409 tests, CPU-only
+python -m pytest tests/ -q                        # 499 tests, CPU-only
 python -m hivemind preflight --config-name stream_small --metadata-only
 python train.py --config-name stream_smoke        # CPU, real data, ~5 min
 ```
