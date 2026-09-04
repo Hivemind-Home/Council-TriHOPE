@@ -129,3 +129,20 @@ class TestEndToEnd:
         assert cont.iloc[0]["p_share_mean"] == pytest.approx(100.0)
         assert cont.iloc[0]["consolidations_attributed_mean"] > 0
         assert containment([run]).empty  # no corrupt_teacher block → nothing to contain
+
+
+def test_every_sweep_merge_has_a_pre_merge_checkpoint(tmp_path: Path) -> None:
+    """The legacy no-flags sweep must also be preceded by a rollback checkpoint."""
+    cfg = _cfg(tmp_path, steps=12)
+    # no forced merge, no P flags: the periodic sweep at step 6 merges via the
+    # unconditional fallback once the (lowered) thresholds pass
+    cfg.controller.debug.policy_override = "always_f"
+    cfg.controller.debug.force_consolidate_steps = []
+    cfg.controller.consolidation.period = 6
+    cfg.controller.consolidation.min_stability_C = -1.0
+    cfg.controller.consolidation.min_repetition = -1.0
+    run_training_loop(cfg, device=torch.device("cpu"))
+    events = _events(tmp_path / "events.jsonl")
+    merges = {e["step"] for e in events if e["type"] == "consolidation"}
+    assert merges == {6}
+    assert (tmp_path / "ckpt" / "step_00000006_pre_merge").exists()

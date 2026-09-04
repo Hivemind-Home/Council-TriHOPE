@@ -324,3 +324,47 @@ deviation from the task document with the reason.
 - Tests: `tests/test_gradient_routing.py` (+6).
 - Deviation: the ablation zeroes rather than re-initialises the slice (no
   RNG, DDP-trivial, and the dead slice is the honest GR semantics).
+
+## T9 — Part C reading notes, and the baseline fixes they forced
+
+- `docs/related_work_notes.md`: the ten papers in the doc's fixed
+  structure (Claim / Mechanism / Overlap / Our difference / Baseline
+  implication / one sentence / BibTeX), read from the arXiv HTML/PDF on
+  2026-09-04; `paper/refs.bib` (13 entries); `docs/related_work_draft.md`
+  (four paragraphs, ~560 words, ending on the one-line gap).
+- **MoLF's score is not m²/v.** Its EPD is `(η_i/N_i) Σ m²/(√v+ε)` per
+  expert, an argmax between the dense and the LoRA expert of each module;
+  `stability_adam` is (up to ε) the square of MoLF's PFN *ablation
+  baseline*. Added `ModuleSignals.epd_score` (`StabilityTracker.
+  compute_epd`, pre-update moments), `PolicyConfig.adam_score_rule:
+  epd_argmax | snr_threshold` (default `epd_argmax`), `epd_lr_base /
+  epd_lr_lora`, and `RFPPolicy._epd_argmax` (per block the P and F modules
+  compete; the winner alone updates; every block routes every step; a
+  blocked teacher's win goes to the LoRA expert). `molf_style` in
+  `baselines_small.yaml` and `bad_teacher_small.yaml` now uses it with
+  `writer.top_k_fraction=1.0` (MoLF's LoRA expert takes a full step); the
+  SNR-threshold variants stay in the sweep as `molf_style_a*`, plus
+  `molf_style_epd`. Not reproduced, on purpose: MoLF's universal momentum
+  tracking (losers' moments advance on a shared clock) — Theorem 1.
+- **Online-LoRA consolidates only on a plateau that follows a loss peak.**
+  `ConsolidationConfig.plateau_require_peak` (default false; the E1/E3
+  `plateau_trigger` specs set it true): a plateau fires only after the
+  window mean rose by more than the window's std since the last fire;
+  detector state round-trips. The author list in the task document ("Wei,
+  Kim") is wrong — it is Wei, Li, Marculescu (WACV 2025, arXiv:2411.05663).
+- **OGP (arXiv:2604.22407) was withdrawn by its authors on 24 Jul 2026.**
+  Cited for its Proposition 1 only (the 1/(1−α) inflation argument that
+  motivates exact masking); its numbers are not to be used.
+- **STABLE (arXiv:2510.16089) has no baseline** — recorded as a follow-up
+  in `docs/STATUS.md` with the design of a faithful `stable_gate`.
+- Terminology for the paper: R is a *deferral* tier (not retrieval in the
+  ReGrad sense); attribution is *provenance* (not importance as in
+  Attribution-Guided CL); never "optimizer as memory" (Nested Learning).
+- **Bug found by the real-data E5 smoke:** the periodic sweep can merge
+  through its legacy no-flags path while the pre-merge checkpoint was
+  gated on `pending_p` being non-empty — a merge with no rollback point.
+  `ConsolidationScheduler.select()` now exposes the modules that are about
+  to merge and the loop saves `pre_merge` whenever that list is non-empty
+  (`tests/test_attribution.py::test_every_sweep_merge_has_a_pre_merge_checkpoint`).
+- Tests: +3 (`test_baseline_policies.py` EPD argmax + peak precondition,
+  `test_stability.py` EPD formula, `test_attribution.py` sweep checkpoint).

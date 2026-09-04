@@ -51,20 +51,27 @@ runs:
       - controller.policy.mode=surprise_only
       - controller.retrieval.replay_on_hit=true
   - id: molf_style
-    # MoLF-style two-tier routing: F vs P per block from the Adam SNR m²/v
-    # (stability_adam) above adam_score_high; no R tier, no merge, and no
-    # TriHOPE confidence gate (it would demote MoLF's P to F on
-    # low-confidence medical rows and confound the comparison).
+    # MoLF-style two-tier routing (arXiv:2605.07111): per block the dense
+    # expert (base weights) and the LoRA expert compete on the expected
+    # preconditioned descent score Σ m²/(√v+ε)/N and the winner alone
+    # updates (P = base fully, F = the whole adapter); every block routes
+    # every step; no R tier, no merge, no TriHOPE confidence gate (it would
+    # demote MoLF's P to F on low-confidence medical rows). Not reproduced:
+    # MoLF's "universal momentum tracking" (losers' moments keep advancing
+    # on a shared clock) — Theorem 1 keeps closed coordinates untouched.
     overrides:
       - controller.policy.mode=adam_score
-      - controller.policy.adam_score_high=0.5
+      - controller.policy.adam_score_rule=epd_argmax
+      - controller.writer.top_k_fraction=1.0
       - controller.ablation.disable_stores=[R]
       - controller.consolidation.period=0
       - controller.writer.flag_p_for_consolidation=false
       - controller.ablation.use_teacher_confidence=false
   - id: plateau_trigger
-    # Online-LoRA-style: every adapter always open, merge ALL adapters into
-    # base whenever the training loss plateaus (window 200, tol 1 %).
+    # Online-LoRA-style (Wei et al., WACV 2025): every adapter always open;
+    # when the training loss plateaus AFTER a loss peak (window 200, tol 1 %,
+    # peak = window mean up by > its std), merge every adapter into base and
+    # start fresh adapters (the merge re-initialises them).
     overrides:
       - controller.enabled=false
       - train.trainable=lora
@@ -72,6 +79,7 @@ runs:
       - controller.consolidation.plateau_window=200
       - controller.consolidation.plateau_tolerance=0.01
       - controller.consolidation.plateau_min_gap=200
+      - controller.consolidation.plateau_require_peak=true
   - id: random_routing
     # The control that proves the signals carry information: the same
     # per-phase R/F/P shares as trihope, assignment drawn at random.

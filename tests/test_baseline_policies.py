@@ -67,12 +67,35 @@ class TestModes:
         assert _labels(pol_no_r) == {"F"}
 
     def test_adam_score_labels(self) -> None:
-        pol = RFPPolicy(PolicyConfig(mode="adam_score", adam_score_high=0.5))
+        pol = RFPPolicy(PolicyConfig(mode="adam_score", adam_score_high=0.5,
+                                     adam_score_rule="snr_threshold"))
         assert _labels(pol) == {"P", "F"}
         hi = _sig(0, stability_adam=0.9, surprise=5.0, repetition=0.0)
         lo = _sig(0, stability_adam=0.1, surprise=5.0, repetition=0.0)
         assert pol.decide({hi.module_id: hi})[0].store == "P"
         assert pol.decide({lo.module_id: lo})[0].store == "F"
+
+    def test_epd_argmax_routes_each_block_to_one_expert(self) -> None:
+        pol = RFPPolicy(PolicyConfig(mode="adam_score", top_m_modules=1))
+        f0 = ModuleSignals(module_id=ModuleId(0, "attn", "F"), grad_norm=1.0, epd_score=0.2)
+        p0 = ModuleSignals(module_id=ModuleId(0, "attn", "P"), grad_norm=1.0, epd_score=0.5)
+        f1 = ModuleSignals(module_id=ModuleId(1, "ffn", "F"), grad_norm=1.0, epd_score=0.9)
+        p1 = ModuleSignals(module_id=ModuleId(1, "ffn", "P"), grad_norm=1.0, epd_score=0.1)
+        sigs = {s.module_id: s for s in (f0, p0, f1, p1)}
+        acts = {str(a.module_id): a.store for a in pol.decide(sigs)}
+        # every block routes (top_m ignored); exactly one expert per block
+        assert acts == {"L0.attn.P": "P", "L1.ffn.F": "F"}
+        # the learning-rate ratio is the knob: a cheap LoRA lr flips block 0
+        pol2 = RFPPolicy(PolicyConfig(mode="adam_score", epd_lr_lora=10.0))
+        assert {str(a.module_id): a.store for a in pol2.decide(sigs)} == {
+            "L0.attn.F": "F", "L1.ffn.F": "F"}
+        # blocked teacher → the LoRA expert takes the step
+        pol3 = RFPPolicy(PolicyConfig(mode="adam_score"),
+                         debug=DebugConfig(block_p_for_teachers=["bad"]))
+        assert {str(a.module_id): a.store for a in pol3.decide(sigs, teacher_name="bad")} == {
+            "L0.attn.F": "F", "L1.ffn.F": "F"}
+        with pytest.raises(ValueError, match="adam_score_rule"):
+            PolicyConfig(adam_score_rule="x")
 
     def test_rfp_default_unchanged(self) -> None:
         pol = RFPPolicy(PolicyConfig())
@@ -187,6 +210,19 @@ class TestPlateau:
         assert fires == [9, 29, 49]
         det2 = PlateauDetector(window=10, tolerance=0.01, min_gap=0)
         assert not any(det2.observe(2.0 - 0.05 * step, step) for step in range(100))
+
+    def test_require_peak_blocks_the_initial_flat_stretch(self) -> None:
+        """Online-LoRA's precondition: a plateau counts only after a loss peak."""
+        det = PlateauDetector(window=6, tolerance=0.01, min_gap=0, require_peak=True)
+        assert not any(det.observe(1.0, s) for s in range(30))  # flat from the start
+        # a jump (peak) ...
+        fires = [s for s in range(30, 45) if det.observe(3.0 if s >= 32 else 1.0, s)]
+        assert fires and fires[0] > 32
+        # ... after the fire the peak flag is cleared: flat again → no refire
+        assert not any(det.observe(3.0, s) for s in range(45, 60))
+        rt = PlateauDetector(window=6, tolerance=0.01, min_gap=0, require_peak=True)
+        rt.load_state_dict(det.state_dict())
+        assert rt.state_dict() == det.state_dict()
 
     def test_state_roundtrip_continues_the_window(self) -> None:
         det = PlateauDetector(window=6, tolerance=0.01, min_gap=0)

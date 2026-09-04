@@ -27,7 +27,11 @@ class ModuleSignals:
     surprise: float = 0.0  # S_t(j)
     stability_C: float = 0.0  # directional cosine (instantaneous)
     stability_C_sustained: float = 0.0  # C̄: EMA of the directional cosine
-    stability_adam: float = 0.0  # Adam ratio
+    stability_adam: float = 0.0  # Adam ratio: mean m²/(v+ε), in [0, 1]
+    # MoLF's expected preconditioned descent per parameter (Eq. 4 without
+    # the learning rate): mean m²/(√v+ε). Units of loss decrease per
+    # parameter; NOT scale-invariant, by design.
+    epd_score: float = 0.0
     stability_V: float = 0.0  # windowed variance
     repetition: float = 0.0  # fused R_t(j)
     repetition_components: dict[str, float] = field(default_factory=dict)
@@ -176,6 +180,7 @@ class SignalComputer:
                     )
                     signals.stability_C_sustained = stability_tracker.sustained_C
                 signals.stability_adam = stability_tracker.compute_adam_ratio(m_cat, v_cat)
+                signals.epd_score = stability_tracker.compute_epd(m_cat, v_cat)
                 if self._stability_v_disabled:
                     signals.stability_V = self._neutral_v
                 else:

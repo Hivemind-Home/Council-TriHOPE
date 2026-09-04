@@ -69,20 +69,36 @@ class PlateauDetector:
     ``min_gap`` steps. Pure function of the observed losses — no RNG.
     """
 
-    def __init__(self, window: int, tolerance: float, min_gap: int) -> None:
+    def __init__(
+        self, window: int, tolerance: float, min_gap: int, require_peak: bool = False
+    ) -> None:
         self.window = max(2, int(window))
         self.tolerance = float(tolerance)
         self.min_gap = max(0, int(min_gap))
+        self.require_peak = bool(require_peak)
         self._history: deque[float] = deque(maxlen=self.window)
         self._last_fire: Optional[int] = None
+        # Peak detection (Online-LoRA): the window mean rose by more than the
+        # window's std within one step since the last fire.
+        self._prev_mean: Optional[float] = None
+        self._peak_seen: bool = False
 
     def observe(self, loss: float, step: int) -> bool:
         self._history.append(float(loss))
         if len(self._history) < self.window:
             return False
+        vals = list(self._history)
+        mean = sum(vals) / len(vals)
+        if self.require_peak:
+            var = sum((v - mean) ** 2 for v in vals) / len(vals)
+            std = var**0.5
+            if self._prev_mean is not None and mean - self._prev_mean > std:
+                self._peak_seen = True
+            self._prev_mean = mean
         if self._last_fire is not None and step - self._last_fire < self.min_gap:
             return False
-        vals = list(self._history)
+        if self.require_peak and not self._peak_seen:
+            return False
         half = self.window // 2
         first = sum(vals[:half]) / half
         second = sum(vals[half:]) / (len(vals) - half)
@@ -90,17 +106,26 @@ class PlateauDetector:
         if improvement < self.tolerance:
             self._last_fire = int(step)
             self._history.clear()
+            self._prev_mean = None
+            self._peak_seen = False
             return True
         return False
 
     def reset(self, step: Optional[int] = None) -> None:
         """Clear the window (and start the min-gap clock at ``step``)."""
         self._history.clear()
+        self._prev_mean = None
+        self._peak_seen = False
         if step is not None:
             self._last_fire = int(step)
 
     def state_dict(self) -> dict:
-        return {"history": list(self._history), "last_fire": self._last_fire}
+        return {
+            "history": list(self._history),
+            "last_fire": self._last_fire,
+            "prev_mean": self._prev_mean,
+            "peak_seen": self._peak_seen,
+        }
 
     def load_state_dict(self, state: dict) -> None:
         self._history = deque(
@@ -108,6 +133,9 @@ class PlateauDetector:
         )
         lf = state.get("last_fire")
         self._last_fire = None if lf is None else int(lf)
+        pm = state.get("prev_mean")
+        self._prev_mean = None if pm is None else float(pm)
+        self._peak_seen = bool(state.get("peak_seen", False))
 
 
 class ConsolidationScheduler:
@@ -144,7 +172,10 @@ class ConsolidationScheduler:
         # Loss-plateau trigger (config.trigger == "plateau"); None otherwise.
         self.plateau: Optional[PlateauDetector] = (
             PlateauDetector(
-                config.plateau_window, config.plateau_tolerance, config.plateau_min_gap
+                config.plateau_window,
+                config.plateau_tolerance,
+                config.plateau_min_gap,
+                require_peak=config.plateau_require_peak,
             )
             if config.trigger == "plateau"
             else None
@@ -220,8 +251,31 @@ class ConsolidationScheduler:
         flagged module that no longer satisfies thresholds remains pending
         for the next period (its signals may recover).
         """
-        sustained = self.config.stability_mode == "sustained"
         consolidated: list[ModuleId] = []
+        for mid in self.select(module_signals):
+            if self.config.merge_strategy == "distill":
+                merged = self._consolidate_distill(mid)
+            else:
+                merged = self.p_store.merge_lora_for_block(
+                    self.model, mid.layer, mid.block_type
+                )
+            if merged > 0:
+                self._reset_adapter_optimizer_state(mid)
+                self._sync_after_merge(mid)
+                consolidated.append(mid)
+                self._pending_p.discard(mid)
+
+        return consolidated
+
+    def select(self, module_signals: dict[ModuleId, ModuleSignals]) -> list[ModuleId]:
+        """The modules :meth:`consolidate` would merge right now (pure).
+
+        Exposed so the training loop can write the rollback checkpoint
+        only when a merge is actually about to happen — including through
+        the legacy no-flags sweep, which the ``pending_p`` test alone would
+        miss (a merge without a ``pre_merge`` checkpoint cannot be reverted).
+        """
+        sustained = self.config.stability_mode == "sustained"
 
         # Decide which modules to consider this round. If the policy has
         # been flagging modules, only re-validate those. Otherwise fall
@@ -243,6 +297,7 @@ class ConsolidationScheduler:
                 key=_module_sort_key,
             )
 
+        ready: list[ModuleId] = []
         for mid in candidates:
             if mid.param_type != "F":
                 continue
@@ -258,19 +313,8 @@ class ConsolidationScheduler:
                 sig.repetition >= self.config.min_repetition
                 and c_value >= self.config.min_stability_C
             ):
-                if self.config.merge_strategy == "distill":
-                    merged = self._consolidate_distill(mid)
-                else:
-                    merged = self.p_store.merge_lora_for_block(
-                        self.model, mid.layer, mid.block_type
-                    )
-                if merged > 0:
-                    self._reset_adapter_optimizer_state(mid)
-                    self._sync_after_merge(mid)
-                    consolidated.append(mid)
-                    self._pending_p.discard(mid)
-
-        return consolidated
+                ready.append(mid)
+        return ready
 
     def _sync_after_merge(self, mid: ModuleId) -> None:
         """Broadcast the freshly reinitialized adapter from rank 0.

@@ -332,3 +332,29 @@ Then GPU, in order: single-GPU `stream_smoke` → 2-GPU `stream_smoke` with
 | `MetadataRouter missed N/M samples` | `teachers.teacher_ids` ≠ the dataset's values | copy the real ids from `docs/experiments.md` |
 | `tokenizer.vocab_size != model.vocab_size` (warning) | expected for Qwen3 (151643 vs 151936) | ignore; the collator uses the model vocab |
 | `strategy='fsdp' is not supported` | FSDP/DeepSpeed void Theorem 1 | use `ddp` |
+
+## ICLR-2027 additions (branch `iclr2027-push`)
+
+New knobs, all defaulting to the pre-existing behaviour; full details per
+task in `docs/CHANGELOG_iclr.md`, campaign order in `docs/GPU_RUNBOOK.md`.
+
+| Key | What it does |
+|---|---|
+| `controller.policy.stability_source: instant\|sustained` | P compares the sustained cosine C̄ (EMA) instead of the per-step cosine |
+| `controller.policy.mode: rfp\|surprise_only\|adam_score\|teacher_partition` | controller family (TriHOPE / Titans-style / MoLF-style / Gradient-Routing-style) |
+| `controller.policy.adam_score_high` | P threshold on mean m²/v for `adam_score` |
+| `controller.retrieval.replay_on_hit` (+ `hit_threshold`, `replay_batches`) | R → F replay: parked rows are replayed into LoRA inside the step once their bucket recurs |
+| `controller.writer.flag_p_for_consolidation` | `false` = a P action on an adapter never flags a merge (MoLF-style) |
+| `controller.consolidation.trigger: signals\|plateau` (+ `plateau_*`) | loss-plateau merge of all adapters (Online-LoRA-style); works with the controller off |
+| `controller.debug.policy_override: random_matched` (+ `random_shares_path`, `random_unit`) | budget-matched random routing from a run's `action_share_by_phase.csv` |
+| `controller.debug.block_p_for_teachers` (+ `block_min_share`) | selective rollback: demote the teacher's P, reset its dominated adapters on resume |
+| `controller.debug.ablate_teacher_slice: {step, teacher}` | gradient-routing ablation of one teacher's rank slice |
+| `data.corrupt_teacher.{enabled, domain, phase, fraction, mode, confidence, tag}` | corrupted-teacher stream (E5); changes the digest when enabled |
+| `checkpoint.save_before_phases: [phase]` | tagged `pre_phase_<name>` checkpoint before a phase |
+| `checkpoint.keep_tagged: 0` | keep every tagged (`pre_merge`, `pre_phase_*`) checkpoint |
+| `train.skip_step_ranges: [[lo, hi]]` | consume but do not train on those steps (full-restore counterfactual) |
+| `eval.interval_by_phase: {phase: steps}` | per-phase eval interval (50 inside `code_revisit`) |
+| `scripts/run_experiment.py --concurrent N` | N runs sharing the one visible GPU |
+| `scripts/rollback_teacher.py` | selective rollback / full restore from a finished run |
+| `python -m analysis.run_report DIR [DIR ...]` | pooled report; `budget_curve.csv`, `pareto_budget.png`, `containment*.{csv,png}` |
+

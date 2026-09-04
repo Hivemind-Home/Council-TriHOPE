@@ -1694,9 +1694,12 @@ def run_training_loop(
             and not p_store_disabled
             and consolidator.should_check(step)
         ):
+            # Save before ANY merge that is about to happen — the legacy
+            # no-flags sweep merges too, and a merge without a pre_merge
+            # checkpoint cannot be rolled back.
             if (
                 ctrl_config.consolidation.checkpoint_before_merge
-                and consolidator.pending_p
+                and consolidator.select(module_signals)
             ):
                 _pre_merge_save(step)
             consolidated = consolidator.consolidate(module_signals)

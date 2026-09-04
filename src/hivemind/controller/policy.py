@@ -159,6 +159,8 @@ class RFPPolicy:
 
         if self.config.mode == "teacher_partition":
             return self._teacher_partition(module_signals, teacher_index, num_teachers)
+        if self.config.mode == "adam_score" and self.config.adam_score_rule == "epd_argmax":
+            return self._epd_argmax(module_signals, teacher_name)
 
         # Step 1: Select Top-M modules by gradient norm
         selected = self.select_top_m(module_signals)
@@ -226,6 +228,60 @@ class RFPPolicy:
             reverse=True,
         )
         return [s for s in sorted_modules[:top_m] if s.grad_norm != 0.0]
+
+    def _epd_argmax(
+        self,
+        module_signals: dict[ModuleId, ModuleSignals],
+        teacher_name: str | None,
+    ) -> list[StoreAction]:
+        """MoLF routing: per block, the dense expert (base weights, our P
+        module) and the LoRA expert (our F module) compete on
+        ``lr_i · epd_score_i``; the winner alone updates. Every block routes
+        every step (no Top-M). A block with only one expert (rank 0, or a
+        module without gradient) routes to the one it has."""
+        cfg = self.config
+        disabled = self.ablation.disable_stores
+        blocks: dict[tuple[int, str], dict[str, ModuleSignals]] = {}
+        for sig in module_signals.values():
+            if sig.grad_norm == 0.0:
+                continue
+            blocks.setdefault((sig.module_id.layer, sig.module_id.block_type), {})[
+                sig.module_id.param_type
+            ] = sig
+        actions: list[StoreAction] = []
+        for key in sorted(blocks):
+            pair = blocks[key]
+            f_sig, p_sig = pair.get("F"), pair.get("P")
+            s_f = cfg.epd_lr_lora * f_sig.epd_score if f_sig is not None else None
+            s_p = cfg.epd_lr_base * p_sig.epd_score if p_sig is not None else None
+            if s_p is not None and "P" not in disabled and (s_f is None or s_p > s_f):
+                winner, store = p_sig, "P"
+            elif f_sig is not None:
+                winner, store = f_sig, "F"
+            else:
+                continue
+            if (
+                store == "P"
+                and teacher_name is not None
+                and teacher_name in self.debug.block_p_for_teachers
+            ):
+                # blocked teacher: the LoRA expert takes the step instead
+                if f_sig is None:
+                    continue
+                winner, store = f_sig, "F"
+            actions.append(StoreAction(
+                module_id=winner.module_id,
+                store=store,
+                surprise=winner.surprise,
+                repetition=winner.repetition,
+                stability_C=winner.stability_C,
+                stability_C_sustained=winner.stability_C_sustained,
+                stability_V=winner.stability_V,
+                stability_adam=winner.stability_adam,
+                grad_norm=winner.grad_norm,
+                repetition_components=dict(winner.repetition_components or {}),
+            ))
+        return actions
 
     def _teacher_partition(
         self,

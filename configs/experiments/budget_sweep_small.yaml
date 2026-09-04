@@ -93,6 +93,7 @@ runs:
       - controller.consolidation.plateau_window=200
       - controller.consolidation.plateau_tolerance=0.005
       - controller.consolidation.plateau_min_gap=200
+      - controller.consolidation.plateau_require_peak=true
   - id: plateau_trigger_t0p01
     overrides:
       - controller.enabled=false
@@ -101,6 +102,7 @@ runs:
       - controller.consolidation.plateau_window=200
       - controller.consolidation.plateau_tolerance=0.01
       - controller.consolidation.plateau_min_gap=200
+      - controller.consolidation.plateau_require_peak=true
   - id: plateau_trigger_t0p02
     overrides:
       - controller.enabled=false
@@ -109,9 +111,22 @@ runs:
       - controller.consolidation.plateau_window=200
       - controller.consolidation.plateau_tolerance=0.02
       - controller.consolidation.plateau_min_gap=200
-  - id: molf_style_a0p3
+      - controller.consolidation.plateau_require_peak=true
+  - id: molf_style_epd
+    # the faithful MoLF rule (no threshold to sweep; lr ratio is the knob)
     overrides:
       - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=epd_argmax
+      - controller.writer.top_k_fraction=1.0
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: molf_style_a0p3
+    # PFN-like SNR threshold variants (MoLF's own ablation baseline)
+    overrides:
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=snr_threshold
       - controller.policy.adam_score_high=0.3
       - controller.ablation.disable_stores=[R]
       - controller.consolidation.period=0
@@ -120,6 +135,7 @@ runs:
   - id: molf_style_a0p5
     overrides:
       - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=snr_threshold
       - controller.policy.adam_score_high=0.5
       - controller.ablation.disable_stores=[R]
       - controller.consolidation.period=0
@@ -128,6 +144,7 @@ runs:
   - id: molf_style_a0p7
     overrides:
       - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=snr_threshold
       - controller.policy.adam_score_high=0.7
       - controller.ablation.disable_stores=[R]
       - controller.consolidation.period=0

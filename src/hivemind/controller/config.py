@@ -81,6 +81,17 @@ class PolicyConfig:
     #   ablating a slice (``DebugConfig.ablate_teacher_slice``).
     mode: str = "rfp"
     adam_score_high: float = 0.5
+    # How ``adam_score`` decides (MoLF, arXiv:2605.07111):
+    # - ``epd_argmax`` (default; faithful): per block, the dense expert (the
+    #   block's base weights) and the LoRA expert compete on MoLF's Expected
+    #   Preconditioned Descent score S_i = (lr_i / N_i) · Σ m² / (√v + ε)
+    #   (their Eq. 4) and the winner alone updates — P opens the base
+    #   weights, F opens the whole adapter. Every block routes every step.
+    # - ``snr_threshold``: P iff mean(m²/(v+ε)) ≥ adam_score_high, else F —
+    #   up to ε placement the square of MoLF's PFN ablation baseline.
+    adam_score_rule: str = "epd_argmax"
+    epd_lr_base: float = 1.0   # lr_i in the EPD score (the optimizer's lr_base / lr_lora)
+    epd_lr_lora: float = 1.0
 
     def __post_init__(self) -> None:
         if self.stability_source not in ("instant", "sustained"):
@@ -91,6 +102,11 @@ class PolicyConfig:
         if self.mode not in POLICY_MODES:
             raise ValueError(
                 f"Unknown policy.mode '{self.mode}'; allowed: {sorted(POLICY_MODES)}"
+            )
+        if self.adam_score_rule not in ("epd_argmax", "snr_threshold"):
+            raise ValueError(
+                f"Unknown policy.adam_score_rule '{self.adam_score_rule}'; "
+                "allowed: 'epd_argmax' | 'snr_threshold'"
             )
 
 
@@ -126,6 +142,12 @@ class ConsolidationConfig:
     plateau_window: int = 200
     plateau_tolerance: float = 0.01
     plateau_min_gap: int = 200
+    # Online-LoRA (Wei et al., WACV 2025, §3.2) only consolidates on a
+    # plateau that FOLLOWS a loss peak — the peak marks the distribution
+    # shift, the plateau marks "the new distribution has been learned".
+    # With ``true`` a plateau only fires after the window mean has risen by
+    # more than the window's standard deviation since the last fire.
+    plateau_require_peak: bool = False
     # Which directional-stability signal the merge re-validation reads:
     # - ``instant``   : the per-step cosine C = cos(g_t, m_{t-1}). Sampled
     #   at the exact period boundary, so a genuinely-stable module still
