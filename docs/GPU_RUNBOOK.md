@@ -1,5 +1,8 @@
 # GPU runbook — the ICLR-2027 campaign on one 96 GB GPU
 
+> Step-by-step version with health signals and troubleshooting:
+> [docs/RUN_PIPELINE_2026-09-04.md](RUN_PIPELINE_2026-09-04.md).
+
 Every command below runs from the repository root on the GPU machine.
 Cache-mode teachers mean **no teacher model is ever loaded**: the only model
 in memory is the Qwen3-0.6B student, so one 96 GB card can run several
