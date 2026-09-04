@@ -64,6 +64,17 @@ class PolicyConfig:
     #   consistent over a sustained window, not when one batch happens to be
     #   aligned — and it is the answer to the "cos(g, m) is noisy" critique.
     stability_source: str = "instant"
+    # Controller family (task T3 — the E1 baselines share the stream, the
+    # student and the write machinery; only the decision rule differs):
+    # - ``rfp``           : TriHOPE's three-way R/F/P rule (default).
+    # - ``surprise_only`` : Titans-style gate on surprise alone — R when
+    #   S ≥ surprise_high (F if R is disabled), otherwise F; never P.
+    # - ``adam_score``    : MoLF-style two-tier routing on the Adam SNR
+    #   m²/v (``stability_adam``): P when ≥ adam_score_high, else F; never R.
+    #   Pair with ``WriterConfig.flag_p_for_consolidation=false`` and
+    #   ``consolidation.period=0`` — MoLF has no merge.
+    mode: str = "rfp"
+    adam_score_high: float = 0.5
 
     def __post_init__(self) -> None:
         if self.stability_source not in ("instant", "sustained"):
@@ -71,6 +82,14 @@ class PolicyConfig:
                 f"Unknown policy.stability_source '{self.stability_source}'; "
                 "allowed: 'instant' | 'sustained'"
             )
+        if self.mode not in POLICY_MODES:
+            raise ValueError(
+                f"Unknown policy.mode '{self.mode}'; allowed: {sorted(POLICY_MODES)}"
+            )
+
+
+#: Controller families selectable through ``PolicyConfig.mode``.
+POLICY_MODES = ("rfp", "surprise_only", "adam_score")
 
 
 @dataclass
@@ -89,6 +108,18 @@ class ConsolidationConfig:
     period: int = 1000
     min_stability_C: float = 0.7
     min_repetition: float = 0.6
+    # What decides that adapters are merged into base weights:
+    # - ``signals`` : the periodic sweep re-validates flagged modules on
+    #   stability ∧ recurrence (TriHOPE; default).
+    # - ``plateau`` : Online-LoRA-style — merge ALL adapters whenever the
+    #   training loss has plateaued (relative improvement over
+    #   ``plateau_window`` steps below ``plateau_tolerance``), at most once
+    #   per ``plateau_min_gap`` steps. The signal sweep is disabled. Works
+    #   with ``controller.enabled=false`` (the E1 `plateau_trigger` baseline).
+    trigger: str = "signals"
+    plateau_window: int = 200
+    plateau_tolerance: float = 0.01
+    plateau_min_gap: int = 200
     # Which directional-stability signal the merge re-validation reads:
     # - ``instant``   : the per-step cosine C = cos(g_t, m_{t-1}). Sampled
     #   at the exact period boundary, so a genuinely-stable module still
@@ -116,6 +147,15 @@ class ConsolidationConfig:
                 f"Unknown consolidation.stability_mode '{self.stability_mode}'; "
                 "allowed: 'instant' | 'sustained'"
             )
+        if self.trigger not in ("signals", "plateau"):
+            raise ValueError(
+                f"Unknown consolidation.trigger '{self.trigger}'; "
+                "allowed: 'signals' | 'plateau'"
+            )
+        if int(self.plateau_window) < 2:
+            raise ValueError("consolidation.plateau_window must be >= 2")
+        self.plateau_window = int(self.plateau_window)
+        self.plateau_min_gap = int(self.plateau_min_gap)
 
 
 @dataclass
@@ -124,6 +164,12 @@ class WriterConfig:
 
     top_k_granularity: str = "rank_components"
     top_k_fraction: float = 0.5
+    # A P action on an F-type module opens the whole adapter for one step
+    # and, by default, flags the block so the next consolidation sweep can
+    # merge it. ``false`` keeps the open-adapter step but never flags — the
+    # MoLF-style baseline, which routes between adapter and base but has no
+    # merge path.
+    flag_p_for_consolidation: bool = True
 
 
 #: Canonical signal names accepted in ``AblationConfig.disable_signals``,
@@ -222,18 +268,80 @@ class DebugConfig:
     bypassing threshold re-validation — the "consolidate at the wrong time"
     probe. ``policy_override`` short-circuits classification entirely.
     Combine with ``consolidation.checkpoint_before_merge`` for rollback.
+
+    ``policy_override="random_matched"`` is the E1 control that proves the
+    signals carry information: every selected module draws its store label
+    from a fixed per-phase categorical distribution — TriHOPE's own action
+    shares, read from ``random_shares_path`` (an ``action_share_by_phase.csv``
+    written by ``analysis.run_report`` on a completed run, filtered to
+    ``random_shares_spec_id``) — so the write budget is matched while the
+    assignment is shuffled. Draws come from a generator seeded by
+    ``(train.seed, step[, module rank])`` so every rank draws the same
+    label and the global RNG is untouched. ``random_unit`` picks whether
+    each module draws independently (``module``) or the whole step shares
+    one draw (``step``). A missing file falls back to uniform thirds with
+    a warning.
     """
 
     force_consolidate_steps: list[int] = field(default_factory=list)
-    policy_override: str | None = None  # None | always_p | always_f | always_r
+    policy_override: str | None = None  # None | always_p | always_f | always_r | random_matched
+    random_shares_path: str | None = None
+    random_shares_spec_id: str = "trihope"
+    random_unit: str = "module"  # module | step
 
     def __post_init__(self) -> None:
-        if self.policy_override not in (None, "always_p", "always_f", "always_r"):
+        if self.policy_override not in (
+            None, "always_p", "always_f", "always_r", "random_matched"
+        ):
             raise ValueError(
                 f"Unknown policy_override '{self.policy_override}'; "
-                "allowed: always_p | always_f | always_r"
+                "allowed: always_p | always_f | always_r | random_matched"
+            )
+        if self.random_unit not in ("module", "step"):
+            raise ValueError(
+                f"Unknown random_unit '{self.random_unit}'; allowed: module | step"
             )
         self.force_consolidate_steps = [int(s) for s in self.force_consolidate_steps]
+
+
+@dataclass
+class RetrievalConfig:
+    """R-store replay: turn a deferred observation back into a fast write.
+
+    Paper motivation (reframe §3.1 / task T2): an R action must be a
+    *deferral*, not a dropped update. With ``replay_on_hit`` the R-store
+    keeps the representative row of every R-routed batch; when the same
+    bucket recurs and the controller stops routing it to R (the pattern has
+    started repeating), the parked rows are replayed into the fast store as
+    an extra F micro-step inside the same training step. Default off →
+    the R tier is write-only, exactly as before (the ``r_terminal``
+    ablation).
+    """
+
+    replay_on_hit: bool = False
+    # A bucket is replayed once it holds R entries from at least this many
+    # DISTINCT earlier steps and the current step routed it somewhere other
+    # than R. (The writer appends one entry per R action, so entries are
+    # grouped by their origin step.)
+    hit_threshold: int = 2
+    # Parked rows replayed per trigger, oldest first (FIFO).
+    replay_batches: int = 1
+    # Store the replayed update is routed to. Only "F" is implemented: the
+    # replay opens the Top-K LoRA components of the Top-M F-type modules.
+    replay_target: str = "F"
+
+    def __post_init__(self) -> None:
+        if self.replay_target != "F":
+            raise ValueError(
+                f"retrieval.replay_target={self.replay_target!r} is not supported; "
+                "only 'F' is implemented"
+            )
+        if int(self.hit_threshold) < 1:
+            raise ValueError("retrieval.hit_threshold must be >= 1")
+        if int(self.replay_batches) < 1:
+            raise ValueError("retrieval.replay_batches must be >= 1")
+        self.hit_threshold = int(self.hit_threshold)
+        self.replay_batches = int(self.replay_batches)
 
 
 @dataclass
@@ -249,3 +357,4 @@ class ControllerConfig:
     writer: WriterConfig = field(default_factory=WriterConfig)
     ablation: AblationConfig = field(default_factory=AblationConfig)
     debug: DebugConfig = field(default_factory=DebugConfig)
+    retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)

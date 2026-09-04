@@ -8,11 +8,67 @@ Determines where knowledge should be stored for each selected module:
 
 from __future__ import annotations
 
+import csv
+import warnings
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from .config import AblationConfig, PolicyConfig
+import torch
+
+from .config import AblationConfig, DebugConfig, PolicyConfig
 from .module_index import ModuleId
 from .signals import ModuleSignals
+
+_STORES = ("R", "F", "P")
+
+
+def load_random_shares(
+    path: "str | Path | None", spec_id: str
+) -> dict[str, tuple[float, float, float]]:
+    """Per-phase ``(p_R, p_F, p_P)`` from an ``action_share_by_phase.csv``.
+
+    The CSV is the seed-aggregated table written by ``analysis.run_report``
+    (columns ``spec_id, phase, r_share_mean, f_share_mean, p_share_mean``,
+    in percent). Rows are filtered to ``spec_id`` and renormalised to sum
+    to one. Returns ``{}`` (→ uniform draws) when the file is missing or
+    holds no row for the spec, with one warning.
+    """
+    if not path:
+        warnings.warn(
+            "random_matched: no random_shares_path given; drawing uniform R/F/P.",
+            stacklevel=2,
+        )
+        return {}
+    p = Path(path)
+    if not p.exists():
+        warnings.warn(
+            f"random_matched: shares file {p} not found; drawing uniform R/F/P.",
+            stacklevel=2,
+        )
+        return {}
+    out: dict[str, tuple[float, float, float]] = {}
+    with open(p, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if str(row.get("spec_id", "")) != spec_id:
+                continue
+            vals = []
+            for key in ("r_share", "f_share", "p_share"):
+                raw = row.get(f"{key}_mean", row.get(key, ""))
+                try:
+                    vals.append(max(0.0, float(raw)))
+                except (TypeError, ValueError):
+                    vals.append(0.0)
+            total = sum(vals)
+            if total <= 0:
+                continue
+            out[str(row["phase"])] = (vals[0] / total, vals[1] / total, vals[2] / total)
+    if not out:
+        warnings.warn(
+            f"random_matched: no rows for spec_id={spec_id!r} in {p}; "
+            "drawing uniform R/F/P.",
+            stacklevel=2,
+        )
+    return out
 
 
 @dataclass(frozen=True)
@@ -40,18 +96,32 @@ class RFPPolicy:
         config: PolicyConfig | None = None,
         ablation: AblationConfig | None = None,
         override: str | None = None,
+        *,
+        debug: DebugConfig | None = None,
+        seed: int = 0,
     ) -> None:
         self.config = config or PolicyConfig()
         self.ablation = ablation or AblationConfig()
         # Debug short-circuit: "always_p" | "always_f" | "always_r" replaces
         # classification (and skips the confidence gate) — diagnostics fields
         # are still populated so the trace stays informative.
+        # "random_matched" draws the label from per-phase shares instead.
         self.override = override
+        self.debug = debug or DebugConfig()
+        self.seed = int(seed)
+        self._random_shares: dict[str, tuple[float, float, float]] = {}
+        if override == "random_matched":
+            self._random_shares = load_random_shares(
+                self.debug.random_shares_path, self.debug.random_shares_spec_id
+            )
 
     def decide(
         self,
         module_signals: dict[ModuleId, ModuleSignals],
         teacher_confidence: float | None = None,
+        *,
+        step: int | None = None,
+        phase: str | None = None,
     ) -> list[StoreAction]:
         """Determine R/F/P routing for each selected module.
 
@@ -66,21 +136,18 @@ class RFPPolicy:
             module_signals: {ModuleId: ModuleSignals} for all modules.
             teacher_confidence: mean confidence of the supervising teacher
                 for this batch (``None`` when unavailable).
+            step: current training step (only the ``random_matched``
+                override reads it — it seeds the draw).
+            phase: current stream phase name (selects the share row for
+                ``random_matched``; ``None`` → uniform).
 
         Returns:
             List of StoreAction for selected modules.
         """
-        cfg = self.config
         ab = self.ablation
-        top_m = ab.top_m_override if ab.top_m_override is not None else cfg.top_m_modules
 
         # Step 1: Select Top-M modules by gradient norm
-        sorted_modules = sorted(
-            module_signals.values(),
-            key=lambda s: s.grad_norm,
-            reverse=True,
-        )
-        selected = sorted_modules[:top_m]
+        selected = self.select_top_m(module_signals)
 
         low_confidence = (
             ab.use_teacher_confidence
@@ -90,11 +157,10 @@ class RFPPolicy:
 
         # Step 2: Apply R/F/P policy to each selected module
         actions: list[StoreAction] = []
-        for sig in selected:
-            if sig.grad_norm == 0.0:
-                continue  # skip modules with no gradient
-
-            if self.override is not None:
+        for rank, sig in enumerate(selected):
+            if self.override == "random_matched":
+                store = self._random_store(step or 0, phase, rank)
+            elif self.override is not None:
                 store = self.override.removeprefix("always_").upper()
             else:
                 store = self._classify(sig)
@@ -120,17 +186,75 @@ class RFPPolicy:
 
         return actions
 
+    def select_top_m(
+        self, module_signals: dict[ModuleId, ModuleSignals]
+    ) -> list[ModuleSignals]:
+        """Top-M modules by gradient norm (modules with no gradient dropped).
+
+        Pure function of the signals — shared by ``decide`` and by the
+        R-store replay micro-step, which must pick modules without touching
+        any stateful tracker.
+        """
+        cfg = self.config
+        ab = self.ablation
+        top_m = ab.top_m_override if ab.top_m_override is not None else cfg.top_m_modules
+        sorted_modules = sorted(
+            module_signals.values(),
+            key=lambda s: s.grad_norm,
+            reverse=True,
+        )
+        return [s for s in sorted_modules[:top_m] if s.grad_norm != 0.0]
+
+    def _random_store(self, step: int, phase: str | None, module_rank: int) -> str:
+        """Budget-matched random label (``policy_override="random_matched"``).
+
+        A fresh ``torch.Generator`` per draw, seeded from ``(seed, step[,
+        module_rank])``: identical on every rank, no global-RNG consumption,
+        bit-exact under resume. ``disable_stores`` still applies (R → F,
+        P → F) so the control never writes where its reference could not.
+        """
+        shares = self._random_shares.get(phase or "") if self._random_shares else None
+        p = shares if shares is not None else (1 / 3, 1 / 3, 1 / 3)
+        salt = module_rank if self.debug.random_unit == "module" else 0
+        gen = torch.Generator().manual_seed(
+            (self.seed * 1_000_003 + int(step) * 7919 + salt) % (2**63 - 1)
+        )
+        u = torch.rand(1, generator=gen).item()
+        acc = 0.0
+        store = "F"
+        for label, prob in zip(_STORES, p):
+            acc += prob
+            if u < acc:
+                store = label
+                break
+        if store in self.ablation.disable_stores:
+            store = "F"
+        return store
+
     def _classify(self, sig: ModuleSignals) -> str:
         """Classify a module's routing target based on its signals.
 
+        ``mode="rfp"`` (TriHOPE):
         R: high surprise, low repetition → novel one-off
         F: moderate+ surprise, medium+ repetition, stability not proven → LoRA
         P: high repetition, high directional stability, low volatility → base weights
+
+        ``mode="surprise_only"`` (Titans-style): R iff S ≥ surprise_high, else F.
+        ``mode="adam_score"`` (MoLF-style): P iff m²/v ≥ adam_score_high, else F.
         """
         cfg = self.config
         disabled_stores = self.ablation.disable_stores
         S = sig.surprise
         R = sig.repetition
+
+        if cfg.mode == "surprise_only":
+            if "R" not in disabled_stores and S >= cfg.surprise_high:
+                return "R"
+            return "F"
+        if cfg.mode == "adam_score":
+            if "P" not in disabled_stores and sig.stability_adam >= cfg.adam_score_high:
+                return "P"
+            return "F"
         # P reads either the instantaneous cosine or its sustained EMA C̄
         # (PolicyConfig.stability_source); R and F never look at C.
         C = (

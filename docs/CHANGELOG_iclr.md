@@ -34,3 +34,95 @@ deviation from the task document with the reason.
 - Tests: `tests/test_policy.py` (+3: sustained → P / instant → F on the
   same signals; R unaffected by the source; invalid value raises).
 - No deviation.
+
+## T2 — R → F replay promotion (deferral, not deletion)
+
+- Config: new `RetrievalConfig` (`controller.retrieval`): `replay_on_hit`
+  (default false → R stays write-only), `hit_threshold` (distinct earlier
+  R steps a bucket needs), `replay_batches`, `replay_target` (only `F`).
+- `RetrievalEntry` is now `eq=False` (identity equality; the generated
+  field-wise `__eq__` raises on multi-element tensors) and carries the
+  representative row when replay is on: `input_ids`, `labels`,
+  `kd_row_mask`, `teacher_confidence`. `RetrievalStore` gains
+  `entries_for_bucket`, `distinct_steps_for_bucket`, `pop_for_bucket`
+  (step-grouped FIFO: the writer appends one entry per R action, so up to
+  Top-M identical entries per step count as one recurrence) and a
+  checkpointed `replayed_total`. Old `stores.pt` files load unchanged.
+- `WriteExecutor.execute(..., sample=None)` attaches the row to R entries.
+- Loop (`training.py`): `_capture_replay_sample` takes row 0 (broadcast
+  from rank 0 every step under DDP — a collective must not sit behind a
+  per-rank branch); the replay micro-step runs after Step 11 inside the
+  same step index: forward/backward on the parked row (B=1), Top-M F-type
+  modules by raw grad norm via the new pure `RFPPolicy.select_top_m` (no
+  stateful tracker sees the replay), Top-K LoRA masks through the writer,
+  a second masked optimizer step. Emits `replay` events (distinct from
+  `decision`, so per-step decision counts and action shares are untouched),
+  `write/replay_count`, `run_summary.extra.retrieval.replayed_total`, and
+  a second `assert_rank_consistent` payload with the replayed decisions.
+- Tests: `tests/test_replay.py` (+9: step-keyed hits/pop/eviction,
+  state-dict round-trip incl. legacy entries, identity equality, kd-mask
+  capture, replay fires at step 1 for a row parked at step 0 with all-F
+  actions and no stream step lost, flag off is bit-identical to a config
+  without the key, replay changes the trajectory only after it lands);
+  `tests/test_resume_exact.py` (+1: resume after a replay is bit-exact,
+  checkpoint carries `replayed_total`).
+- **Deviations from the task document.** (1) The replay is an extra
+  micro-step *inside* the triggering step, not a substitution of the next
+  stream batch: substitution breaks `step == stream index`, on which the
+  phase map, eval schedule, `force_consolidate_steps`, checkpoint cadence,
+  the digest guard and DDP sharding all rely, and would require growing
+  `train.steps`. Nothing new is checkpointed beyond the R-store. (2) The
+  trigger counts distinct origin *steps*, not entries. (3) The replayed
+  KD term is CE-only for HF rows (cached logits are not stored). (4) A
+  bucket-keyed trigger can never fire on `novel_inject` batches (each has
+  a unique synthetic bucket); on the real stream replay fires on
+  recurrent-phase rows that were first routed R.
+
+## T3 — baseline controllers for E1
+
+- `PolicyConfig.mode: rfp | surprise_only | adam_score` (+ `adam_score_high`,
+  default 0.5; validated). `surprise_only` = Titans-style gate (R iff
+  S ≥ surprise_high, F otherwise, never P); `adam_score` = MoLF-style
+  two-tier routing on the Adam SNR m²/v already computed as
+  `stability_adam` (P iff ≥ threshold, else F, never R). `disable_stores`
+  still applies in every mode.
+- `WriterConfig.flag_p_for_consolidation` (default true): with `false` a
+  P action on an F-type module opens the adapter but never flags it —
+  MoLF has no merge path.
+- `ConsolidationConfig.trigger: signals | plateau`, `plateau_window=200`,
+  `plateau_tolerance=0.01`, `plateau_min_gap=200`. New `PlateauDetector`
+  (owned by `ConsolidationScheduler`, serialised under
+  `consolidation.pt["plateau"]`): plateau = first-half vs second-half
+  window means improve by less than the tolerance; the window is cleared
+  on a fire and `min_gap` blocks refires. `should_check` is false under
+  the plateau trigger (no signal sweep). Loop call site sits outside the
+  `controller_enabled` gates (the spec runs with the controller off and
+  every adapter open); every rank feeds its own loss, rank 0's verdict is
+  agreed through `all_reduce_max_int`, the window is reset on all ranks.
+  `consolidation` events now carry `trigger: signals | plateau | forced`.
+- `DebugConfig.policy_override="random_matched"`, `random_shares_path`,
+  `random_shares_spec_id="trihope"`, `random_unit: module | step`.
+  `RFPPolicy` takes `debug=` and `seed=`; `decide(..., step=, phase=)`.
+  Shares come from `action_share_by_phase.csv` (`*_share_mean` columns,
+  filtered to the spec, renormalised); draws use a local
+  `torch.Generator` seeded from `(seed, step[, module rank])` — identical
+  on every rank, no global-RNG use; missing file/phase → uniform thirds
+  with one warning; `disable_stores` honoured.
+- `run_config` event records `policy_mode`, `policy_override`,
+  `adam_score_high`, `consolidation.trigger` and plateau parameters.
+- Tests: `tests/test_baseline_policies.py` (+14: label sets per mode,
+  adam_score + writer flag never flags consolidation, random_matched
+  frequencies within 3 points of the file per phase / identical across
+  instances / global RNG untouched / uniform fallback with warning /
+  disabled stores + per-step draw, plateau detector fires on flat not on
+  decreasing series with min_gap and state round-trip, invalid trigger
+  raises, end-to-end plateau merges with the controller off).
+- Notes / deviations: the `molf_style` spec must also set
+  `controller.ablation.use_teacher_confidence=false` — otherwise
+  TriHOPE's confidence gate would demote MoLF's P to F on low-confidence
+  medical rows (done in the T8 manifests). MoLF's exact EPD score is
+  checked in T9; `stability_adam` is the mean m²/v, documented there.
+- Commit note: T2 and T3 landed in one commit (`T2+T3`) because both
+  touch the same hunks of `controller/config.py`, `policy.py`,
+  `writer.py` and `training.py`; the changelog entries above are still
+  separate. Every later task has its own commit.

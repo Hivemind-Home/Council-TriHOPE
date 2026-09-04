@@ -64,6 +64,7 @@ class WriteExecutor:
         teacher_id: int = 0,
         teacher_name: str = "",
         teacher_output_text: str = "",
+        sample: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], dict[nn.Parameter, "torch.Tensor | bool"]]:
         """Execute all routing actions.
 
@@ -78,6 +79,11 @@ class WriteExecutor:
             teacher_name: registered teacher name (e.g. "qwen3_coder_30b_a3b").
             teacher_output_text: teacher's text answer for this sample —
                 the cheap stand-in for "teacher soft targets".
+            sample: optional representative-row tensors (``input_ids``,
+                ``labels``, ``kd_row_mask``, ``teacher_confidence``) stored
+                on R entries so they can be replayed into the fast store
+                later (``RetrievalConfig.replay_on_hit``). ``None`` keeps
+                the pre-replay entry layout.
 
         Returns:
             ``(metrics, masks)``: write statistics (including a per-action
@@ -107,6 +113,7 @@ class WriteExecutor:
                     teacher_id=teacher_id,
                     teacher_name=teacher_name,
                     teacher_output_text=teacher_output_text,
+                    sample=sample,
                 )
                 metrics["r_count"] += 1
 
@@ -138,6 +145,7 @@ class WriteExecutor:
         teacher_id: int = 0,
         teacher_name: str = "",
         teacher_output_text: str = "",
+        sample: dict[str, Any] | None = None,
     ) -> None:
         """R-store action: no weight update, store in retrieval memory.
 
@@ -145,6 +153,7 @@ class WriteExecutor:
         their weights, moments, and counters bit-identical.
         """
         if embedding is not None:
+            sample = sample or {}
             self.r_store.add(RetrievalEntry(
                 embedding=embedding.detach().cpu(),
                 teacher_id=int(teacher_id),
@@ -152,6 +161,10 @@ class WriteExecutor:
                 step=int(step),
                 teacher_name=str(teacher_name),
                 teacher_output_text=str(teacher_output_text),
+                input_ids=sample.get("input_ids"),
+                labels=sample.get("labels"),
+                kd_row_mask=sample.get("kd_row_mask"),
+                teacher_confidence=sample.get("teacher_confidence"),
             ))
 
     def _execute_f(
@@ -197,6 +210,10 @@ class WriteExecutor:
             masks[p] = MaskedAdamW.FULLY_OPEN
             opened += p.numel()
 
-        if mod.id.param_type == "F" and self.consolidator is not None:
+        if (
+            mod.id.param_type == "F"
+            and self.consolidator is not None
+            and self.config.flag_p_for_consolidation
+        ):
             self.consolidator.flag_for_consolidation(mod.id)
         return opened

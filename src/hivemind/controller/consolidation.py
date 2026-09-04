@@ -59,6 +59,57 @@ def _module_sort_key(mid: ModuleId) -> tuple:
     return (mid.layer, mid.block_type, mid.param_type)
 
 
+class PlateauDetector:
+    """Loss-plateau trigger (Online-LoRA-style merge timing).
+
+    Keeps the last ``window`` training losses. The plateau test compares the
+    mean of the first half of the window with the mean of the second half:
+    a relative improvement below ``tolerance`` means learning has stalled.
+    After a fire the window is cleared and nothing can fire again for
+    ``min_gap`` steps. Pure function of the observed losses — no RNG.
+    """
+
+    def __init__(self, window: int, tolerance: float, min_gap: int) -> None:
+        self.window = max(2, int(window))
+        self.tolerance = float(tolerance)
+        self.min_gap = max(0, int(min_gap))
+        self._history: deque[float] = deque(maxlen=self.window)
+        self._last_fire: Optional[int] = None
+
+    def observe(self, loss: float, step: int) -> bool:
+        self._history.append(float(loss))
+        if len(self._history) < self.window:
+            return False
+        if self._last_fire is not None and step - self._last_fire < self.min_gap:
+            return False
+        vals = list(self._history)
+        half = self.window // 2
+        first = sum(vals[:half]) / half
+        second = sum(vals[half:]) / (len(vals) - half)
+        improvement = (first - second) / max(abs(first), 1e-8)
+        if improvement < self.tolerance:
+            self._last_fire = int(step)
+            self._history.clear()
+            return True
+        return False
+
+    def reset(self, step: Optional[int] = None) -> None:
+        """Clear the window (and start the min-gap clock at ``step``)."""
+        self._history.clear()
+        if step is not None:
+            self._last_fire = int(step)
+
+    def state_dict(self) -> dict:
+        return {"history": list(self._history), "last_fire": self._last_fire}
+
+    def load_state_dict(self, state: dict) -> None:
+        self._history = deque(
+            [float(v) for v in state.get("history", [])], maxlen=self.window
+        )
+        lf = state.get("last_fire")
+        self._last_fire = None if lf is None else int(lf)
+
+
 class ConsolidationScheduler:
     """Periodic F→P consolidation based on signal thresholds."""
 
@@ -90,6 +141,20 @@ class ConsolidationScheduler:
         # "modules flagged ready for P"). Drained at each consolidation
         # period and re-validated against current signals before merge.
         self._pending_p: set[ModuleId] = set()
+        # Loss-plateau trigger (config.trigger == "plateau"); None otherwise.
+        self.plateau: Optional[PlateauDetector] = (
+            PlateauDetector(
+                config.plateau_window, config.plateau_tolerance, config.plateau_min_gap
+            )
+            if config.trigger == "plateau"
+            else None
+        )
+
+    def plateau_fired(self, loss: float, step: int) -> bool:
+        """Feed one training loss to the plateau detector; True when it fires."""
+        if self.plateau is None:
+            return False
+        return self.plateau.observe(loss, step)
 
     def flag_for_consolidation(self, mid: ModuleId) -> None:
         """Register a module the policy wants consolidated.
@@ -112,6 +177,8 @@ class ConsolidationScheduler:
         self._replay.append(input_ids.detach().cpu())
 
     def should_check(self, step: int) -> bool:
+        if self.config.trigger != "signals":
+            return False  # the plateau trigger replaces the periodic sweep
         if self.config.period <= 0:
             return False
         return step > 0 and step % self.config.period == 0
@@ -392,13 +459,16 @@ class ConsolidationScheduler:
     # -- serialisation ----------------------------------------------------
 
     def state_dict(self) -> dict:
-        return {
+        out = {
             "replay": [t.clone() for t in self._replay],
             "pending_p": [
                 {"layer": m.layer, "block_type": m.block_type, "param_type": m.param_type}
                 for m in self._pending_p
             ],
         }
+        if self.plateau is not None:
+            out["plateau"] = self.plateau.state_dict()
+        return out
 
     def load_state_dict(self, state: dict) -> None:
         self._replay.clear()
@@ -409,3 +479,5 @@ class ConsolidationScheduler:
             self._pending_p.add(
                 ModuleId(int(raw["layer"]), str(raw["block_type"]), str(raw["param_type"]))
             )
+        if self.plateau is not None and "plateau" in state:
+            self.plateau.load_state_dict(state["plateau"])

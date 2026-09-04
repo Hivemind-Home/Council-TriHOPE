@@ -143,6 +143,15 @@ controller:
   debug:
     force_consolidate_steps: []
     policy_override: null
+  retrieval:
+    # R → F replay (T2). Off = the R tier is write-only (the `r_terminal`
+    # ablation); the trihope specs flip it on. A bucket parked in R on
+    # `hit_threshold` distinct earlier steps is replayed into the fast
+    # store, inside the same step, once the controller routes it non-R.
+    replay_on_hit: false
+    hit_threshold: 2
+    replay_batches: 1
+    replay_target: F
 
 data:
   source: hf

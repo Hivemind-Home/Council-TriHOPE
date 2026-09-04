@@ -27,14 +27,15 @@ from .controller.config import (
     DebugConfig,
     PolicyConfig,
     RepetitionConfig,
+    RetrievalConfig,
     StabilityConfig,
     SurpriseConfig,
     WriterConfig,
 )
 from .controller.consolidation import ConsolidationScheduler
 from .controller.module_index import ModuleId, build_module_index
-from .controller.policy import RFPPolicy
-from .controller.signals import SignalComputer
+from .controller.policy import RFPPolicy, StoreAction
+from .controller.signals import ModuleSignals, SignalComputer
 from .controller.writer import WriteExecutor
 from .data import SyntheticTeacherSeedData, build_dataloader
 from .data.collate import EmptyBatchError
@@ -253,7 +254,69 @@ def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
         writer=WriterConfig(**_sub_config(ctrl, "writer")),
         ablation=AblationConfig(**_sub_config(ctrl, "ablation")),
         debug=DebugConfig(**_sub_config(ctrl, "debug")),
+        retrieval=RetrievalConfig(**_sub_config(ctrl, "retrieval")),
     )
+
+
+def _capture_replay_sample(
+    batch: dict[str, Any], dist: DistContext, device: torch.device
+) -> dict[str, Any]:
+    """Representative row (row 0) of the batch, for R-store replay.
+
+    Mirrors the choice already made for ``bucket_id`` / ``embedding``: row 0
+    of the global batch. Under DDP that row lives on rank 0 only (contiguous
+    sharding), and each rank pads to its own shard's length, so the row is
+    broadcast from rank 0 — unconditionally, every step, so the collective
+    can never depend on a per-rank decision. Tensors are returned on CPU;
+    the R-store keeps them there.
+
+    ``kd_row_mask`` is ``None`` on the synthetic path (the replay computes KD
+    against the live teacher, as the main step does) and ``0.0`` for HF
+    batches: cached logits are not stored, so a replayed HF row is CE-only.
+    """
+    ids = batch["input_ids"]
+    labels = batch.get("labels")
+    conf = batch.get("teacher_confidence")
+    kd_row_mask = None if batch.get("teacher_logits") is None else 0.0
+    if dist.enabled:
+        T = int(ids.shape[1]) if dist.is_main else 0
+        has_labels = labels is not None
+        conf_val = None
+        if dist.is_main and isinstance(conf, torch.Tensor) and conf.numel() > 0:
+            conf_val = float(conf[0].item())
+        T, has_labels, kd_row_mask, conf_val = dist.broadcast_obj(
+            (T, has_labels, kd_row_mask, conf_val), src=0
+        )
+        coll = dist._coll_device()
+        row_ids = (
+            ids[0].detach().to(coll)
+            if dist.is_main
+            else torch.empty(T, dtype=torch.long, device=coll)
+        )
+        dist.broadcast_tensor_(row_ids)
+        row_labels = None
+        if has_labels:
+            row_labels = (
+                labels[0].detach().to(coll)
+                if dist.is_main
+                else torch.empty(T, dtype=torch.long, device=coll)
+            )
+            dist.broadcast_tensor_(row_labels)
+        return {
+            "input_ids": row_ids.cpu(),
+            "labels": None if row_labels is None else row_labels.cpu(),
+            "kd_row_mask": kd_row_mask,
+            "teacher_confidence": conf_val,
+        }
+    conf_val = None
+    if isinstance(conf, torch.Tensor) and conf.numel() > 0:
+        conf_val = float(conf[0].item())
+    return {
+        "input_ids": ids[0].detach().cpu(),
+        "labels": None if labels is None else labels[0].detach().cpu(),
+        "kd_row_mask": kd_row_mask,
+        "teacher_confidence": conf_val,
+    }
 
 
 def run_training_loop(
@@ -449,11 +512,15 @@ def run_training_loop(
         ctrl_config.policy,
         ablation=ctrl_config.ablation,
         override=ctrl_config.debug.policy_override,
+        debug=ctrl_config.debug,
+        seed=int(seed),
     )
     controller_enabled = ctrl_config.enabled
     masked_updates = masked_updates and controller_enabled
     p_store_disabled = "P" in ctrl_config.ablation.disable_stores
     force_steps = set(ctrl_config.debug.force_consolidate_steps)
+    replay_cfg = ctrl_config.retrieval
+    replay_enabled = bool(replay_cfg.replay_on_hit) and controller_enabled
 
     if masked_updates:
         # Controller-indexed params (attn/ffn base + LoRA) default to closed;
@@ -766,6 +833,9 @@ def run_training_loop(
                 "disable_stores": list(ctrl_config.ablation.disable_stores),
                 "use_teacher_confidence": ctrl_config.ablation.use_teacher_confidence,
             },
+            "policy_mode": ctrl_config.policy.mode,
+            "policy_override": ctrl_config.debug.policy_override,
+            "adam_score_high": ctrl_config.policy.adam_score_high,
             "thresholds": {
                 "surprise_high": ctrl_config.policy.surprise_high,
                 "repetition_low": ctrl_config.policy.repetition_low,
@@ -780,6 +850,14 @@ def run_training_loop(
                 "min_stability_C": ctrl_config.consolidation.min_stability_C,
                 "stability_mode": ctrl_config.consolidation.stability_mode,
                 "strategy": ctrl_config.consolidation.merge_strategy,
+                "trigger": ctrl_config.consolidation.trigger,
+                "plateau_window": ctrl_config.consolidation.plateau_window,
+                "plateau_tolerance": ctrl_config.consolidation.plateau_tolerance,
+            },
+            "retrieval": {
+                "replay_on_hit": replay_enabled,
+                "hit_threshold": replay_cfg.hit_threshold,
+                "replay_batches": replay_cfg.replay_batches,
             },
         }
     )
@@ -1096,6 +1174,12 @@ def run_training_loop(
             conf_count=conf_count,
             conf_local_mean=conf_local_mean,
         )
+        # Representative row for R-store replay (T2). Captured every step
+        # when replay is on — under DDP it is a collective, and a collective
+        # must not sit behind a branch on the (not yet computed) actions.
+        replay_sample = (
+            _capture_replay_sample(batch, dist, device) if replay_enabled else None
+        )
 
         with profiler.timer.section("signals"):
             module_signals = (
@@ -1113,7 +1197,12 @@ def run_training_loop(
         policy_section = profiler.timer.section("policy_write")
         policy_section.__enter__()
         actions = (
-            policy.decide(module_signals, teacher_confidence=conf_mean)
+            policy.decide(
+                module_signals,
+                teacher_confidence=conf_mean,
+                step=step,
+                phase=current_phase,
+            )
             if controller_enabled
             else []
         )
@@ -1142,6 +1231,7 @@ def run_training_loop(
             teacher_id=teacher_idx_repr,
             teacher_name=teacher_name_repr,
             teacher_output_text=teacher_text_repr,
+            sample=replay_sample,
         )
 
         # Trace every routing decision + update the per-module ledger.
@@ -1210,6 +1300,137 @@ def run_training_loop(
                 # next step.
                 optimizer.clear_masks()
 
+        # === Step 11b: R-store replay (deferral, not deletion) ===
+        # When the current bucket has been parked in R on enough EARLIER
+        # steps and the controller now routes it somewhere other than R (the
+        # pattern has started recurring), the parked representative rows are
+        # replayed into the fast store as extra F micro-steps INSIDE this
+        # step index. Running them here rather than substituting the next
+        # stream batch keeps ``step == stream index``, which the phase map,
+        # eval schedule, force_consolidate_steps, checkpoints and DDP
+        # sharding all rely on. The queue is drained within the step, so no
+        # replay state survives a step boundary except the R-store itself
+        # (already checkpointed). Trigger inputs are all rank-synced.
+        replayed: list[tuple[int, tuple[tuple[str, int], ...]]] = []
+        if replay_enabled and write_metrics["actions"]:
+            with profiler.timer.section("replay"):
+                eligible = [
+                    s for s in r_store.distinct_steps_for_bucket(bucket_id) if s < step
+                ]
+                any_non_r = any(d["store"] != "R" for d in write_metrics["actions"])
+                if len(eligible) >= replay_cfg.hit_threshold and any_non_r:
+                    for entry in r_store.pop_for_bucket(
+                        bucket_id, replay_cfg.replay_batches
+                    ):
+                        if entry.input_ids is None:
+                            continue  # parked before replay was enabled
+                        rep_tokens = entry.input_ids.to(device).unsqueeze(0)
+                        rep_labels = (
+                            entry.labels.to(device).unsqueeze(0)
+                            if entry.labels is not None
+                            else None
+                        )
+                        rep_tidx = torch.tensor([int(entry.teacher_id)], device=device)
+                        rep_mask = (
+                            None
+                            if entry.kd_row_mask is None
+                            else torch.tensor([float(entry.kd_row_mask)], device=device)
+                        )
+                        rep_conf = (
+                            None
+                            if entry.teacher_confidence is None
+                            else torch.tensor(
+                                [float(entry.teacher_confidence)], device=device
+                            )
+                        )
+                        rep_teacher_logits = batch_teacher_forward(
+                            rep_tokens, rep_tidx, registry.teachers, cfg.model.vocab_size
+                        )
+                        optimizer.zero_grad()
+                        with autocast_ctx:
+                            rep_logits = model_fwd(rep_tokens)
+                            rep_reg = compute_total_regularization(
+                                student, reg_config, consistency_forward=None
+                            )
+                            rep_loss, _rep_loss_metrics = compute_distillation_objective(
+                                teacher_logits=rep_teacher_logits,
+                                student_logits=rep_logits,
+                                targets=rep_tokens,
+                                config=distill_config,
+                                reg_loss=rep_reg,
+                                labels=rep_labels,
+                                teacher_logits_mask=rep_mask,
+                                teacher_confidence=rep_conf,
+                            )
+                        scaler.scale(rep_loss).backward()
+                        scaler.unscale_(optimizer)
+                        # Top-M F-type modules by raw gradient norm — a pure
+                        # function of the grads; no stateful tracker sees
+                        # the replay. Base (P-type) modules are excluded:
+                        # replay_target is the fast store.
+                        rep_signals: dict[ModuleId, ModuleSignals] = {}
+                        for m in module_index:
+                            if m.id.param_type != "F":
+                                continue
+                            grads = [
+                                p.grad.detach().flatten()
+                                for p in m.params
+                                if p.grad is not None
+                            ]
+                            if not grads:
+                                continue
+                            rep_signals[m.id] = ModuleSignals(
+                                module_id=m.id,
+                                grad_norm=torch.cat(grads).norm().item(),
+                            )
+                        rep_actions = [
+                            StoreAction(module_id=s.module_id, store="F", grad_norm=s.grad_norm)
+                            for s in policy.select_top_m(rep_signals)
+                        ]
+                        rep_write_metrics, rep_masks = writer.execute(
+                            actions=rep_actions, module_map=module_map, step=step
+                        )
+                        if masked_updates:
+                            optimizer.set_masks(rep_masks)
+                        try:
+                            scaler.step(optimizer)
+                            scaler.update()
+                        finally:
+                            optimizer.clear_masks()
+                        for det in rep_write_metrics["actions"]:
+                            ledger.record_action(
+                                det["module"], det["store"], step, det["coords_opened"]
+                            )
+                            # A distinct event type: ``decision`` records stay
+                            # one-per-Top-M-module-per-step and the action
+                            # shares (the source of random_routing's budget)
+                            # stay uncontaminated.
+                            event_trace.emit(
+                                {
+                                    "type": "replay",
+                                    "step": step,
+                                    "origin_step": int(entry.step),
+                                    "module": det["module"],
+                                    "action": det["store"],
+                                    "coords_opened": det["coords_opened"],
+                                    "bucket_id": bucket_id,
+                                    "teacher": entry.teacher_name,
+                                }
+                            )
+                        replayed.append(
+                            (
+                                int(entry.step),
+                                tuple(
+                                    (d["module"], d["coords_opened"])
+                                    for d in rep_write_metrics["actions"]
+                                ),
+                            )
+                        )
+            dist.assert_rank_consistent(
+                (step, "replay", tuple(replayed)), what="replay decisions"
+            )
+        replay_count = len(replayed)
+
         # Tier 2: catch drift that has not yet flipped a discrete decision.
         every = dist.cfg.assert_rank_consistency
         if every and step % every == 0:
@@ -1223,7 +1444,9 @@ def run_training_loop(
         consolidator.record_batch(tokens)
         consolidated = []
 
-        def _trace_merges(mids: list[ModuleId], forced: bool) -> None:
+        def _trace_merges(
+            mids: list[ModuleId], forced: bool, trigger: str = "signals"
+        ) -> None:
             for mid in mids:
                 ledger.record_consolidation(str(mid), step)
                 sig = module_signals.get(mid)
@@ -1232,6 +1455,7 @@ def run_training_loop(
                         "type": "consolidation",
                         "step": step,
                         "module": str(mid),
+                        "trigger": trigger,
                         "strategy": ctrl_config.consolidation.merge_strategy,
                         "pre_signals": (
                             {
@@ -1268,8 +1492,28 @@ def run_training_loop(
             if ctrl_config.consolidation.checkpoint_before_merge:
                 _pre_merge_save(step)
             forced_merged = consolidator.force_consolidate()
-            _trace_merges(forced_merged, forced=True)
+            _trace_merges(forced_merged, forced=True, trigger="forced")
             consolidated = consolidated + forced_merged
+
+        # Loss-plateau trigger (Online-LoRA-style baseline). Deliberately
+        # outside the ``controller_enabled`` gates: the `plateau_trigger`
+        # spec runs with the controller off and every adapter open. Every
+        # rank feeds its own shard loss to the detector, but only rank 0's
+        # verdict counts (per-rank losses differ), agreed through one int
+        # collective, and the window is reset everywhere on a fire.
+        if ctrl_config.consolidation.trigger == "plateau" and not p_store_disabled:
+            fired_local = consolidator.plateau_fired(
+                float(loss_metrics.get("loss/total", 0.0)), step
+            )
+            fire = dist.all_reduce_max_int(1 if (fired_local and is_main) else 0)
+            if fire:
+                if consolidator.plateau is not None:
+                    consolidator.plateau.reset(step)
+                if ctrl_config.consolidation.checkpoint_before_merge:
+                    _pre_merge_save(step)
+                plateau_merged = consolidator.force_consolidate()
+                _trace_merges(plateau_merged, forced=False, trigger="plateau")
+                consolidated = consolidated + plateau_merged
         consolidation_section.__exit__(None, None, None)
 
         # === Step 13: Logging ===
@@ -1286,6 +1530,7 @@ def run_training_loop(
                 "write/f_count": write_metrics["f_count"],
                 "write/p_count": write_metrics["p_count"],
                 "write/coords_opened": write_metrics["coords_opened"],
+                "write/replay_count": replay_count,
                 "signals/surprise_mean": sum(surprises) / max(len(surprises), 1),
                 "signals/repetition_mean": sum(repetitions) / max(len(repetitions), 1),
                 "signals/stability_C_mean": sum(stabilities) / max(len(stabilities), 1),
@@ -1492,14 +1737,21 @@ def run_training_loop(
             retention=phase_tracker.retention_table() if phase_tracker else None,
             ledger_totals=ledger.totals(),
             interrupted=bool(_interrupted["flag"]),
-            extra=(
-                {
-                            "stream_digest": stream_schedule.config_digest(),
-                            "world_size": dist.world_size,
-                        }
-                if stream_schedule is not None
-                else None
-            ),
+            extra={
+                **(
+                    {
+                        "stream_digest": stream_schedule.config_digest(),
+                        "world_size": dist.world_size,
+                    }
+                    if stream_schedule is not None
+                    else {}
+                ),
+                "retrieval": {
+                    "replay_on_hit": replay_enabled,
+                    "replayed_total": int(r_store.replayed_total),
+                    "buffer_size": int(r_store.size),
+                },
+            },
         )
 
     event_trace.close()
