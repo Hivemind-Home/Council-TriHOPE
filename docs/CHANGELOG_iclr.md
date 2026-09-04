@@ -368,3 +368,22 @@ deviation from the task document with the reason.
   (`tests/test_attribution.py::test_every_sweep_merge_has_a_pre_merge_checkpoint`).
 - Tests: +3 (`test_baseline_policies.py` EPD argmax + peak precondition,
   `test_stability.py` EPD formula, `test_attribution.py` sweep checkpoint).
+- T5 acceptance on real data (`stream_smoke`, corrupted math teacher,
+  forced merge at step 35, sweep merge at step 60 with 40 % of the evidence
+  attributed to `math_teacher_corrupted`): `rollback_teacher.py --min-share
+  0.3` restored `step_00000060_pre_merge` (which only exists because of the
+  T9 fix), resumed with the block list, made zero P decisions for the tag
+  and no further merges, and wrote `rollback_summary.json` (math 6.401 →
+  6.368, medical 10.198 → 10.180 at the end of the 70-step smoke).
+  `--baseline full_restore` restored `step_00000009_pre_phase_math_recurrent`
+  and skipped steps 10–39. The script now forwards `--min-share` as
+  `controller.debug.block_min_share` so the restore-time adapter reset uses
+  the same threshold as the rollback-point search.
+
+## T10 — STATUS
+
+- `docs/STATUS.md`: task table with commits and test counts, E1/E5 result
+  slots with the pass conditions, E2/E3/E4 slots, the not-done list
+  (`stable_gate`, MoLF's momentum tracking, no real-stream runs on this
+  CPU box), and every deviation. Final suite: 498 passed, 2 GPU-only skips;
+  ruff clean.

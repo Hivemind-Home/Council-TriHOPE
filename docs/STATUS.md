@@ -19,7 +19,7 @@ the GPU campaign has run — nothing has been run on the real stream yet.
 | T7 budget curve + Pareto | done | `b95237a` | 454 |
 | T8 manifests + runbook + `--concurrent` | done | `2e83cff` | 458 |
 | T9 Part C reading notes + reading-driven fixes (EPD rule, peak precondition, pre-merge bug) | done | see git log | 498 |
-| T10 this file | skeleton; results pending | — | — |
+| T10 this file | done (results pending the GPU campaign) | see git log | 498 |
 
 Real-data checks done on this CPU box (`stream_smoke`, Qwen tokenizer,
 math + medical Layer-C): replay fires (22 rows, none in `novel_inject`),

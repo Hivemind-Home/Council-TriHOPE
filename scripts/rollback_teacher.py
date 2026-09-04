@@ -180,6 +180,8 @@ def plan(
         extra = [
             f"++checkpoint.resume_from={ckpt}",
             f"++controller.debug.block_p_for_teachers=[{teacher}]",
+            # the same threshold decides which pending adapters are reset
+            f"++controller.debug.block_min_share={min_share}",
         ]
         info = {"mode": "selective", "restore_step": step, "module": point.get("module"),
                 "attribution_share": point.get("attribution_share")}

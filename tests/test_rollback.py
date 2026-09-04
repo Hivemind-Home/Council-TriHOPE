@@ -182,6 +182,7 @@ class TestScriptPlanning:
         assert cmd[cmd.index("--config-name") + 1] == "stream_small"
         assert "data.corrupt_teacher.enabled=true" in cmd
         assert "++controller.debug.block_p_for_teachers=[bad]" in cmd
+        assert "++controller.debug.block_min_share=0.5" in cmd
         assert any(o.startswith("++checkpoint.resume_from=") and o.endswith("_pre_merge")
                    for o in cmd)
 
