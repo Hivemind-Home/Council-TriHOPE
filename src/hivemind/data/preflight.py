@@ -111,6 +111,44 @@ def validate(
                 )
 
     phases = list(stream_cfg.get("phases") or [])
+    corrupt = dict(data_cfg.get("corrupt_teacher") or {})
+    if corrupt.get("enabled"):
+        from .corruption import CorruptionSpec
+
+        try:
+            spec_c = CorruptionSpec(**corrupt)
+        except (TypeError, ValueError) as exc:
+            rep.errors.append(f"data.corrupt_teacher is invalid: {exc}")
+            spec_c = None
+        if spec_c is not None:
+            phase_names = {str(p.get("name")) for p in phases}
+            if spec_c.domain not in declared:
+                rep.errors.append(
+                    f"data.corrupt_teacher.domain={spec_c.domain!r} is not a declared domain."
+                )
+            if spec_c.phase not in phase_names:
+                rep.errors.append(
+                    f"data.corrupt_teacher.phase={spec_c.phase!r} is not a stream phase "
+                    f"(have {sorted(phase_names)})."
+                )
+            else:
+                served = next(
+                    _phase_domains(p) for p in phases if str(p.get("name")) == spec_c.phase
+                )
+                if spec_c.domain not in served:
+                    rep.errors.append(
+                        f"data.corrupt_teacher: phase {spec_c.phase!r} serves {served}, "
+                        f"not {spec_c.domain!r}."
+                    )
+            if spec_c.tag in set(teacher_ids.values()):
+                rep.errors.append(
+                    f"data.corrupt_teacher.tag={spec_c.tag!r} collides with a real "
+                    "teacher id; the corrupted rows would not be distinguishable."
+                )
+            rep.facts["corrupt_teacher"] = {
+                "domain": spec_c.domain, "phase": spec_c.phase,
+                "fraction": spec_c.fraction, "mode": spec_c.mode, "tag": spec_c.tag,
+            }
     for phase in phases:
         for name in _phase_domains(phase):
             if name not in declared:

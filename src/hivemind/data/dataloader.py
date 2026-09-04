@@ -169,18 +169,29 @@ def build_dataloader(
                 tokenizer=getattr(collate_fn, "tokenizer", None),
             )
 
+        from .corruption import CorruptedTeacherView, parse_corruption_config
+
         # Built at the GLOBAL batch size on every rank — identical by
         # construction, since the schedule is a pure function of the seed.
         # Sharding happens inside the sampler, per step.
+        corruption = parse_corruption_config(cfg.get("corrupt_teacher"))
         schedule = StreamSchedule(
             stream,
             dataset,
             batch_size=int(cfg.get("batch_size", 4)),
             seed=int(cfg.get("shuffle_seed", cfg.get("seed", 42))),
             data_identity=_data_identity(cfg),
+            corruption=corruption,
         )
+        # The corrupted-teacher view wraps the TRAIN dataset only, after the
+        # schedule was built on the raw rows; eval and probe loaders take
+        # the non-stream branch and stay clean.
+        train_dataset: Dataset = dataset
+        plan = schedule.corruption_plan()
+        if plan is not None:
+            train_dataset = CorruptedTeacherView(dataset, plan)
         loader = DataLoader(
-            dataset,
+            train_dataset,
             batch_sampler=StreamBatchSampler(
                 schedule, rank=rank, world_size=world_size
             ),

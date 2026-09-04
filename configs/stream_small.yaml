@@ -163,6 +163,22 @@ data:
   batch_size: 2
   num_workers: 0            # 0 required for exact resume
   seed: 42
+  # Corrupted-teacher stream (E5, task T4). Off = the clean stream and the
+  # unchanged digest. When on, whole bucket subsets + whole background steps
+  # of `phase` (fraction of each) are served with a bad teacher: `shuffle`
+  # swaps teacher_output_text between corrupted rows, `degrade` truncates
+  # it and appends a wrong final answer. Rows carry teacher_id = tag so
+  # every decision / R entry is attributed to the corrupted teacher.
+  # `confidence: null` keeps each row's own confidence (E5 measures the
+  # routing, not the confidence gate); 0.2 is the low-confidence arm.
+  corrupt_teacher:
+    enabled: false
+    domain: math
+    phase: math_recurrent
+    fraction: 0.5
+    mode: shuffle
+    confidence: null
+    tag: math_teacher_corrupted
 
 stream:
   enabled: true

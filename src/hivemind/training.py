@@ -400,11 +400,22 @@ def run_training_loop(
                 f"[warn] teachers.teacher_ids has no entry for {missing_ids}; "
                 "those domains can only route by domain name."
             )
+        # Corrupted-teacher stream (T4): register the tag as its own cache
+        # teacher (same domain, distinct name) so MetadataRouter resolves it
+        # by name and every decision / R entry is attributed to it.
+        corrupt_raw = _as_container(cfg.data.get("corrupt_teacher")) or {}
+        extra_teachers = (
+            [(str(corrupt_raw.get("tag", "math_teacher_corrupted")),
+              str(corrupt_raw.get("domain", "math")))]
+            if corrupt_raw.get("enabled")
+            else []
+        )
         teachers = create_hf_cache_teachers(
             domains=domains,
             teacher_ids=teacher_ids,
             vocab_size=cfg.model.vocab_size,
             device=device,
+            extra=extra_teachers,
         )
     else:
         num_teachers = teachers_cfg.get("num_teachers", 2)
@@ -434,9 +445,12 @@ def run_training_loop(
 
     # Router
     if router_kind == "metadata":
-        domain_to_index = {
-            getattr(t.model, "domain", ""): i for i, t in enumerate(registry.teachers)
-        }
+        # First teacher wins per domain: the corrupted tag shares a domain
+        # with the clean teacher, and a row with an unknown teacher_id must
+        # fall back to the CLEAN one.
+        domain_to_index: dict[str, int] = {}
+        for i, t in enumerate(registry.teachers):
+            domain_to_index.setdefault(getattr(t.model, "domain", ""), i)
         # Live teachers: a routing miss silently distils a domain through the
         # wrong expert, so refuse. Cache teachers all return zeros, so a miss
         # cannot change the loss — keep the tolerant fallback there.
@@ -885,6 +899,17 @@ def run_training_loop(
                 "hit_threshold": replay_cfg.hit_threshold,
                 "replay_batches": replay_cfg.replay_batches,
             },
+            "corrupt_teacher": (
+                {
+                    **stream_schedule.corruption.digest_payload(),
+                    "corrupted_rows": len(stream_schedule.corrupted_indices),
+                    "corrupted_rows_by_phase": dict(
+                        stream_schedule.corrupted_rows_by_phase
+                    ),
+                }
+                if stream_schedule is not None and stream_schedule.corruption is not None
+                else None
+            ),
         }
     )
 
@@ -1017,7 +1042,14 @@ def run_training_loop(
                             {"type": "phase_memory", "step": step - 1, **mem}
                         )
                 event_trace.emit(
-                    {"type": "phase_start", "step": step, "phase": phase_name}
+                    {
+                        "type": "phase_start",
+                        "step": step,
+                        "phase": phase_name,
+                        "corrupted_rows": int(
+                            stream_schedule.corrupted_rows_by_phase.get(phase_name, 0)
+                        ),
+                    }
                 )
                 profiler.on_phase_start(phase_name)
                 current_phase = phase_name
@@ -1811,6 +1843,20 @@ def run_training_loop(
                     "replayed_total": int(r_store.replayed_total),
                     "buffer_size": int(r_store.size),
                 },
+                **(
+                    {
+                        "corrupt_teacher": {
+                            **stream_schedule.corruption.digest_payload(),
+                            "corrupted_rows": len(stream_schedule.corrupted_indices),
+                            "corrupted_rows_by_phase": dict(
+                                stream_schedule.corrupted_rows_by_phase
+                            ),
+                        }
+                    }
+                    if stream_schedule is not None
+                    and stream_schedule.corruption is not None
+                    else {}
+                ),
             },
         )
 

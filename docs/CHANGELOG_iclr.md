@@ -199,3 +199,45 @@ deviation from the task document with the reason.
   and `random_routing` run with replay on so their R tier means the same
   thing as trihope's. `trihope_no_hash` is added to E1/E2/E3 as a headline
   candidate (see the plan: the bucket-id counter is dataset metadata).
+
+## T4 — corrupted-teacher stream
+
+- New `src/hivemind/data/corruption.py`: `CorruptionSpec`
+  (`data.corrupt_teacher: {enabled, domain, phase, fraction, mode:
+  shuffle|degrade, confidence, tag}`), `degrade_text` (first 25 % of
+  whitespace tokens + "Final answer: <last number + 1>", or a fixed wrong
+  suffix), `CorruptedTeacherView` (a `Dataset` view rewriting
+  `teacher_output_text`, `teacher_id = tag`, `teacher_confidence` when
+  set, `teacher_logits_path = None`, `corrupted = True`; delegates every
+  other attribute to the wrapped dataset).
+- `StreamSchedule(corruption=)`: selection in `_build_corruption` with
+  `_rng(phase_index, tag=99)`, exposed as `corrupted_indices`,
+  `corruption_partner`, `corrupted_rows_by_phase`, `corruption_plan()`,
+  `is_corrupted_step()`. `config_digest` gains a `corruption` key **only
+  when enabled**, so every clean checkpoint keeps its digest.
+- `build_dataloader` wraps the TRAIN dataset in the stream branch after the
+  schedule is built; eval and probe loaders stay clean.
+- `create_hf_cache_teachers(..., extra=[(tag, domain)])` registers the
+  tag as a fifth cache teacher; `training.py` builds `domain_to_index`
+  first-wins (it was last-wins, which would have routed unknown-id math
+  rows to the corrupted teacher). `phase_start` events carry
+  `corrupted_rows`; `run_config` and `run_summary.extra` carry the block
+  plus `corrupted_rows_by_phase`.
+- Preflight: enabled-only checks (domain declared, phase exists and serves
+  the domain, tag does not collide with a real teacher id).
+- `stream_small.yaml` ships the block with `enabled: false`.
+- Tests: `tests/test_corrupt_teacher.py` (+15).
+- **Deviations.** (1) Selection is batch-coherent — `round(fraction ×
+  num_buckets)` whole bucket subsets plus `round(fraction × other steps)`
+  whole background/novel steps — not per-row: with batch_size 2 and bucket
+  rows served ~19× each, per-row selection would alternate clean/corrupt
+  across visits and mix within a batch, so the representative-row teacher
+  label and every merge attribution would be ~50 % wrong. "Exact fraction"
+  therefore holds at step level within one bucket's share. (2) Corruption
+  is applied by global row index through a dataset view instead of at
+  collate time (no `global_index` plumbing). A corrupted background row
+  that a later mixed phase re-draws stays corrupted; the count is reported
+  per phase (`corrupted_rows_by_phase`) — ≈1 row for `stream_small`.
+  (3) `confidence` defaults to `null` (keep the row's own): the doc's 0.2
+  would make E5 measure the confidence gate rather than the routing; 0.2
+  is the separate `trihope_lowconf` arm in `bad_teacher_small.yaml` (T5).
