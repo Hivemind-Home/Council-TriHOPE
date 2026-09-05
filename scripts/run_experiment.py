@@ -400,7 +400,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--dry-run", action="store_true", help="print the matrix and exit")
     parser.add_argument("--resume", action="store_true", help="skip done runs, resume failed ones")
-    parser.add_argument("--only", type=str, default=None, help="run only this spec id")
+    parser.add_argument(
+        "--only", type=str, default=None, help="run only these spec ids (comma-separated)"
+    )
+    parser.add_argument(
+        "--skip",
+        type=str,
+        default=None,
+        help=(
+            "skip these spec ids (comma-separated), e.g. --skip random_routing until "
+            "trihope's action shares exist"
+        ),
+    )
     parser.add_argument(
         "--max-hours", type=float, default=None, help="stop launching past this budget"
     )
@@ -471,9 +482,16 @@ def main(argv: list[str] | None = None) -> int:
         if code:
             return code
     if args.only:
-        runs = [r for r in runs if r.spec_id == args.only]
+        wanted = {x.strip() for x in args.only.split(",") if x.strip()}
+        runs = [r for r in runs if r.spec_id in wanted]
         if not runs:
             print(f"No runs match --only {args.only}")
+            return 2
+    if args.skip:
+        skipped = {x.strip() for x in args.skip.split(",") if x.strip()}
+        runs = [r for r in runs if r.spec_id not in skipped]
+        if not runs:
+            print(f"Every run is excluded by --skip {args.skip}")
             return 2
 
     if args.dry_run:

@@ -83,6 +83,22 @@ class TestDryRun:
     def test_only_no_match(self, tmp_path: Path) -> None:
         assert main([str(_manifest(tmp_path)), "--dry-run", "--only", "bogus"]) == 2
 
+    def test_only_accepts_comma_list(self, tmp_path: Path, capsys) -> None:
+        path = _manifest(tmp_path)
+        assert main([str(path), "--dry-run", "--only", "trihope,no_surprise"]) == 0
+        out = capsys.readouterr().out
+        assert "trihope-seed1" in out and "no_surprise-seed2" in out
+
+    def test_skip_excludes_spec(self, tmp_path: Path, capsys) -> None:
+        path = _manifest(tmp_path)
+        assert main([str(path), "--dry-run", "--skip", "no_surprise"]) == 0
+        out = capsys.readouterr().out
+        assert "trihope-seed1" in out and "no_surprise" not in out
+
+    def test_skip_everything_is_an_error(self, tmp_path: Path) -> None:
+        path = _manifest(tmp_path)
+        assert main([str(path), "--dry-run", "--skip", "trihope,no_surprise"]) == 2
+
 
 class TestCleanup:
     def _run_with_ckpts(self, tmp_path: Path) -> ResolvedRun:

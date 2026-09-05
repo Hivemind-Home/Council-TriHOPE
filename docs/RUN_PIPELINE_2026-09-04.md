@@ -234,7 +234,8 @@ surprising) and fill the slot in `docs/STATUS.md`.
 
 ```bash
 python scripts/run_experiment.py MANIFEST --dry-run              # matrix + preflight, launches nothing
-python scripts/run_experiment.py MANIFEST --only <spec_id>       # one spec (all seeds)
+python scripts/run_experiment.py MANIFEST --only a,b             # only these specs (all seeds)
+python scripts/run_experiment.py MANIFEST --skip random_routing  # everything except these specs
 python scripts/run_experiment.py MANIFEST --resume               # skip done, resume failed/interrupted bit-exactly
 python scripts/run_experiment.py MANIFEST --concurrent N         # N runs sharing the one GPU
 python scripts/run_experiment.py MANIFEST --max-hours H          # stop launching past the budget
