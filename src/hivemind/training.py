@@ -258,8 +258,32 @@ def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
     )
 
 
+def _kd_row_mask(
+    cached_mask: torch.Tensor | None, live_teachers: bool
+) -> torch.Tensor | None:
+    """The per-row KD mask the objective should see.
+
+    The collator's ``teacher_logits_mask`` means "this row carried CACHED
+    logits". With cache-backed teachers that is also "this row has any
+    teacher logits at all", so it is the right KD mask. With LIVE teachers
+    it is not: ``batch_teacher_forward`` fills every cache-miss row from
+    the live model, so every row has real logits and KD must be on for all
+    of them. Passing the cache mask through unchanged silently zeroed the
+    KD term of every live run (``loss/kd`` == 0 with four teachers loaded).
+    """
+    if cached_mask is None:
+        return None
+    if live_teachers:
+        return torch.ones_like(cached_mask)
+    return cached_mask
+
+
 def _capture_replay_sample(
-    batch: dict[str, Any], dist: DistContext, device: torch.device
+    batch: dict[str, Any],
+    dist: DistContext,
+    device: torch.device,
+    *,
+    live_teachers: bool = False,
 ) -> dict[str, Any]:
     """Representative row (row 0) of the batch, for R-store replay.
 
@@ -271,13 +295,18 @@ def _capture_replay_sample(
     the R-store keeps them there.
 
     ``kd_row_mask`` is ``None`` on the synthetic path (the replay computes KD
-    against the live teacher, as the main step does) and ``0.0`` for HF
-    batches: cached logits are not stored, so a replayed HF row is CE-only.
+    against the live teacher, as the main step does), ``1.0`` for HF batches
+    with live teachers (the replay re-runs the live forward, so KD is real),
+    and ``0.0`` for HF batches with cache-backed teachers: cached logits are
+    not stored, so a replayed HF row is CE-only.
     """
     ids = batch["input_ids"]
     labels = batch.get("labels")
     conf = batch.get("teacher_confidence")
-    kd_row_mask = None if batch.get("teacher_logits") is None else 0.0
+    if batch.get("teacher_logits") is None:
+        kd_row_mask = None
+    else:
+        kd_row_mask = 1.0 if live_teachers else 0.0
     if dist.enabled:
         T = int(ids.shape[1]) if dist.is_main else 0
         has_labels = labels is not None
@@ -1263,7 +1292,7 @@ def run_training_loop(
                 reg_loss=reg_loss,
                 labels=batch.get("labels"),
                 attention_mask=batch.get("attention_mask"),
-                teacher_logits_mask=cached_mask,
+                teacher_logits_mask=_kd_row_mask(cached_mask, teacher_mode == "live"),
                 teacher_confidence=batch.get("teacher_confidence"),
             )
 
@@ -1322,7 +1351,11 @@ def run_training_loop(
         # when replay is on — under DDP it is a collective, and a collective
         # must not sit behind a branch on the (not yet computed) actions.
         replay_sample = (
-            _capture_replay_sample(batch, dist, device) if replay_enabled else None
+            _capture_replay_sample(
+                batch, dist, device, live_teachers=(teacher_mode == "live")
+            )
+            if replay_enabled
+            else None
         )
 
         with profiler.timer.section("signals"):

@@ -439,3 +439,25 @@ deviation from the task document with the reason.
   `corrupt_teacher` block so E5 can target it.
 - Docs touched: `experiments.md`, `GPU_RUNBOOK.md`,
   `RUN_PIPELINE_2026-09-04.md`, `STATUS.md`, `README.md`, `running.md`.
+
+## 2026-09-05 (later) — live-KD mask bug, P-firing diagnostic
+
+- **Bug (found by the first `trihope_live` run):** the training loop
+  passed the collator's `teacher_logits_mask` — which means "this row had
+  CACHED logits" — straight through as the KD row mask. With live
+  teachers every cache-miss row is filled by the live forward, so the
+  mask must be all ones; instead KD was multiplied by zero and the "live"
+  run trained on text exactly like cache mode (`loss/kd` = 0.0,
+  `kd_row_hit_frac` = 0.0, teachers loaded at 28.9 GB peak for nothing).
+  Fix: `training._kd_row_mask(cached_mask, live_teachers)` at the main
+  loss call, and `_capture_replay_sample(..., live_teachers=True)` so a
+  replayed row is KD-on under live teachers too. Regression test
+  `tests/test_training_loop_hf.py::test_live_teachers_make_kd_active`.
+  Every `live_kd_small_v1` run made before this commit must be deleted
+  and rerun.
+- The same run made **zero P decisions and zero consolidations** in 6000
+  steps (36 000 decisions: R 12 178 / F 23 822). `scripts/diagnose_p.py
+  <run_dir>` prints, per phase, the quantiles of R / C̄ / V / S at decision
+  time and the share of decisions passing each P sub-condition and the
+  sweep's re-validation — run it on the cache-mode `trihope` seeds before
+  reading E4.

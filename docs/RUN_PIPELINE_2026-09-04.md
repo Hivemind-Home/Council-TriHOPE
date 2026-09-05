@@ -277,6 +277,7 @@ python scripts/run_experiment.py MANIFEST --max-hours H          # stop launchin
 | `fatal error: Python.h: No such file or directory` on the first forward (Triton compiling its CUDA driver helper) | the Python dev headers are missing: `sudo apt-get install -y python3.X-dev build-essential` (X = your interpreter's minor version), then relaunch with `--resume`; the compile happens once and is cached |
 | the runner prints the launch command and then nothing | by design: the training subprocess writes to `<run_dir>/stdout.log`, not the terminal — `tail -f` it; `status.json` says `running` |
 | the progress bar sits at step 499 / 1999 / 2149 / … for minutes | phase-boundary eval: validation loss on all four domains plus exact-match generation (64 samples × 64 new tokens, token by token) on code, medical and math; the same pause recurs every 250 steps and every 50 steps inside `code_revisit` |
+| `permanent_writes.total == 0` and no `consolidation` events at the end | P never fired: run `python scripts/diagnose_p.py <run_dir>` — it prints per phase how far R, C̄ and V sit from the policy and sweep thresholds, which tells you which conjunct to relax (`controller.policy.stability_high_C` / `stability_low_V` / `repetition_medium`, or the sweep's `min_stability_C` / `min_repetition`) |
 | `F=6, R=0` throughout `general_warm` | benign for the pretrained student: general-text loss is already ~1.2, so surprise never reaches `surprise_high=2.0` and everything is a tentative F write; the decisive checks are `novel_inject` (steps 2000–2149) routing to R with zero replays and `code_recurrent` showing replays after ~step 600 |
 
 ## 9. Tier 4 — live logit-KD robustness check (appendix)
@@ -298,7 +299,10 @@ Five runs at one seed, ~2× the cache-mode cost each (teachers add ~18 GB
 in bf16 and four extra forwards per step; no bitsandbytes needed — set
 `teachers.pretrained.general.quantization=nf4` to save ~6 GB if it is
 installed). Run after Tier 1; it does not affect the go/no-go. Health
-signal at step 0: `loss/kd` > 0 and `loss/kd_row_hit_frac` = 1.0. Compare
+signal at step 0: `loss/kd` > 0 and `loss/kd_row_hit_frac` = 1.0 — a live
+run that shows 0.0 for both is training on text (that was a real bug,
+fixed 2026-09-05; any live run made on an older commit must be deleted
+and rerun). Compare
 `action_share_by_phase.csv` and `forgetting_table.csv` with the cache-mode
 rows — the appendix claim is that routing behaviour is not an artefact of
 text-only supervision. Provenance of the cached text, what confidence
