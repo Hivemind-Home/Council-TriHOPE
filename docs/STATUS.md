@@ -154,7 +154,7 @@ P never fired, zero consolidations. Cause (`controller/moments.py`
 docstring): under exact masking a never-opened base-weight module has
 m = v = 0 forever, base modules dominate Top-M by gradient norm, and P —
 the only action that opens them — needs those signals. Every E1 run made
-before commit `d878821` routed on repetition alone and must be
+before commit `5788dac` routed on repetition alone and must be
 deleted. Fix: `controller.moments.source=tracked` (default; the old
 behaviour is the `moments_optimizer` ablation). The live-KD tier had a
 second, independent bug (KD mask zeroed; fixed in `f9b422d`). Both VMs:
