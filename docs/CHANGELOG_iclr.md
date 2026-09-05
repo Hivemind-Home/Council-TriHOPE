@@ -461,3 +461,37 @@ deviation from the task document with the reason.
   time and the share of decisions passing each P sub-condition and the
   sweep's re-validation — run it on the cache-mode `trihope` seeds before
   reading E4.
+
+## 2026-09-05 (evening) — tracked signal moments: the controller was reading dead Adam state
+
+- **Finding** (`scripts/diagnose_p.py` on `trihope-seed1337`, 2 000 steps):
+  C̄ = 0.000 and S = 20.0 (= `s_max`) at all 9 384 decisions; P never
+  fired; 0 consolidations. The smoke reproduces it split by module type:
+  base-weight (P-type) modules C̄ max 0.000 / S ≥ 8.8, LoRA (F-type)
+  modules C̄ up to 0.83. Cause: MaskedAdamW never touches a closed
+  coordinate's state (Theorem 1), base modules are opened only by P, base
+  modules dominate Top-M by gradient norm, and P requires C̄ ≥ 0.5 from
+  the very moments that never update. Surprise is `g²/(v+ε)` with v = 0.
+- **Fix:** `controller/moments.py` — `SignalMomentTracker`, the
+  controller's own bias-corrected Adam-style m̃/ṽ for every indexed
+  coordinate, advanced from the full gradient every step with the
+  optimizer's β₁/β₂ regardless of the mask (MoLF's universal momentum
+  tracking on the signal path only; the optimizer's state stays exactly
+  masked). `MomentsConfig(source=tracked|optimizer, sketch_stride,
+  bias_correct)` on `ControllerConfig`; `SignalComputer` reads the tracked
+  moments (grad_norm / Top-M still use the full gradient); moments
+  checkpoint in `controller.pt` (~0.6 GB at stride 8 for 0.6B) and resume
+  bit-exactly. Stream configs set `sketch_stride: 8`. Ablation spec
+  `moments_optimizer` reproduces the dead-signal behaviour.
+- **Tests** (`tests/test_moments.py`): tracked ≡ Adam's `exp_avg` /
+  `exp_avg_sq` on always-open coordinates; with the optimizer source a
+  never-opened module reads C = 0 forever while tracked moments give
+  C > 0.5 and S < s_max; stride-4 sketch tracks stride-1 on modules ≥ 2k
+  coords; state-dict round trip; bias correction; config validation.
+- **Consequence:** every `baselines_small_v1` run made before this commit
+  routed on repetition alone (S and C̄ carried no information) and is
+  deleted; E1 restarts. Smoke reference losses re-recorded below.
+- Docs: `reframe.md` correction, reframe §2 claim 1, `related_work_draft.md`
+  and `related_work_notes.md` (MoLF momentum tracking now adopted on the
+  signal path), `experiments.md` formal-claim row, `GPU_RUNBOOK.md`
+  checkpoint size, `STATUS.md` §7.6 and §8.

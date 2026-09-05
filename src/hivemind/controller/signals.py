@@ -13,6 +13,7 @@ import torch
 from ..optim.masked_adamw import MaskedAdamW
 from .config import ControllerConfig
 from .module_index import ModuleId, ModuleInfo
+from .moments import SignalMomentTracker
 from .repetition import FusedRepetition
 from .stability import StabilityTracker
 from .surprise import AdamSurprise
@@ -102,6 +103,28 @@ class SignalComputer:
             self._stability[m.id] = StabilityTracker(config.stability)
             self._repetition[m.id] = FusedRepetition(rep_cfg)
 
+        # Signal moments (MomentsConfig): the controller's own continuous
+        # m̃/ṽ, keyed by parameter name so they checkpoint and resume.
+        mc = config.moments
+        self._use_tracked = mc.source == "tracked"
+        # ``param_names`` are not unique (both LoRA factors of a projection
+        # share one name), so suffix repeats: the tracker keys buffers by
+        # this string and two params must never share one.
+        self._param_names: dict[int, str] = {}
+        seen: dict[str, int] = {}
+        for m in modules:
+            for p, name in zip(m.params, m.param_names):
+                k = seen.get(name, 0)
+                seen[name] = k + 1
+                self._param_names[id(p)] = name if k == 0 else f"{name}#{k}"
+        self._moments = SignalMomentTracker(
+            sketch_stride=int(mc.sketch_stride), bias_correct=bool(mc.bias_correct)
+        )
+
+    @property
+    def moments(self) -> SignalMomentTracker:
+        return self._moments
+
     def compute_all(
         self,
         optimizer: MaskedAdamW,
@@ -123,34 +146,53 @@ class SignalComputer:
             {ModuleId: ModuleSignals} for each module.
         """
         results: dict[ModuleId, ModuleSignals] = {}
+        tracked = self._use_tracked
+        if tracked:
+            self._moments.set_betas_from(optimizer)
 
         for mod in modules:
             mid = mod.id
             signals = ModuleSignals(module_id=mid)
 
-            # Collect gradients and optimizer states
+            # Collect gradients and the moment evidence. ``grads`` (full) feeds
+            # grad_norm / Top-M; ``sig_grads`` is what the m/v-based signals
+            # see — the full gradient with optimizer moments, the strided
+            # sketch with tracked moments.
             grads = []
+            sig_grads = []
             m_states = []
             v_states = []
             has_states = True
+            pending: list[tuple[str, torch.Tensor]] = []
 
             for p in mod.params:
                 if p.grad is None:
                     continue
-                grads.append(p.grad.detach().flatten())
-                m, v = optimizer.get_state_for_param(p)
-                if m is not None and v is not None:
-                    m_states.append(m.detach().flatten())
-                    v_states.append(v.detach().flatten())
+                g = p.grad.detach().flatten()
+                grads.append(g)
+                if tracked:
+                    name = self._param_names.get(id(p), f"param@{id(p)}")
+                    gs = self._moments.sketch(g)
+                    m, v = self._moments.read(name, gs)
+                    sig_grads.append(gs)
+                    m_states.append(m)
+                    v_states.append(v)
+                    pending.append((name, gs))
                 else:
-                    has_states = False
+                    sig_grads.append(g)
+                    m, v = optimizer.get_state_for_param(p)
+                    if m is not None and v is not None:
+                        m_states.append(m.detach().flatten())
+                        v_states.append(v.detach().flatten())
+                    else:
+                        has_states = False
 
             if not grads:
                 results[mid] = signals
                 continue
 
-            grad_cat = torch.cat(grads)
-            signals.grad_norm = grad_cat.norm().item()
+            signals.grad_norm = torch.cat(grads).norm().item()
+            grad_cat = torch.cat(sig_grads)
 
             if has_states and m_states and v_states:
                 m_cat = torch.cat(m_states)
@@ -210,8 +252,12 @@ class SignalComputer:
                             signals.grad_norm
                         )
 
+            for name, gs in pending:
+                self._moments.update(name, gs)
             results[mid] = signals
 
+        if tracked:
+            self._moments.advance()
         return results
 
     def state_dict(self) -> dict:
@@ -221,6 +267,7 @@ class SignalComputer:
         return {
             "stability": {_encode(mid): tr.state_dict() for mid, tr in self._stability.items()},
             "repetition": {_encode(mid): tr.state_dict() for mid, tr in self._repetition.items()},
+            "moments": self._moments.state_dict() if self._use_tracked else None,
         }
 
     def load_state_dict(self, state: dict) -> None:
@@ -236,3 +283,7 @@ class SignalComputer:
             mid = _decode(key)
             if mid in self._repetition:
                 self._repetition[mid].load_state_dict(sub)
+        moments = state.get("moments")
+        if self._use_tracked and moments:
+            device = next((p.device for m in self.modules for p in m.params), None)
+            self._moments.load_state_dict(moments, device=device)

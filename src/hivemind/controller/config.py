@@ -29,6 +29,42 @@ class StabilityConfig:
 
 
 @dataclass
+class MomentsConfig:
+    """Where the controller's ``m_{t-1}`` / ``v_{t-1}`` evidence comes from.
+
+    ``tracked`` (default): the controller keeps its own bias-corrected
+    Adam-style moments for every indexed coordinate, advanced from the full
+    gradient every step regardless of the write mask (MoLF's universal
+    momentum tracking, confined to the signal path; see
+    ``controller/moments.py``). Identical to Adam's state on coordinates
+    that are open every step; alive on coordinates the mask keeps closed.
+
+    ``optimizer``: read MaskedAdamW's own ``exp_avg`` / ``exp_avg_sq``. Under
+    exact masking these are zero for every never-opened coordinate, so
+    surprise saturates and the cosine is a warmup zero on base-weight
+    modules until P has fired — which needs those signals. Kept as the
+    ablation that shows why ``tracked`` is necessary.
+
+    ``sketch_stride``: track every k-th coordinate only (memory ÷ k; the
+    signals are per-coordinate means and cosines, so a fixed stride is an
+    unbiased, deterministic estimate). ``bias_correct``: divide by
+    ``1 - β^t`` as Adam does before forming ``g²/v`` and ``m²/v``.
+    """
+
+    source: str = "tracked"
+    sketch_stride: int = 1
+    bias_correct: bool = True
+
+    def __post_init__(self) -> None:
+        if self.source not in ("tracked", "optimizer"):
+            raise ValueError(
+                f"moments.source must be 'tracked' or 'optimizer', got {self.source!r}"
+            )
+        if int(self.sketch_stride) < 1:
+            raise ValueError(f"moments.sketch_stride must be >= 1, got {self.sketch_stride}")
+
+
+@dataclass
 class RepetitionConfig:
     """Repetition signal configuration."""
 
@@ -411,3 +447,4 @@ class ControllerConfig:
     ablation: AblationConfig = field(default_factory=AblationConfig)
     debug: DebugConfig = field(default_factory=DebugConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    moments: MomentsConfig = field(default_factory=MomentsConfig)

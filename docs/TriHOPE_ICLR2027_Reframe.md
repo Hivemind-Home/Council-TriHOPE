@@ -29,7 +29,7 @@ We stop presenting TriHOPE as a way to make a small student model better through
 
 **We are claiming:**
 
-1. Permanence of an update is a decision the optimizer does not currently make, and it can be made per block from pre-update `m`, `v`, and the current gradient at no extra cost.
+1. Permanence of an update is a decision the optimizer does not currently make, and it can be made per block from pre-update Adam-style `m`, `v` (tracked for every indexed coordinate; identical to Adam's own state wherever the coordinate is open — see `docs/reframe.md`, correction of 2026-09-05) and the current gradient, without changing the update rule.
 2. A three-tier write policy (R = defer/write nothing, F = tentative LoRA, P = permanent base) traces a better forgetting-vs-plasticity curve than two-tier and heuristic-trigger alternatives at a matched permanent-write budget.
 3. The no-write tier is useful only because deferred observations can come back (replay into F on recurrence). Deferral is quarantine, not deletion.
 4. F→P promotion gated on stability ∧ recurrence fires at sensible times, and mistimed promotion measurably hurts.

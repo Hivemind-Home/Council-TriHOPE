@@ -111,6 +111,19 @@ controller:
     c_ema_alpha: 0.1          # EMA of cos(g, m) → the sustained C̄ read by policy + consolidation
     warmup_threshold: 1.0e-6
     eps: 1.0e-8
+  # Where the m/v evidence comes from (controller/moments.py). `tracked`
+  # keeps the controller's own bias-corrected Adam-style moments for every
+  # indexed coordinate, advanced every step regardless of the write mask —
+  # MoLF's universal momentum tracking, confined to the signal path. The
+  # optimizer's own m/v stay exactly masked (Theorem 1 is about the update).
+  # `optimizer` reads MaskedAdamW's state instead and is the ablation that
+  # reproduces the dead-signal behaviour of the first real-stream run
+  # (S pinned at s_max, C̄ = 0, P never fires). Stride 8 tracks every 8th
+  # coordinate (≈ 0.6 GB for the 0.6B student).
+  moments:
+    source: tracked
+    sketch_stride: 8
+    bias_correct: true
   repetition:
     alpha_mom: 0.05
     alpha_hash: 0.1

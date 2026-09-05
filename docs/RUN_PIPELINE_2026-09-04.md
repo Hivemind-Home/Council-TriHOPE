@@ -36,7 +36,7 @@ Datasets download automatically from the Hugging Face hub on first use
 ## 2. Tests (before anything touches the GPU)
 
 ```bash
-python -m pytest tests/ -q                     # expected: 499 passed, 0 skipped (497 + 2 GPU-only tests)
+python -m pytest tests/ -q                     # expected: 512 passed, 0 skipped (2 of them GPU-only)
 ruff check src tests analysis scripts          # expected: All checks passed!
 ```
 
@@ -67,13 +67,13 @@ runs that share a directory would mix their traces.
 python train.py --config-name stream_smoke \
     ++run.dir=runs/smoke/plain ++checkpoint.dir=runs/smoke/plain/ckpt \
     ++logging.path=runs/smoke/plain/metrics.jsonl ++logging.events_path=runs/smoke/plain/events.jsonl
-#     ... Training complete. Final loss: 5.054330348968506
+#     ... Training complete. Final loss: 4.962428569793701   (tracked signal moments, 2026-09-05; was 5.054330348968506 before)
 
 # 3b. replay on — expect replays in the recurrent phases, none in novel_inject
 python train.py --config-name stream_smoke ++controller.retrieval.replay_on_hit=true \
     ++run.dir=runs/smoke/replay ++checkpoint.dir=runs/smoke/replay/ckpt \
     ++logging.path=runs/smoke/replay/metrics.jsonl ++logging.events_path=runs/smoke/replay/events.jsonl
-#     reference: 22 rows replayed, final loss 4.8209028244018555 (verified 2026-09-04; last digits may differ by platform)
+#     reference: 5 rows replayed, 20 P decisions, final loss 4.934509754180908 (2026-09-05, tracked moments; fewer R decisions than before so fewer replays)
 
 # 3c. bit-exact resume with replay on — final loss identical to 3b to the last digit
 python train.py --config-name stream_smoke ++controller.retrieval.replay_on_hit=true \
@@ -109,11 +109,39 @@ print(json.load(open(f"{d}/run_summary.json"))["extra"])
 PY
 ```
 
-Expected: 3a prints the reference loss to the last digit; 3b shows
-`replays: 88` (22 rows × 4 modules) and `replayed_total: 22`, with no
+Expected: 3a prints the reference loss to the last digit, with P
+decisions and `consolidations` ≥ 1 (the signals are alive); 3b shows
+`replays: 20` (5 rows × 4 modules) and `replayed_total: 5`, with no
 replay at steps 40–44 (`novel_inject`); 3c prints the same final loss as
-3b; 3d shows `math_teacher_corrupted` among the teachers and a different
+3b (`4.934509754180908`); 3d shows `math_teacher_corrupted` among the teachers and a different
 `stream_digest` from 3b.
+
+## 3.5 Restart notice (2026-09-05)
+
+Two defects were found by the first real runs and fixed the same day;
+both are in `docs/CHANGELOG_iclr.md` (2026-09-05 entries):
+
+- **The controller was reading dead Adam state.** Under exact masking a
+  never-opened base-weight module has m = v = 0 forever, so surprise was
+  pinned at `s_max` and C̄ = 0 at every decision, and P could never fire.
+  The controller now tracks its own bias-corrected Adam-style moments
+  (`controller.moments`, default `tracked`; ≈ 0.6 GB extra per run and per
+  checkpoint at `sketch_stride: 8`). **Every E1 run made before this
+  commit routed on repetition alone: delete `runs/baselines_small_v1` and
+  restart from step 4.**
+- **Live KD was zeroed** by the cache-hit mask (`f9b422d`): delete
+  `runs/live_kd_small_v1` and rerun Tier 4.
+
+Sanity check after `git pull`, on either VM, before relaunching:
+
+```bash
+python -m pytest tests/test_moments.py tests/test_training_loop_hf.py -q   # both green
+python scripts/diagnose_p.py <any finished run>    # old runs: C̄ max 0.000 everywhere
+```
+
+On the new runs, `diagnose_p.py` must show C̄ spread across (0, 1) from
+`general_warm` on, surprise well below 20 for most decisions, and a
+non-zero P count by the end of `code_recurrent`.
 
 ## 4. The first proper training run
 

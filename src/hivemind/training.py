@@ -25,6 +25,7 @@ from .controller.config import (
     ConsolidationConfig,
     ControllerConfig,
     DebugConfig,
+    MomentsConfig,
     PolicyConfig,
     RepetitionConfig,
     RetrievalConfig,
@@ -255,6 +256,7 @@ def _build_controller_config(cfg: DictConfig) -> ControllerConfig:
         ablation=AblationConfig(**_sub_config(ctrl, "ablation")),
         debug=DebugConfig(**_sub_config(ctrl, "debug")),
         retrieval=RetrievalConfig(**_sub_config(ctrl, "retrieval")),
+        moments=MomentsConfig(**_sub_config(ctrl, "moments")),
     )
 
 

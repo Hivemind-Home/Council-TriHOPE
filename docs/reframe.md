@@ -28,12 +28,24 @@ evidence:**
   consolidate everything; consolidation is costly and gated.
 
 ## What is actually ours (the one defensible claim)
-A task-free controller that reads pre-update Adam **m *and* v per block**,
-routes each update across a **three-tier store whose R tier writes nothing**
-(every rival is two-store), promotes **F→P only under joint
+A task-free controller that reads pre-update Adam-style **m *and* v per
+block**, routes each update across a **three-tier store whose R tier writes
+nothing** (every rival is two-store), promotes **F→P only under joint
 stability ∧ recurrence** (the opposite trigger to Online-LoRA's novelty
-signal), at **zero optimizer overhead**, with **exact coordinate masking**.
-The rigor that is genuinely ours is the exact masking — **not** the merge.
+signal), **without touching the update rule**, with **exact coordinate
+masking**. The rigor that is genuinely ours is the exact masking — **not**
+the merge.
+
+*Correction (2026-09-05, first real run):* under exact masking the
+optimizer's own m/v of a never-opened coordinate are zero forever, so
+reading them literally makes surprise saturate and C̄ = 0 on every
+base-weight module, and P can never fire. The controller therefore keeps
+its own bias-corrected Adam-style moments for every indexed coordinate
+(MoLF's universal momentum tracking, confined to the signal path; one EMA
+pair on a 1/8 coordinate sketch, ≈ 0.6 GB for 0.6B). They equal Adam's
+state on coordinates that are open every step and stay alive on closed
+ones. "Zero optimizer overhead" becomes "no change to the update; a
+signal-side EMA"; Theorem 1 is unchanged because it is about the update.
 
 ## What we do (in priority order)
 1. **E1 — the make-or-break run.** m/v-timed routing vs **Online-LoRA**

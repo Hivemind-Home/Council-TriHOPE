@@ -83,10 +83,13 @@ Xinyin Zhang, Boxun Li, Virginia Smith, Kevin Kuo.
   `lr_i · mean(m²/(√v+ε))` (`ModuleSignals.epd_score`, pre-update moments —
   one EMA step behind MoLF's post-update ones), the winner alone updates
   (P = base fully, F = the whole adapter with `top_k_fraction=1.0`), every
-  block routes every step, no R, no merge. **Not reproduced:** universal
-  momentum tracking (losers' moments advancing on a shared clock) — that
-  contradicts Theorem 1 and MaskedAdamW; documented as the one deliberate
-  deviation. The PFN-like SNR threshold survives as `adam_score_rule=
+  block routes every step, no R, no merge. Universal momentum tracking
+  (losers' moments advancing on a shared clock) is reproduced **on the
+  signal path only** (`controller/moments.py`, 2026-09-05): the EPD score
+  reads the controller's tracked moments, which advance for every expert
+  every step, while MaskedAdamW's own state stays exactly masked
+  (Theorem 1). The first real run showed why MoLF needs it: read literally,
+  a never-selected expert's m/v are zero and its score is dead. The PFN-like SNR threshold survives as `adam_score_rule=
   snr_threshold` (sweep specs `molf_style_a*`). MoLF's own numbers do not
   transfer (single-task SFT).
 - **One sentence.** MoLF (Tang et al., 2026) reads each module's Adam

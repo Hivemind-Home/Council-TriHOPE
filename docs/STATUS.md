@@ -139,3 +139,24 @@ Recorded in full in `docs/data_provenance.md`; the paper must:
    a trace.
 5. Keep teacher selection out of the contributions (cache mode routes by
    the row's `teacher_id`; the cosine router runs only on synthetic data).
+6. Say where the evidence comes from: the controller tracks its own
+   bias-corrected Adam-style moments for every indexed coordinate (a 1/8
+   sketch), identical to Adam's state on always-open coordinates and alive
+   on closed ones; the optimizer's state stays exactly masked. Credit
+   MoLF's universal momentum tracking for the idea; "zero optimizer
+   overhead" becomes "no change to the update rule".
+
+## 8. 2026-09-05 — the campaign restarts from E1
+
+`scripts/diagnose_p.py` on the first cache-mode `trihope` seed (2 000 steps,
+9 384 decisions): C̄ = 0.000 at every decision, surprise pinned at 20.0,
+P never fired, zero consolidations. Cause (`controller/moments.py`
+docstring): under exact masking a never-opened base-weight module has
+m = v = 0 forever, base modules dominate Top-M by gradient norm, and P —
+the only action that opens them — needs those signals. Every E1 run made
+before commit `d878821` routed on repetition alone and must be
+deleted. Fix: `controller.moments.source=tracked` (default; the old
+behaviour is the `moments_optimizer` ablation). The live-KD tier had a
+second, independent bug (KD mask zeroed; fixed in `f9b422d`). Both VMs:
+`git pull`, delete `runs/baselines_small_v1` and `runs/live_kd_small_v1`,
+relaunch from step 4 of `docs/RUN_PIPELINE_2026-09-04.md`.

@@ -13,7 +13,7 @@ produces.
 
 ```bash
 pip install -e ".[data,analysis]"     # + [logging] for wandb
-python -m pytest tests/ -q            # 499 tests, CPU-only, ~30s
+python -m pytest tests/ -q            # 512 tests, CPU-only, ~2 min
 ```
 
 Datasets (public, HuggingFace hub, downloaded automatically on first use):
@@ -119,11 +119,15 @@ recurrent → revisit). Verifies: Layer-C loading, stream scheduling, R/F/P
 routing + event trace, phase-boundary eval, checkpoint/resume (the resumed
 run must end at the **exact** same loss), and `logs/run_summary.json`.
 
-Expected routing behavior: ~100% R in the warm/novel phases, F once
-repetition rises in the recurrent phases. A reference run (2026-08-07,
-CPU, ~5 min): loss 10.95 → 5.05, `R=4` through step 59, `F=4` from step
-60, and the resumed run finished at `5.054330348968506` — identical to the
-uninterrupted run to the last digit.
+Expected routing behavior: R while nothing recurs, F once repetition
+rises in the recurrent phases, and a handful of P decisions plus at least
+one consolidation once the sustained cosine C̄ clears the bar. Reference
+run (2026-09-05, CPU, ~3 min, tracked signal moments): loss 10.95 → 4.96,
+actions R 62 / F 203 / P 15, 2 consolidations, C̄ up to 0.72; with
+`++controller.retrieval.replay_on_hit=true` the run ends at
+`4.934509754180908` with 5 rows replayed, and resuming it from step 50
+finishes at the identical loss to the last digit. (Before the tracked
+moments the same smoke ended at 5.054330348968506 with P never firing.)
 
 Code is deliberately absent from the smoke: `load_dataset` fetches the
 whole split before `.select`, and `code-layerC-200k` is 64 shards
@@ -394,3 +398,4 @@ The paper's theorems are enforced by the test suite:
 | Corollary 2 (fresh optimizer state after merge) | `tests/test_consolidation.py::test_merge_resets_adapter_optimizer_state` |
 | Proposition 1 (exact Top-K budget) | `tests/test_writer.py::test_f_action_opens_top_k_only` |
 | Bit-exact resume | `tests/test_resume_exact.py` |
+| Tracked signal moments ≡ Adam's state on always-open coordinates; alive on closed ones | `tests/test_moments.py` |

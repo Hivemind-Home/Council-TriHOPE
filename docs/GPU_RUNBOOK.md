@@ -118,7 +118,9 @@ show, anything surprising (task document, Part B, T8).
 - `--concurrent N` shares the single visible GPU between N processes; use
   `--parallel-gpus N` instead when several GPUs are visible.
 - `checkpoint.keep_tagged=0` (E5 manifests) keeps every `pre_merge` /
-  `pre_phase_*` checkpoint; expect ~1.3 GB per tagged checkpoint for the
-  0.6B student. Prune manually after the rollback runs.
+  `pre_phase_*` checkpoint; expect ~1.9 GB per tagged checkpoint for the
+  0.6B student (1.3 GB weights + optimizer, ~0.6 GB tracked signal
+  moments in `controller.pt` at `sketch_stride: 8`). Prune manually after
+  the rollback runs.
 - `random_routing` warns and falls back to uniform thirds if the shares
   file is missing — run `--only trihope` + `run_report` first.

@@ -47,7 +47,10 @@ loss and uses it, with momentum and a decay gate, to scale writes into a
 learned memory module. MoLF (Tang et al., 2026) is closest to our
 mechanism: it routes each module's update to a dense or LoRA expert by an
 expected-preconditioned-descent score on Adam's moments under a Top-1
-masked AdamW, then fuses once after training. Hu et al. (2026) show that
+masked AdamW, then fuses once after training; its universal momentum
+tracking keeps the losing expert's moments advancing, which we adopt for
+the controller's evidence only — the optimizer's own state stays exactly
+masked. Hu et al. (2026) show that
 gradient attenuation fed to both moments inflates the effective step by
 1/(1−α) through the second-moment denominator, which motivates our exact
 mask: a closed coordinate receives no parameter, moment, weight-decay or

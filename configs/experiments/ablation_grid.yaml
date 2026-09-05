@@ -47,3 +47,11 @@ runs:
       - controller.consolidation.min_stability_C=0.7
       - controller.consolidation.min_repetition=0.6
       - controller.consolidation.period=1000
+  - id: moments_optimizer
+    # Signal-evidence control: read MaskedAdamW's own (exactly masked) m/v
+    # instead of the controller's tracked moments. Reproduces the first
+    # real-stream run: base-weight modules read m = v = 0 until P fires, so
+    # surprise saturates, C̄ = 0 and P never fires (docs/CHANGELOG_iclr.md,
+    # 2026-09-05). Shows why tracked moments are necessary.
+    overrides:
+      - controller.moments.source=optimizer
