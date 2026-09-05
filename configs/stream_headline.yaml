@@ -177,6 +177,18 @@ data:
   max_rows_per_domain: null   # full data for the headline
   batch_size: 1
   num_workers: 0
+  # Corrupted-teacher stream (E5). Off = the clean stream; same semantics as
+  # stream_small (whole bucket subsets + background steps of `phase` served
+  # with teacher_id = tag). Present so bad_teacher manifests can target the
+  # headline profile without a base-config change.
+  corrupt_teacher:
+    enabled: false
+    domain: math
+    phase: math_recurrent
+    fraction: 0.5
+    mode: shuffle
+    confidence: null
+    tag: math_teacher_corrupted
   seed: 42
 
 stream:

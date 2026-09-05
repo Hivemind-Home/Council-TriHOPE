@@ -408,3 +408,34 @@ deviation from the task document with the reason.
 - `docs/related_work_draft.md` trimmed to the 500–600 word budget; test
   counts in `CLAUDE.md` / `docs/experiments.md` refreshed (498 → 499 with
   the new DDP test).
+
+## 2026-09-05 — GPU-day fixes, live-KD tier, data-provenance audit
+
+- **Runner:** `--skip a,b` (exclude specs) and comma-list `--only`, so the
+  E1 matrix can fill the card while `random_routing` waits for trihope's
+  action-share file (3 tests). Commit `3e9b33c`.
+- **First real GPU run** (`trihope-seed1337`, 96 GB card): Triton needed
+  `python3.12-dev` (`Python.h`) to compile its driver helper; peak memory
+  ≈ 12 GB, ≈ 4 it/s alone; `general_warm` routes everything to F because
+  the pretrained student's general-text loss (~1.2) never reaches
+  `surprise_high`. Runbook troubleshooting rows added for all of these.
+- **Objective audit:** cache mode is sequence-level distillation —
+  `loss/kd` is exactly 0 because no logit files exist. `stream_small.yaml`
+  now declares the four Qwen-vocabulary live teachers (bf16, ~18 GB, no
+  bitsandbytes); new manifest `configs/experiments/live_kd_small.yaml`
+  (Tier 4, appendix: `trihope_live`, `full_ft_live`, three trigger
+  baselines, one seed, `data.router_strict=true`).
+- **Data-provenance audit** (`docs/data_provenance.md`): general/code
+  traces were shipped with public corpora (R1-Distill-Llama-70B via
+  Glaive; DeepSeek-R1 via NVIDIA); math/medical were generated for this
+  project (attribution rests on ids + logit-derived confidence; generation
+  logs still to be obtained); `deepseek-v4-flash` graded curation samples
+  only; general/code confidence is an undocumented scoring pass; math
+  traces truncated at ~1000 chars; student context 512 tokens. Paper
+  wording fixes listed in `docs/STATUS.md` §7.
+- `configs/experiments/headline.yaml` trimmed to the reframe's plan
+  (`trihope`, `trihope_no_hash`, placeholder for the closest E1 baseline;
+  `trihope_live_kd` removed). `stream_headline.yaml` gains the disabled
+  `corrupt_teacher` block so E5 can target it.
+- Docs touched: `experiments.md`, `GPU_RUNBOOK.md`,
+  `RUN_PIPELINE_2026-09-04.md`, `STATUS.md`, `README.md`, `running.md`.

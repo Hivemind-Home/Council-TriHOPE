@@ -29,8 +29,10 @@ done
 
 Then read `runs/.../run_summary.json → profile.final_peak_mem_gb` from the
 first real run (step 1 below) and pick `N = floor(80 GB / peak)` for
-`--concurrent N` (expect N = 3–4 for the 0.6B student in bf16 with gradient
-checkpointing).
+`--concurrent N`. Observed 2026-09-05 on a 96 GB card: **~12 GB** for
+`trihope` (0.6B student, bf16, gradient checkpointing, batch 2), so N = 5
+is safe; `full_ft` (full Adam state on every base weight) peaks higher,
+and N processes share compute, so per-run speed drops roughly N-fold.
 
 ## 1. Tier 1 — E1, the go/no-go (≈ 40 GPU-hours sequential)
 
@@ -78,12 +80,30 @@ python -m analysis.run_report runs/r_tier_small_v1
 python -m analysis.run_report runs/p_study_small_v1
 ```
 
-## 4. Optional — headline (1.7B) only if the GPU is idle after Tier 3
+## 4. Tier 4 — live logit-KD robustness check (≈ 15 GPU-hours, appendix)
 
-Three runs at 1 seed, sequentially (~6 h each):
-`trihope`, `trihope_no_hash`, and whichever baseline was closest in E1.
-Add them to `configs/experiments/headline.yaml` with the same overrides as
-in `baselines_small.yaml`; `trihope_live_kd` is not part of the plan.
+```bash
+python scripts/run_experiment.py configs/experiments/live_kd_small.yaml --concurrent 2
+python -m analysis.run_report runs/live_kd_small_v1
+```
+
+Five specs at one seed (`trihope_live`, `full_ft_live` and the three
+trigger baselines) with `teachers.mode=live`: the four Qwen-vocabulary
+teachers declared in `stream_small.yaml` (~18 GB bf16, no bitsandbytes
+needed) score the cached text and the student matches their full
+distributions. Run it after Tier 1 — the go/no-go does not depend on it.
+`--only trihope_live,<closest>_live` cuts it to two runs. Read
+`action_share_by_phase.csv` and `forgetting_table.csv` next to the
+cache-mode rows; the appendix claim is "same routing behaviour under
+logit KD", not a number. See `docs/data_provenance.md` §3 for why it does
+not join Figure 1.
+
+## 5. Optional — headline (1.7B) only if the GPU is idle after Tier 4
+
+`configs/experiments/headline.yaml` now holds `trihope` and
+`trihope_no_hash` at one seed (~6 h each); uncomment the placeholder and
+paste in the override list of whichever E1 baseline sat closest on
+Figure 1.
 
 ## Per-experiment write-up
 

@@ -173,11 +173,26 @@ print("peak GB:", s["profile"].get("final_peak_mem_gb"), "wall h:", round(s["pro
 PY
 ```
 
-Pick `N = floor(80 / peak GB)` for `--concurrent N` (expect 3–4).
-Then start the paired headline candidate:
+Pick `N = floor(80 / peak GB)` for `--concurrent N`. Observed 2026-09-05
+on a 96 GB card: ~12 GB for `trihope`, so N = 5 is safe (`full_ft` peaks
+higher; N processes also share compute, so each runs ~N× slower than the
+4 it/s a lone run shows).
+
+To fill the card while the trihope seeds are still running, launch the
+rest of E1 now and leave `random_routing` for last — it reads trihope's
+action-share file and silently falls back to uniform thirds if the file
+is missing (a different, weaker control than the paper claims):
 
 ```bash
-python scripts/run_experiment.py configs/experiments/baselines_small.yaml --only trihope_no_hash --concurrent 3
+python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resume --skip random_routing --concurrent 5
+```
+
+When the three trihope seeds are done, build the shares file and run the
+last spec:
+
+```bash
+python -m analysis.run_report runs/baselines_small_v1
+python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resume --only random_routing --concurrent 3
 ```
 
 ## 5. The full campaign, in order
@@ -259,10 +274,42 @@ python scripts/run_experiment.py MANIFEST --max-hours H          # stop launchin
 | `checkpoint … does not exist` from `rollback_teacher.py` | the run lacked `checkpoint_before_merge` / `keep_tagged=0` / `save_before_phases` — the E5 manifest sets all three |
 | `teacher_partition needs lora.rank >= number of teachers` | rank must be ≥ 5 on the corrupted stream (`stream_small` ships 16) |
 | replicas "diverged across ranks" (DDP only) | a controller input escaped the sync; file a bug — never lower `assert_rank_consistency` |
+| `fatal error: Python.h: No such file or directory` on the first forward (Triton compiling its CUDA driver helper) | the Python dev headers are missing: `sudo apt-get install -y python3.X-dev build-essential` (X = your interpreter's minor version), then relaunch with `--resume`; the compile happens once and is cached |
+| the runner prints the launch command and then nothing | by design: the training subprocess writes to `<run_dir>/stdout.log`, not the terminal — `tail -f` it; `status.json` says `running` |
+| the progress bar sits at step 499 / 1999 / 2149 / … for minutes | phase-boundary eval: validation loss on all four domains plus exact-match generation (64 samples × 64 new tokens, token by token) on code, medical and math; the same pause recurs every 250 steps and every 50 steps inside `code_revisit` |
+| `F=6, R=0` throughout `general_warm` | benign for the pretrained student: general-text loss is already ~1.2, so surprise never reaches `surprise_high=2.0` and everything is a tentative F write; the decisive checks are `novel_inject` (steps 2000–2149) routing to R with zero replays and `code_recurrent` showing replays after ~step 600 |
 
-## 9. Optional last tier — 1.7B headline
+## 9. Tier 4 — live logit-KD robustness check (appendix)
 
-Only if the GPU is idle after Tier 3: `trihope`, `trihope_no_hash` and the
-closest E1 baseline at one seed on `stream_headline` (~6 h each), added to
-`configs/experiments/headline.yaml` with the same overrides as in
-`baselines_small.yaml`. `trihope_live_kd` is not part of the plan.
+Every run above trains on cached teacher **text**: no logit files exist,
+so the KD term is inert (`loss/kd` = 0.0 in metrics.jsonl) and the
+objective is confidence-weighted CE on `teacher_output_text` — sequence-
+level distillation. Tier 4 re-runs the headline controller and its E1
+rivals with `teachers.mode=live`, where the four Qwen-vocabulary teachers
+declared in `stream_small.yaml` score the same cached text and the student
+matches their full distributions (τ² · KL at τ = 4, CE at half weight):
+
+```bash
+python scripts/run_experiment.py configs/experiments/live_kd_small.yaml --concurrent 2
+python -m analysis.run_report runs/live_kd_small_v1
+```
+
+Five runs at one seed, ~2× the cache-mode cost each (teachers add ~18 GB
+in bf16 and four extra forwards per step; no bitsandbytes needed — set
+`teachers.pretrained.general.quantization=nf4` to save ~6 GB if it is
+installed). Run after Tier 1; it does not affect the go/no-go. Health
+signal at step 0: `loss/kd` > 0 and `loss/kd_row_hit_frac` = 1.0. Compare
+`action_share_by_phase.csv` and `forgetting_table.csv` with the cache-mode
+rows — the appendix claim is that routing behaviour is not an artefact of
+text-only supervision. Provenance of the cached text, what confidence
+means per domain, and why this tier does not join Figure 1:
+`docs/data_provenance.md`.
+
+## 10. Optional last tier — 1.7B headline
+
+Only if the GPU is idle after Tier 4. `configs/experiments/headline.yaml`
+holds `trihope` and `trihope_no_hash` at one seed on `stream_headline`
+(~6 h each); uncomment the placeholder and paste in the override list of
+whichever E1 baseline sat closest to trihope on Figure 1.
+`stream_headline.yaml` now carries the disabled `corrupt_teacher` block,
+so an E5 manifest can target it as well.

@@ -58,6 +58,18 @@ without a logit cache — the NPZ files referenced by `teacher_logits_path`
 are not published — so `ce_confidence_weighting` is the only route by
 which confidence changes the objective in cache mode.
 
+That makes the campaign's objective **sequence-level distillation**
+(the student imitates the teacher's text; `loss/kd` reads 0.0 for the
+whole run), not temperature-scaled logit matching. Every controller sees
+the identical gradient stream, so E1–E5 are unaffected; the *wording* of
+the paper is (see `docs/data_provenance.md` §4). The logit-matching form
+of the objective is exercised once, as a robustness check, by
+`configs/experiments/live_kd_small.yaml` (Tier 4 below): four frozen
+Qwen-vocabulary teachers score the same cached text and the student
+matches their distributions. Who authored each domain's cached text, what
+`teacher_confidence` is per domain, and the trace truncation the student
+sees are all recorded in `docs/data_provenance.md`.
+
 `teachers.teacher_ids` must equal the values in the tables:
 
 | domain | teacher_id |
@@ -67,13 +79,17 @@ which confidence changes the objective in cache mode.
 | math | `math_teacher_deepseek_r1_distill_qwen_1p5b` |
 | medical | `medical_teacher_qwen2p5_1p5b_instruct_clean` |
 
-The one **live** run (`trihope_live_kd`) loads four small domain experts
-for true temperature-scaled logit KD. `teacher_hf.py` hard-raises unless
-`vocab_size == 151936`, which rules out DeepSeek-R1-Distill-Llama-70B
-(128256) and the 7B Qwen2.5 Coder/Math variants (152064) — only the 1.5B
-Qwen2.5 models qualify. The shipped set totals ~12 GB and fits alongside
-the 1.7B student on a 40 GB card; math and medical are exactly the models
-that produced the cached supervision, so live and cache stay comparable.
+**Live teachers** (`teachers.mode=live`, Tier 4 only) load four small
+domain experts for true temperature-scaled logit KD. `teacher_hf.py`
+hard-raises unless `vocab_size == 151936`, which rules out the models that
+authored the cached general and code traces (DeepSeek-R1-Distill-Llama-70B:
+128256; DeepSeek-R1: 129280) and the 7B Qwen2.5 Coder/Math variants
+(152064). The declared set (Qwen3-4B, Qwen2.5-Coder-1.5B-Instruct,
+DeepSeek-R1-Distill-Qwen-1.5B, Qwen2.5-1.5B-Instruct) is ~18 GB in bf16;
+math and medical are the models named in the cached `teacher_id`, general
+and code are stand-ins that *score* another model's text. Live teachers
+never generate: the collator still builds prompt + cached answer, and the
+teacher's logits over that fixed sequence are the KD target.
 
 ## Preflight (run this before ANY GPU time)
 
@@ -228,14 +244,36 @@ a genuinely different objective and is reported as an ablation rather than
 being made the default. `docs/dataset_preperation.md`'s "gold → CE+KD, no
 gold → KD only" design is aspirational; this run is where it is measured.
 
-### Group D — Headline (Qwen3-1.7B)
+### Tier 4 — Live logit-KD robustness check (appendix)
+
+```bash
+python scripts/run_experiment.py configs/experiments/live_kd_small.yaml --concurrent 2
+python -m analysis.run_report runs/live_kd_small_v1
+```
+
+`trihope_live`, `full_ft_live`, `surprise_gate_live`, `molf_style_live`,
+`plateau_trigger_live` at one seed on `stream_small` with
+`teachers.mode=live`: the four `teachers.pretrained` models in
+`stream_small.yaml` (Qwen3-4B, Qwen2.5-Coder-1.5B, R1-Distill-Qwen-1.5B,
+Qwen2.5-1.5B-Instruct; ~18 GB in bf16) score the cached text under teacher
+forcing and the student trains on τ²·KL at τ = 4 plus CE at half weight.
+`data.router_strict=true` so an unregistered domain fails instead of
+distilling through teacher 0. Reported next to the cache-mode rows
+(`action_share_by_phase`, `forgetting_table`) to show the routing
+behaviour is not an artefact of text-only supervision. It does not join
+Figure 1: the general/code live teachers differ from the authors of the
+cached traces, so it is a different stream. ~2× the cache-mode cost.
+
+### Group D — Headline (Qwen3-1.7B, optional)
 
 ```bash
 python scripts/run_experiment.py configs/experiments/headline.yaml
 ```
 
-Same five baselines at 1.7B/12000 steps, plus `trihope_live_kd` — the one
-true logit-KD run with live nf4 30B teachers.
+`trihope`, `trihope_no_hash` and (once E1 is in) the closest E1 baseline
+at 1.7B / 12000 steps / 1024 tokens, one seed, cache mode, ~6 h each.
+`stream_headline.yaml` now carries the same `corrupt_teacher` block as
+`stream_small` (disabled), so an E5 manifest can target it too.
 
 ## Runner controls
 

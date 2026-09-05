@@ -1,0 +1,69 @@
+# Tier 4 — live logit-KD robustness check (appendix; reframe §7 limitations).
+#
+# The campaign (E1–E5) trains on cached teacher TEXT: the KD term is inert
+# because no logit files exist, so the objective is confidence-weighted CE
+# on teacher_output_text (sequence-level distillation). This tier re-runs
+# the headline controller and its E1 rivals with teachers.mode=live: four
+# frozen Qwen-vocabulary teachers (stream_small.yaml `teachers.pretrained`)
+# score the SAME cached text under teacher forcing and the student matches
+# their full distributions (τ² · KL at τ = 4) plus CE at half weight.
+#
+# What it answers: is the routing behaviour (action shares per phase,
+# retention curve, permanent-write count) an artefact of text-only
+# supervision? Report action_share_by_phase + forgetting_table next to the
+# cache-mode rows. It does NOT join Figure 1: the general and code live
+# teachers are different models from the ones that authored the cached
+# traces, so this is a different stream, not the same stream with richer
+# supervision.
+#
+# Run AFTER Tier 1 (the go/no-go does not depend on it). ~2× the cache-mode
+# cost per run (+18 GB teachers, four extra forwards per step):
+#   python scripts/run_experiment.py configs/experiments/live_kd_small.yaml --concurrent 2
+#   python -m analysis.run_report runs/live_kd_small_v1
+# Add `--only trihope_live,<closest E1 baseline>_live` to run just two.
+experiment: live_kd_small_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+live: &live
+  - teachers.mode=live
+  - teachers.num_teachers=4
+  - distillation.lambda_ce=0.5
+  - ++data.router_strict=true
+runs:
+  - id: trihope_live
+    overrides:
+      - *live
+      - controller.retrieval.replay_on_hit=true
+  - id: full_ft_live
+    overrides:
+      - *live
+      - controller.enabled=false
+      - model.lora.rank=0
+      - train.trainable=all
+  - id: surprise_gate_live
+    overrides:
+      - *live
+      - controller.policy.mode=surprise_only
+      - controller.retrieval.replay_on_hit=true
+  - id: molf_style_live
+    overrides:
+      - *live
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=epd_argmax
+      - controller.writer.top_k_fraction=1.0
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: plateau_trigger_live
+    overrides:
+      - *live
+      - controller.enabled=false
+      - train.trainable=lora
+      - controller.consolidation.trigger=plateau
+      - controller.consolidation.plateau_window=200
+      - controller.consolidation.plateau_tolerance=0.01
+      - controller.consolidation.plateau_min_gap=200
+      - controller.consolidation.plateau_require_peak=true

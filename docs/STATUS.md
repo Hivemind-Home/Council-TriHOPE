@@ -58,6 +58,17 @@ recovers more than a full restore.
 - E3 `runs/figure1/pareto_budget.png` (E1 + sweep pooled) — _pending_
 - E4 `runs/p_study_small_v1/analysis/{p_selection_stats,damage_recovery}.csv` — _pending_
 
+### 4b. Tier 4 — live logit-KD (`runs/live_kd_small_v1`, appendix)
+
+**Pass condition:** `trihope_live` shows the same qualitative routing as
+cache-mode `trihope` (R in `novel_inject`, F rising through the recurrent
+phases, P at the 250-step sweeps, zero replays in `novel_inject`) and the
+E1 ranking of trihope vs the trigger baselines on worst retention delta is
+unchanged in sign.
+
+- Table: `runs/live_kd_small_v1/analysis/{action_share_by_phase,forgetting_table}.csv` — _pending_
+- Verdict: _pending_
+
 ## 5. Unable to do / not done
 
 - **`stable_gate` baseline (STABLE, arXiv:2510.16089) — not implemented.**
@@ -77,7 +88,11 @@ recovers more than a full restore.
   is validated on `stream_smoke` (tiny in-repo student, real data).
 - `stream_headline` (1.7B) is out of the plan on one GPU; the runbook
   lists it as an optional last tier.
-- `trihope_live_kd` (live 1.5B teachers) dropped: cache mode only.
+- Live logit-KD is not in the figures: the campaign is sequence-level
+  distillation on cached text (`loss/kd` = 0). The Tier 4 manifest
+  `live_kd_small.yaml` (added 2026-09-05) runs the headline controller and
+  its E1 rivals with four live Qwen-vocabulary teachers as an appendix
+  robustness check — slot in §4b.
 - Part C reading notes depend on the papers being reachable at their
   arXiv ids; any paper that could not be fetched is marked in
   `docs/related_work_notes.md` rather than summarised from memory.
@@ -102,3 +117,25 @@ recovers more than a full restore.
    with replay on; `trihope_no_hash` added as a headline candidate;
    `--concurrent N` added for the single-GPU campaign.
 7. **T2+T3** share one commit (same hunks); T0's numbers live in T1's commit.
+
+## 7. Paper wording fixes from the 2026-09-05 data / objective audit
+
+Recorded in full in `docs/data_provenance.md`; the paper must:
+
+1. Call the main-result objective **sequence-level distillation from
+   cached teacher traces**; reserve "temperature-scaled KL" for the Tier 4
+   appendix run where it is actually active.
+2. Describe `teacher_confidence` as a dataset-provided per-answer score
+   whose derivation differs by domain (logit-derived for math/medical,
+   undocumented scoring pass for general/code).
+3. Give, per domain, the source corpus and the authoring model as far as
+   documented: general and code traces were shipped with public corpora
+   (R1-Distill-Llama-70B via Glaive; DeepSeek-R1 via NVIDIA); math and
+   medical were generated for this project (models per `teacher_id`,
+   generation logs still to be obtained). A hosted model
+   (`deepseek-v4-flash`) graded curation samples only.
+4. State the truncation: math traces cut at ~1000 characters; student
+   context 512 tokens (1024 headline), so the student sees the opening of
+   a trace.
+5. Keep teacher selection out of the contributions (cache mode routes by
+   the row's `teacher_id`; the cosine router runs only on synthetic data).

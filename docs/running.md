@@ -130,8 +130,7 @@ finishes.
 
 ### 4b. One long run → DDP-shard it
 
-For the headline and live-KD runs, where there is nothing to parallelize
-across:
+For the headline runs, where there is nothing to parallelize across:
 
 ```bash
 # Directly
@@ -207,7 +206,10 @@ python scripts/run_experiment.py configs/experiments/p_study_small.yaml --parall
 # B — signal ablations (needs A's `trihope` as the baseline)
 python scripts/run_experiment.py configs/experiments/ablation_grid.yaml --parallel-gpus 4
 
-# D — headline (Qwen3-1.7B) + the one live logit-KD run
+# Tier 4 — live logit-KD robustness check (appendix; see docs/data_provenance.md)
+python scripts/run_experiment.py configs/experiments/live_kd_small.yaml --concurrent 2
+
+# D — headline (Qwen3-1.7B), optional
 python scripts/run_experiment.py configs/experiments/headline.yaml
 ```
 

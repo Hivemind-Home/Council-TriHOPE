@@ -53,6 +53,36 @@ teachers:
     code: code_teacher_deepseek_r1
     math: math_teacher_deepseek_r1_distill_qwen_1p5b
     medical: medical_teacher_qwen2p5_1p5b_instruct_clean
+  # Used only when teachers.mode=live is set (the live-KD robustness tier,
+  # configs/experiments/live_kd_small.yaml). Every streamed domain must
+  # appear here: an undeclared domain is not registered, so its samples
+  # fall through to teacher index 0 and distil through the wrong expert
+  # (data.router_strict defaults to true in live mode, so that is an error
+  # rather than a silent misroute). teacher_hf.py hard-raises unless
+  # vocab_size == 151936, which rules out the models that wrote the cached
+  # general and code traces (DeepSeek-R1-Distill-Llama-70B: 128256;
+  # DeepSeek-R1: 129280). Live teachers therefore SCORE the cached text
+  # (teacher forcing) — they do not regenerate it — and for general/code
+  # the scorer is a different model from the author. Math and medical are
+  # the models named in the cached teacher_id. bf16 everywhere so the run
+  # does not need bitsandbytes; set general.quantization: nf4 to save ~6 GB
+  # if it is installed. Total ≈ 18 GB on top of the ~12 GB student run.
+  dtype: bfloat16
+  trust_remote_code: false
+  hf_cache_dir: null
+  pretrained:
+    general:
+      name: Qwen/Qwen3-4B                              # 151936, bf16 ≈ 8 GB
+      quantization: null
+    code:
+      name: Qwen/Qwen2.5-Coder-1.5B-Instruct           # 151936, bf16 ≈ 3.1 GB
+      quantization: null
+    math:
+      name: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B  # 151936, bf16 ≈ 3.5 GB
+      quantization: null
+    medical:
+      name: Qwen/Qwen2.5-1.5B-Instruct                 # 151936, bf16 ≈ 3.1 GB
+      quantization: null
 
 distillation:
   tau: 4.0

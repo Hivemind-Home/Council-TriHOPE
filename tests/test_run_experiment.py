@@ -138,6 +138,7 @@ class TestManifestFilesParse:
             "ablation_grid",
             "p_study_small",
             "headline",
+            "live_kd_small",
             "r_tier_small",
             "budget_sweep_small",
             "bad_teacher_small",
@@ -147,7 +148,8 @@ class TestManifestFilesParse:
         path = Path(__file__).parent.parent / "configs" / "experiments" / f"{name}.yaml"
         manifest = load_manifest(path)
         runs = expand_matrix(manifest)
-        assert len(runs) >= 4
+        # headline.yaml ships two specs at one seed by design (reframe §5).
+        assert len(runs) >= 2
         assert len({r.run_id for r in runs}) == len(runs)
 
 

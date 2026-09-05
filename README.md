@@ -133,7 +133,10 @@ python scripts/run_experiment.py configs/experiments/p_study_small.yaml
 # Group B: ablate every routing signal + Top-M / Top-K
 python scripts/run_experiment.py configs/experiments/ablation_grid.yaml
 
-# Group D: headline Qwen3-1.7B runs (+ one live logit-KD run)
+# Tier 4: live logit-KD robustness check (appendix)
+python scripts/run_experiment.py configs/experiments/live_kd_small.yaml --concurrent 2
+
+# Group D (optional): headline Qwen3-1.7B runs
 python scripts/run_experiment.py configs/experiments/headline.yaml
 
 # Tables + figures (Table 1/2 analogues, ablation deltas, P timelines, ...)
@@ -172,7 +175,7 @@ Three teacher types via `teachers.mode`:
 | `cache` | `CacheBackedTeacher` | Pulls precomputed teacher logits from NPZ files via `TeacherLogitsCache`; if missing, KD is skipped per-row via `teacher_logits_mask` | matches the tokenizer that generated the NPZs |
 | `live` | `HFTeacher` | Live `AutoModelForCausalLM.forward(tokens)`; vocab match validated at construction | must match student's `vocab_size` exactly |
 
-Cache mode is the default for HF training because the existing supervision was already generated (DeepSeek R1 → `code_teacher_deepseek_r1`, DeepSeek R1 1.5B → `math_teacher_deepseek_r1_1p5b`). See `configs/pilot_hf_live.yaml` for the live-teacher template.
+Cache mode is the default for HF training because the supervision text was generated in advance (per-domain `teacher_id` values and their provenance: `docs/data_provenance.md`). No logit files are published, so cache mode is sequence-level distillation (CE on the teacher's text; the KD term is inert). `stream_small.yaml` and `stream_headline.yaml` declare four Qwen-vocabulary live teachers for `teachers.mode=live`; `configs/experiments/live_kd_small.yaml` is the logit-KD robustness tier.
 
 ## Datasets
 
