@@ -1,6 +1,6 @@
 """Why did P never fire? Signal distributions at decision time, per phase.
 
-    python scripts/diagnose_p.py runs/<exp>/<run>
+    python scripts/diagnose_p.py runs/<exp>/<run> [--config path/to/.hydra/config.yaml]
 
 Reads events.jsonl: maps each decision to its phase via the phase_start
 events, then reports per phase the quantiles of R, C̄, V and S, the share
@@ -27,10 +27,25 @@ def _q(xs: list[float]) -> str:
     return "p10 %.3f  p50 %.3f  p90 %.3f  max %.3f" % tuple(np.percentile(a, [10, 50, 90, 100]))
 
 
-def main(run_dir: str) -> int:
-    ev = [json.loads(line) for line in open(Path(run_dir) / "events.jsonl")]
-    cfg = next((e for e in ev if e.get("type") == "run_config"), {}) or {}
-    ctrl = ((cfg.get("config") or cfg).get("controller") or {}) if isinstance(cfg, dict) else {}
+def main(run_dir: str, config_path: str | None = None) -> int:
+    run = Path(run_dir)
+    ev = [json.loads(line) for line in open(run / "events.jsonl")]
+    ctrl: dict = {}
+    snapshots = tuple(
+        [Path(config_path)] if config_path else []
+    ) + (
+        run / "hydra" / "rank0" / ".hydra" / "config.yaml",
+        run / ".hydra" / "config.yaml",
+    )
+    for cand in snapshots:
+        if cand.exists():
+            import yaml  # hydra's resolved config snapshot, written by the runner
+
+            ctrl = (yaml.safe_load(cand.read_text()) or {}).get("controller") or {}
+            print(f"thresholds from {cand}")
+            break
+    else:
+        print("thresholds: no hydra snapshot under the run dir; using stream_small defaults")
     pol = ctrl.get("policy") or {}
     con = ctrl.get("consolidation") or {}
     rep_med = float(pol.get("repetition_medium", 0.5))
@@ -41,6 +56,9 @@ def main(run_dir: str) -> int:
     period = int(con.get("period", 250) or 0)
     src = pol.get("stability_source", "sustained")
     print(f"policy P needs: R >= {rep_med}, C({src}) >= {c_high}, V <= {v_low}")
+    dis = (ctrl.get("ablation") or {}).get("disable_stores") or []
+    if "P" in dis:
+        print("NOTE: P is disabled by controller.ablation.disable_stores for this run")
     print(f"sweep merge needs: R >= {min_rep}, C_bar >= {min_c}, every {period} steps\n")
 
     starts = sorted((e["step"], e["phase"]) for e in ev if e.get("type") == "phase_start")
@@ -87,4 +105,10 @@ def main(run_dir: str) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("run_dir")
+    ap.add_argument("--config", default=None, help="hydra config.yaml (defaults: under run_dir)")
+    ns = ap.parse_args()
+    sys.exit(main(ns.run_dir, ns.config))
