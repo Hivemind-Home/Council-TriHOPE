@@ -47,7 +47,7 @@ class TestExpandMatrix:
         r = runs[2]
         assert r.spec_id == "no_surprise"
         assert r.seed == 1
-        assert "controller.ablation.disable_signals=[surprise]" in r.overrides
+        assert "++controller.ablation.disable_signals=[surprise]" in r.overrides
         assert "++train.seed=1" in r.overrides
         assert any(o.startswith("++checkpoint.dir=") for o in r.overrides)
         assert any(o.startswith("++logging.events_path=") for o in r.overrides)
@@ -94,6 +94,22 @@ class TestDryRun:
         assert main([str(path), "--dry-run", "--skip", "no_surprise"]) == 0
         out = capsys.readouterr().out
         assert "trihope-seed1" in out and "no_surprise" not in out
+
+    def test_overrides_are_forced_add_or_override(self, tmp_path: Path) -> None:
+        """Baseline knobs are dataclass defaults the base YAML never declares;
+        Hydra's struct mode rejects a plain ``key=value`` for them, which is
+        how three live-KD baselines died at launch on 2026-09-08."""
+        from run_experiment import _force_override
+
+        assert _force_override("controller.policy.mode=surprise_only") == (
+            "++controller.policy.mode=surprise_only"
+        )
+        assert _force_override("++a.b=1") == "++a.b=1"
+        assert _force_override("+a.b=1") == "+a.b=1"
+        assert _force_override("~a.b") == "~a.b"
+        runs = expand_matrix(load_manifest(_manifest(tmp_path)))
+        for r in runs:
+            assert all(o.startswith(("+", "~")) for o in r.overrides), r.overrides
 
     def test_skip_everything_is_an_error(self, tmp_path: Path) -> None:
         path = _manifest(tmp_path)

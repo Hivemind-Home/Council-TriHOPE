@@ -495,3 +495,17 @@ deviation from the task document with the reason.
   and `related_work_notes.md` (MoLF momentum tracking now adopted on the
   signal path), `experiments.md` formal-claim row, `GPU_RUNBOOK.md`
   checkpoint size, `STATUS.md` §7.6 and §8.
+
+## 2026-09-08 — manifest overrides are now add-or-override
+
+- Three live-KD baselines (`surprise_gate_live`, `molf_style_live`,
+  `plateau_trigger_live`) died at launch with `Key 'mode' is not in
+  struct` / `Key 'trigger' is not in struct`: the manifests write plain
+  `controller.policy.mode=…` overrides for knobs that are dataclass
+  defaults the stream YAMLs never declare, and Hydra's struct mode rejects
+  those. The same specs in `baselines_small.yaml`, the E3 sweep and the E5
+  manifest would have failed identically. `run_experiment.expand_matrix`
+  now prefixes every manifest override with `++` (`_force_override`);
+  hand-written `+`/`++`/`~` are left alone; a misspelt key still fails
+  fast because the controller dataclasses reject unknown fields. Test in
+  `tests/test_run_experiment.py`.

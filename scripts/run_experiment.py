@@ -67,6 +67,20 @@ def load_manifest(path: Path) -> dict:
     return manifest
 
 
+def _force_override(override: str) -> str:
+    """Make a manifest override add-or-override (``++key=value``).
+
+    Hydra's struct mode rejects ``key=value`` for a key the base config does
+    not declare, and most baseline knobs (``controller.policy.mode``,
+    ``controller.consolidation.trigger``, the plateau window, ...) are
+    dataclass defaults that the stream YAMLs never spell out. ``++`` sets the
+    key whether or not it exists; a misspelt key still fails fast because
+    the controller dataclasses reject unknown fields at construction.
+    ``+``/``++``/``~`` prefixes written by hand are left alone.
+    """
+    return override if override[:1] in "+~" else f"++{override}"
+
+
 def expand_matrix(manifest: dict) -> list[ResolvedRun]:
     """Expand (runs × seeds) into concrete run dirs + override lists."""
     out_root = Path(manifest.get("output_root", "runs")) / manifest["experiment"]
@@ -82,9 +96,9 @@ def expand_matrix(manifest: dict) -> list[ResolvedRun]:
         spec_overrides: list[str] = []
         for o in spec.get("overrides", []):
             if isinstance(o, (list, tuple)):
-                spec_overrides.extend(str(x) for x in o)
+                spec_overrides.extend(_force_override(str(x)) for x in o)
             else:
-                spec_overrides.append(str(o))
+                spec_overrides.append(_force_override(str(o)))
         for seed in seeds:
             run_id = f"{spec_id}-seed{seed}"
             run_dir = out_root / run_id

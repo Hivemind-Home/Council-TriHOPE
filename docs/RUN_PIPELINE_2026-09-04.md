@@ -295,7 +295,7 @@ python scripts/run_experiment.py MANIFEST --max-hours H          # stop launchin
 
 | Symptom | Cause / fix |
 |---|---|
-| `Key 'X' is not in struct` | the override key is not in the base config: use `++key=value` |
+| `Key 'X' is not in struct` | the override key is not in the base config: use `++key=value` by hand; manifest overrides get `++` automatically since 2026-09-08 |
 | `Stream config changed since the checkpoint was written (digest …)` | you changed data/stream/corruption config and asked to resume — a fresh run, not a resume |
 | `router/miss_rate > 0` at step 0 | `teachers.teacher_ids` ≠ the dataset's `teacher_id` values (see `docs/experiments.md`) |
 | `random_routing` warns "shares file not found" | run `--only trihope` + `run_report` first |
