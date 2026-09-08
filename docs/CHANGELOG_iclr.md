@@ -509,3 +509,12 @@ deviation from the task document with the reason.
   hand-written `+`/`++`/`~` are left alone; a misspelt key still fails
   fast because the controller dataclasses reject unknown fields. Test in
   `tests/test_run_experiment.py`.
+- **`surprise_gate` was consolidating.** With zero P decisions the
+  periodic sweep falls back to re-validating every F module on C̄ ∧ R and
+  merging the ones that pass (15 merges by step 500 in
+  `surprise_gate_live`). That hands the Titans-style baseline a
+  stability-and-recurrence gate it is defined not to have. All five
+  `surprise_gate*` specs (E1, E3 ×3, Tier 4) now set
+  `controller.consolidation.period=0` and
+  `controller.writer.flag_p_for_consolidation=false`, like `molf_style`.
+  The `surprise_gate_live` run made before this must be deleted and rerun.

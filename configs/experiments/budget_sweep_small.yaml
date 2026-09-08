@@ -74,16 +74,34 @@ runs:
     overrides:
       - controller.policy.mode=surprise_only
       - controller.retrieval.replay_on_hit=true
+      # Titans reads surprise only: no consolidation sweep either — the
+      # sweep's no-flags fallback would otherwise merge on C̄ ∧ R, a gate
+      # this baseline is defined not to have (found 2026-09-08: 15 merges
+      # by step 500 with zero P decisions).
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
       - controller.policy.surprise_high=1.0
   - id: surprise_gate_s2
     overrides:
       - controller.policy.mode=surprise_only
       - controller.retrieval.replay_on_hit=true
+      # Titans reads surprise only: no consolidation sweep either — the
+      # sweep's no-flags fallback would otherwise merge on C̄ ∧ R, a gate
+      # this baseline is defined not to have (found 2026-09-08: 15 merges
+      # by step 500 with zero P decisions).
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
       - controller.policy.surprise_high=2.0
   - id: surprise_gate_s4
     overrides:
       - controller.policy.mode=surprise_only
       - controller.retrieval.replay_on_hit=true
+      # Titans reads surprise only: no consolidation sweep either — the
+      # sweep's no-flags fallback would otherwise merge on C̄ ∧ R, a gate
+      # this baseline is defined not to have (found 2026-09-08: 15 merges
+      # by step 500 with zero P decisions).
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
       - controller.policy.surprise_high=4.0
   - id: plateau_trigger_t0p005
     overrides:
