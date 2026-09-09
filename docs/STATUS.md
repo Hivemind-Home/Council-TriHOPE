@@ -148,6 +148,10 @@ Recorded in full in `docs/data_provenance.md`; the paper must:
 
 ## 8. 2026-09-05 — the campaign restarts from E1
 
+> Handoff for the next operator: `docs/HANDOFF_2026-09-09.md` (state,
+> setup, the one open threshold decision, the full run order).
+
+
 `scripts/diagnose_p.py` on the first cache-mode `trihope` seed (2 000 steps,
 9 384 decisions): C̄ = 0.000 at every decision, surprise pinned at 20.0,
 P never fired, zero consolidations. Cause (`controller/moments.py`
