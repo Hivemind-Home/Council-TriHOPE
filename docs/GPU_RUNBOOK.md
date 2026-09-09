@@ -23,7 +23,7 @@ python train.py --config-name stream_smoke ++controller.retrieval.replay_on_hit=
     checkpoint.resume_from=50                              # final loss identical to the run above
 python -m hivemind preflight --config-name stream_small --metadata-only
 for m in baselines_small r_tier_small budget_sweep_small p_study_small ablation_grid bad_teacher_small; do
-  python scripts/run_experiment.py configs/experiments/$m.yaml --dry-run   # runs preflight once per manifest
+  python scripts/run_experiment.py configs/experiments/$m.yaml --dry-run   # prints the matrix (preflight runs at real launch)
 done
 ```
 

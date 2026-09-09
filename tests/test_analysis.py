@@ -149,3 +149,24 @@ class TestReport:
         assert (out / "forgetting_table.csv").exists()
         pngs = list(out.glob("*.png"))
         assert len(pngs) >= 3
+
+
+def test_ablation_deltas_accepts_pooled_prefixed_baseline(tmp_path: Path) -> None:
+    """``run_report A B`` prefixes spec ids with the experiment name; the
+    ablation grid has no trihope of its own, so its deltas must resolve
+    ``baselines_small_v1/trihope`` as the baseline."""
+    from analysis.tables import ablation_deltas
+
+    e1, grid = tmp_path / "baselines_small_v1", tmp_path / "ablation_grid_v1"
+    _make_run(e1, "trihope", 1)
+    _make_run(grid, "no_surprise", 1)
+    runs = []
+    for exp in (e1, grid):
+        for run in load_experiment(exp):
+            run.spec_id = f"{exp.name}/{run.spec_id}"
+            run.run_id = f"{exp.name}/{run.run_id}"
+            runs.append(run)
+    df = ablation_deltas(runs)
+    assert not df.empty
+    assert list(df["spec_id"]) == ["ablation_grid_v1/no_surprise"]
+    assert ablation_deltas(load_experiment(grid)).empty  # no baseline on its own

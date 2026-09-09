@@ -33,7 +33,7 @@ stage_gate() {
   fi
   cat <<'EOF'
 
-STOP. Decide the E1 thresholds now (docs/HANDOFF_2026-09-09.md §3): if the
+STOP. Decide the E1 thresholds now (docs/OPERATOR_GUIDE.md §3): if the
 novel_inject R share is well under half, set controller.policy.surprise_high /
 repetition_low in configs/stream_small.yaml, delete runs/baselines_small_v1,
 and rerun `gate`. Otherwise continue with `e1`.
@@ -78,7 +78,7 @@ stage_tier3() {
   REPORT runs/baselines_small_v1 runs/budget_sweep_small_v1 --out runs/figure1
   REPORT runs/r_tier_small_v1
   REPORT runs/p_study_small_v1
-  REPORT runs/ablation_grid_v1
+  REPORT runs/baselines_small_v1 runs/ablation_grid_v1 --out runs/ablations   # deltas vs E1's trihope
 }
 
 case "$STAGE" in

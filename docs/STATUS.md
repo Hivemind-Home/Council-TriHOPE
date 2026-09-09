@@ -148,7 +148,7 @@ Recorded in full in `docs/data_provenance.md`; the paper must:
 
 ## 8. 2026-09-05 — the campaign restarts from E1
 
-> Handoff for the next operator: `docs/HANDOFF_2026-09-09.md` (state,
+> Handoff for the next operator: `docs/OPERATOR_GUIDE.md` (state,
 > setup, the one open threshold decision, the full run order).
 
 

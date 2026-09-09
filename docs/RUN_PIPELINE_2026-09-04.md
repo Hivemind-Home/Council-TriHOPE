@@ -36,7 +36,7 @@ Datasets download automatically from the Hugging Face hub on first use
 ## 2. Tests (before anything touches the GPU)
 
 ```bash
-python -m pytest tests/ -q                     # expected: 512 passed, 0 skipped (2 of them GPU-only)
+python -m pytest tests/ -q                     # expected: 514 passed, 0 skipped (2 of them GPU-only)
 ruff check src tests analysis scripts          # expected: All checks passed!
 ```
 
@@ -90,7 +90,7 @@ python train.py --config-name stream_smoke ++data.corrupt_teacher.enabled=true \
 # 3e. config gate for the real stream (metadata only, ~1 min, no download)
 python -m hivemind preflight --config-name stream_small --metadata-only
 for m in baselines_small r_tier_small budget_sweep_small p_study_small ablation_grid bad_teacher_small; do
-  python scripts/run_experiment.py configs/experiments/$m.yaml --dry-run    # runs preflight, prints the matrix
+  python scripts/run_experiment.py configs/experiments/$m.yaml --dry-run    # prints the matrix; preflight runs at real launch (or step 3e above)
 done
 ```
 
@@ -276,7 +276,7 @@ surprising) and fill the slot in `docs/STATUS.md`.
 ## 7. Runner controls and recovery
 
 ```bash
-python scripts/run_experiment.py MANIFEST --dry-run              # matrix + preflight, launches nothing
+python scripts/run_experiment.py MANIFEST --dry-run              # matrix only, launches nothing (preflight runs on a real launch)
 python scripts/run_experiment.py MANIFEST --only a,b             # only these specs (all seeds)
 python scripts/run_experiment.py MANIFEST --skip random_routing  # everything except these specs
 python scripts/run_experiment.py MANIFEST --resume               # skip done, resume failed/interrupted bit-exactly

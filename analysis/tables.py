@@ -91,8 +91,16 @@ def forgetting_table(runs: list[RunData]) -> pd.DataFrame:
 def ablation_deltas(runs: list[RunData], baseline: str = "trihope") -> pd.DataFrame:
     """Per-spec deltas vs the baseline spec on the forgetting-table metrics."""
     table = forgetting_table(runs)
-    if table.empty or baseline not in set(table["spec_id"]):
+    if table.empty:
         return pd.DataFrame()
+    # Pooled reports prefix spec ids with their experiment name
+    # (``baselines_small_v1/trihope``); accept that form so the ablation
+    # grid can be reported against E1's trihope in one call.
+    ids = list(table["spec_id"])
+    matches = [s for s in ids if s == baseline or str(s).endswith(f"/{baseline}")]
+    if not matches:
+        return pd.DataFrame()
+    baseline = matches[0]
     base = table[table["spec_id"] == baseline].iloc[0]
     mean_cols = [c for c in table.columns if c.endswith("_mean")]
     rows = []

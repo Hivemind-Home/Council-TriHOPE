@@ -518,3 +518,19 @@ deviation from the task document with the reason.
   `controller.consolidation.period=0` and
   `controller.writer.flag_p_for_consolidation=false`, like `molf_style`.
   The `surprise_gate_live` run made before this must be deleted and rerun.
+
+## 2026-09-09 — operator guide, campaign script, report fixes
+
+- `docs/OPERATOR_GUIDE.md` (was `HANDOFF_2026-09-09.md`): the single
+  document for whoever runs the campaign — ingredients (student, data,
+  teachers, stream, controller defaults), setup, sanity checks with the
+  current smoke references, the four-stage campaign with its two human
+  stops, every manifest's specs and why, monitoring, deliverables, gaps.
+- `scripts/run_campaign.sh gate|e1|e5|tier3|all`: idempotent stages
+  (`--resume` everywhere, rollbacks skipped when present); `gate` aborts on
+  the dead-signal pattern; `DRY_RUN=1`, `CONCURRENT=N`.
+- `analysis.tables.ablation_deltas` accepts an experiment-prefixed baseline
+  (`baselines_small_v1/trihope`) so the ablation grid can be reported
+  against E1 in one pooled call (`--out runs/ablations`); test added.
+- Docs corrected: `--dry-run` prints the matrix only — preflight runs at a
+  real launch (the runbooks said otherwise).
