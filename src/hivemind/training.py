@@ -9,6 +9,7 @@ Implements the full pipeline:
 from __future__ import annotations
 
 import random
+import traceback
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
@@ -1914,6 +1915,9 @@ def run_training_loop(
                     # all-reduce turn it into a simultaneous crash.
                     eval_failed = 1
                     print(f"[error] evaluation failed at step {step}: {exc!r}")
+                    # The re-raise below replaces this exception, so without
+                    # the stack here the original failure site is unrecoverable.
+                    traceback.print_exc()
             if consolidation_due:
                 eval_metrics["eval/trigger"] = "consolidation"
             # Turn a rank-0 eval failure into a crash on every rank rather
