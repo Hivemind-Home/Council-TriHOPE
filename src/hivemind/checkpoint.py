@@ -334,8 +334,16 @@ class CheckpointManager:
         signal_computer.load_state_dict(
             torch.load(path / "controller.pt", map_location=map_location, weights_only=False)
         )
+        # The R-store is CPU by contract: ``state_dict`` writes embeddings with
+        # ``.cpu()`` and ``WriteExecutor`` adds live entries with ``.cpu()`` too,
+        # so a buffer is expected to be uniformly on the host. Honouring the
+        # caller's CUDA ``map_location`` here restored the saved entries onto the
+        # device while newly added ones stayed on the host; the first
+        # ``torch.stack`` over that mixed buffer (``_aligned``) then died with a
+        # device mismatch at the first eval after any resume. GPU-only: the CPU
+        # test suite has both sides on one device and cannot see it.
         r_store.load_state_dict(
-            torch.load(path / "stores.pt", map_location=map_location, weights_only=False)
+            torch.load(path / "stores.pt", map_location="cpu", weights_only=False)
         )
         _restore_rng(torch.load(path / "rng.pt", map_location="cpu", weights_only=False))
 

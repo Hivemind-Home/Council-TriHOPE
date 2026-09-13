@@ -76,7 +76,7 @@ clipping a distribution sitting just beneath it.
 | # | Defect | Status |
 |---|---|---|
 | 1 | Rank-0 eval handler caught every exception and printed only `repr(exc)`; the all-reduce then re-raised a fresh error, so the original failure site was unrecoverable even with `HYDRA_FULL_ERROR=1`. | **Fixed**, commit `ebfa6bd` — `traceback.print_exc()` at the catch site. Error path only, cannot affect numerics. |
-| 2 | **Resume is broken on GPU.** A run resumed from checkpoint dies at the next eval with a CPU/CUDA device mismatch in `torch.cat`. Fresh runs are unaffected. The CPU test suite structurally cannot catch it (both sides land on the same device). Undermines the guide's "rerunning a stage after a crash is always the right move". | **Open** — not yet root-caused. Replay path, `RetrievalStore._aligned`, and `exact_match_eval` were each checked and handle devices correctly. |
+| 2 | **Resume was broken on GPU.** A resumed run died at the first eval with a CPU/CUDA mismatch. Root cause: `checkpoint.py` loaded `stores.pt` with the caller's CUDA `map_location`, but the R-store is CPU by contract (`state_dict` writes `.cpu()`, `WriteExecutor` adds `.cpu()`). Restored entries landed on the device while new ones stayed on the host, so the first `torch.stack` over that mixed buffer in `RetrievalStore._aligned` failed. GPU-only — the CPU suite has both sides on one device. Found via the traceback added in defect 1. | **Fixed** — load `stores.pt` with `map_location="cpu"`, matching the three neighbouring loads that already did. |
 | 3 | Checkpoints are **4.6 GB**, not the ~1.9 GB the guide states (`optimizer.pt` 2.43 + `base.pt` 1.50 + `controller.pt` 0.91). Makes the guide's "≥300 GB" insufficient. | Documented; worked around by pruning between stages. |
 | 4 | E5 (`bad_teacher_small`) sets `checkpoint_before_merge=true` + `keep_tagged=0`, so each of 21 runs keeps EVERY pre-merge checkpoint. Measured 7–10 merging sweeps/run → 9–12 ckpts → 41–55 GB/run → **~1.0 TB**. The retune made this worse (consolidations 2–7 → 10–16). | Worked around: E5 batched by spec, pruned between batches. |
 | 5 | `analysis/tables.py:teacher_attribution` uses `DataFrame.iterrows()` over ~1.08M decision events with a dict-valued `signals` column; a 30-run report takes ~40 min. Runs ~6× per campaign. | **Open** — deliberately NOT patched mid-campaign; this code generates the paper's tables. |
@@ -93,3 +93,22 @@ clipping a distribution sitting just beneath it.
 - **MPS matters**: without it, concurrent CUDA processes are driver time-sliced.
   Measured 3 concurrent: 62.3k → 71.9k launches/s (+15 %). Saturates at 3 processes;
   6 and 9 are slightly worse.
+
+## 4. Impact of defect 2 on E5
+
+The resume path is used by exactly one thing: `rollback_teacher.py`, which restores a
+pre-merge checkpoint and replays forward. So the bug hit **only the rollback
+counterfactuals**, never the primary training runs.
+
+Verified from `events.jsonl`: every primary E5 run shows no `resume` event,
+`decisions=36000`, `max_step=5999` — complete and clean. The four runs that did
+resume are the rollback replays, and each died ~1500 steps after its restore point
+(3499 / 3747 / 3749 / 3750) instead of running to 6000.
+
+**Consequence:** E5's headline containment result is unaffected — `rollback_teacher.py`
+reported "no consolidation event attributes >= 0.50 of a merge to
+'math_teacher_corrupted'; nothing to roll back (containment held)" for the trihope
+seeds, which is a result, not an error (guide 5). But the selective-rollback vs
+full-restore *recovery curves* were truncated. `trihope`'s checkpoints were pruned
+after its rollbacks ran, so regenerating those curves requires re-running the three
+`trihope` E5 runs with the fix in place.
