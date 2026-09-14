@@ -322,7 +322,14 @@ not "the no-write tier reduces forgetting".
 2. The `threshold_tag` of the E1 `trihope` rows — the sweep note says the
    shipped default is now surprise 1.0 (was 2.0). Figure 1 must state the
    values E1 ran with, and STATUS §8 must record the change.
-3. Why `trihope` (E1, 0.188) and `trihope_replay` (E2, 0.194) differ: they
+3. **Replay timing** (new table, 2026-09-14): rerun `run_report` on
+   `runs/baselines_small_v1` and `runs/r_tier_small_v1` and send
+   `analysis/replay_timing.csv`. It splits every replay into same-phase
+   (an extra adapter update shortly after parking) and cross-phase (a stale
+   write-back of a row parked in an earlier phase), with the delay in
+   steps. This is what separates the two explanations for replay's
+   forgetting cost; the paper cannot pick one without it.
+4. Why `trihope` (E1, 0.188) and `trihope_replay` (E2, 0.194) differ: they
    are the same spec and seeds. Either the default changed between the two
    launches (then E2 was run against a different default — say which) or
    the GPU path is nondeterministic (then the error bars already cover it).

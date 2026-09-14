@@ -553,3 +553,11 @@ deviation from the task document with the reason.
 - **`LIVE=1 scripts/run_campaign.sh <stage>`:** the four campaign stages in
   live-teacher mode (`--live`, `_live` directories everywhere, concurrency
   3). Dry-run verified for gate / e5 live and tier3 cache.
+- **`analysis.tables.replay_timing`** (in every `run_report`): per run, the
+  replay count after collapsing per-module rows, the parking-to-replay
+  delay (median, p90), the cross-phase share (origin phase earlier than the
+  replay phase = stale write-back) and the count per replay phase. Added
+  because E2 shows replay costing +62 % worst-case forgetting and the
+  forgetting table cannot say whether that is stale write-back or simply
+  more adapter updates. On the CPU smoke: 5 replays, 40 % cross-phase.
+  Test in `tests/test_analysis.py`.

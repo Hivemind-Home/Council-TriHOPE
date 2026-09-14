@@ -170,3 +170,27 @@ def test_ablation_deltas_accepts_pooled_prefixed_baseline(tmp_path: Path) -> Non
     assert not df.empty
     assert list(df["spec_id"]) == ["ablation_grid_v1/no_surprise"]
     assert ablation_deltas(load_experiment(grid)).empty  # no baseline on its own
+
+
+def test_replay_timing_splits_same_phase_from_cross_phase(tmp_path: Path) -> None:
+    """Replays parked in one phase and written back in a later one are the
+    stale-write-back case; same-phase ones are plain extra updates."""
+    from analysis.tables import replay_timing
+
+    run_dir = _make_run(tmp_path / "exp_v1", "trihope", 1)
+    events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    # phases: warm [0, 50), recurrent [50, ...). Two replays per event pair
+    # (one per module) to check the per-module rows collapse to one replay.
+    for step, origin in ((20, 10), (70, 60), (80, 30), (90, 30)):
+        for module in ("L0.ffn.F", "L1.ffn.F"):
+            events.append({"type": "replay", "step": step, "origin_step": origin,
+                           "module": module, "action": "F", "coords_opened": 8,
+                           "bucket_id": 7, "teacher": "t"})
+    _write_jsonl(run_dir / "events.jsonl", events)
+    df = replay_timing(load_experiment(tmp_path / "exp_v1"))
+    row = df.iloc[0]
+    assert row["replays"] == 4
+    assert row["cross_phase_replays"] == 2 and abs(row["cross_phase_share"] - 0.5) < 1e-9
+    assert row["replays_in_warm"] == 1 and row["replays_in_recurrent"] == 3
+    assert row["delay_median_steps"] == 35.0  # delays 10, 10, 50, 60
+    assert replay_timing(load_experiment(tmp_path / "exp_v1"))["seed"].iloc[0] == 1

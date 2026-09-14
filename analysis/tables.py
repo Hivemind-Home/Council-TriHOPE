@@ -115,6 +115,67 @@ def ablation_deltas(runs: list[RunData], baseline: str = "trihope") -> pd.DataFr
     return pd.DataFrame(rows)
 
 
+def _phase_lookup(run: RunData):
+    """step -> phase name, from the run's phase_start events."""
+    starts = run.phases
+    if not starts:
+        return lambda step: None
+    steps = [s for s, _ in starts]
+    names = [n for _, n in starts]
+
+    def lookup(step: int):
+        i = int(np.searchsorted(steps, step, side="right")) - 1
+        return names[i] if i >= 0 else None
+
+    return lookup
+
+
+def replay_timing(runs: list[RunData]) -> pd.DataFrame:
+    """Where and when deferred rows came back (the R tier's write-back).
+
+    One row per (spec, seed): replay count, the delay between parking
+    (``origin_step``) and replay (``step``) in steps, the share of replays
+    whose origin lies in an *earlier* phase than the replay (cross-phase =
+    stale write-back), and the count per replay phase. Written to separate
+    the two explanations for replay's forgetting cost — a late write on top
+    of what was learned in between, versus simply more adapter updates —
+    which the forgetting table alone cannot tell apart.
+    """
+    rows = []
+    for run in runs:
+        ev = run.events
+        if ev.empty or "type" not in ev.columns:
+            continue
+        rep = ev[ev["type"] == "replay"]
+        if rep.empty or "origin_step" not in rep.columns:
+            continue
+        rep = rep.dropna(subset=["origin_step", "step"])
+        # One replay = one row; the loop logs one event per opened module,
+        # so collapse to (step, origin_step, bucket) first.
+        key_cols = [c for c in ("step", "origin_step", "bucket_id") if c in rep.columns]
+        rep = rep.drop_duplicates(subset=key_cols)
+        phase_of = _phase_lookup(run)
+        replay_phase = rep["step"].astype(int).map(phase_of)
+        origin_phase = rep["origin_step"].astype(int).map(phase_of)
+        delay = rep["step"].astype(int) - rep["origin_step"].astype(int)
+        cross = (replay_phase != origin_phase)
+        rec: dict = {
+            "spec_id": run.spec_id,
+            "seed": run.seed,
+            "replays": int(len(rep)),
+            "delay_median_steps": float(delay.median()),
+            "delay_p90_steps": float(delay.quantile(0.9)),
+            "cross_phase_share": float(cross.mean()),
+            "cross_phase_replays": int(cross.sum()),
+        }
+        for phase, n in replay_phase.value_counts().items():
+            rec[f"replays_in_{phase}"] = int(n)
+        rows.append(rec)
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).fillna(0)
+
+
 def p_selection_stats(runs: list[RunData]) -> pd.DataFrame:
     """When does P fire, and what do the signals look like at those moments?"""
     rows = []

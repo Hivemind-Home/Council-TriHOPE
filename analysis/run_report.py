@@ -47,6 +47,7 @@ def generate_report(exp_dir: "Path | list[Path]", out_dir: Path) -> Path:
         "action_share_by_phase": tables.action_share_by_phase,
         "ablation_deltas": tables.ablation_deltas,
         "p_selection_stats": tables.p_selection_stats,
+        "replay_timing": tables.replay_timing,
         "adapter_reuse_aulc": tables.adapter_reuse_aulc,
         "damage_recovery": tables.damage_recovery,
         "budget_curve": tables.budget_curve,
