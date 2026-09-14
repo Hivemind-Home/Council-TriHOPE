@@ -111,6 +111,35 @@ class TestDryRun:
         for r in runs:
             assert all(o.startswith(("+", "~")) for o in r.overrides), r.overrides
 
+    def test_live_flag_rewrites_manifest(self, tmp_path: Path, capsys) -> None:
+        from run_experiment import LIVE_OVERRIDES, apply_live
+
+        manifest = load_manifest(_manifest(tmp_path))
+        live = apply_live(manifest)
+        assert live["experiment"] == manifest["experiment"] + "_live"
+        assert manifest["experiment"] != live["experiment"]  # original untouched
+        for spec in live["runs"]:
+            assert spec["overrides"][: len(LIVE_OVERRIDES)] == list(LIVE_OVERRIDES)
+        runs = expand_matrix(live)
+        assert all("_live/" in str(r.run_dir) for r in runs)
+        assert main([str(_manifest(tmp_path)), "--dry-run", "--live"]) == 0
+        out = capsys.readouterr().out
+        assert "++teachers.mode=live" in out and "_live/" in out
+
+    def test_live_flag_redirects_experiment_paths(self, tmp_path: Path) -> None:
+        from run_experiment import apply_live
+
+        manifest = load_manifest(_manifest(tmp_path))
+        name = manifest["experiment"]
+        manifest["runs"][0]["overrides"].append(
+            f"controller.debug.random_shares_path=runs/{name}/analysis/action_share_by_phase.csv"
+        )
+        live = apply_live(manifest)
+        assert any(
+            o.endswith(f"runs/{name}_live/analysis/action_share_by_phase.csv")
+            for o in live["runs"][0]["overrides"]
+        )
+
     def test_skip_everything_is_an_error(self, tmp_path: Path) -> None:
         path = _manifest(tmp_path)
         assert main([str(path), "--dry-run", "--skip", "trihope,no_surprise"]) == 2

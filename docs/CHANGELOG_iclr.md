@@ -546,3 +546,7 @@ deviation from the task document with the reason.
   columns, E1 threshold tag, trihope vs trihope_replay discrepancy).
 - `docs/OPERATOR_GUIDE.md`: §2b progress log, §5b results reading, §9
   live-teacher replication (later), gaps renumbered to §10.
+- **Runner `--live`:** runs any manifest with live teacher models
+  (`apply_live`: live overrides prepended to every spec, experiment name
+  suffixed `_live`, `random_routing`'s shares path redirected). Two tests.
+  `docs/OPERATOR_GUIDE.md` §9 now gives the live replication as commands.

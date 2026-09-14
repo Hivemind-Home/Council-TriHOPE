@@ -81,6 +81,47 @@ def _force_override(override: str) -> str:
     return override if override[:1] in "+~" else f"++{override}"
 
 
+#: What ``--live`` adds to every spec: four frozen Qwen-vocabulary teachers
+#: (``teachers.pretrained`` in the stream YAML) score the cached text and the
+#: student matches their distributions; strict routing so an unregistered
+#: domain fails instead of distilling through teacher 0.
+LIVE_OVERRIDES = (
+    "teachers.mode=live",
+    "teachers.num_teachers=4",
+    "distillation.lambda_ce=0.5",
+    "data.router_strict=true",
+)
+
+
+def apply_live(manifest: dict) -> dict:
+    """Return a copy of ``manifest`` rewritten for live teachers.
+
+    The experiment name gains a ``_live`` suffix (its own ``runs/`` directory,
+    never pooled with cache-mode results), every spec gets
+    :data:`LIVE_OVERRIDES`, and any override that points into the cache-mode
+    experiment directory (random_routing's action-share file) is redirected
+    to the live one.
+    """
+    import copy
+
+    live = copy.deepcopy(manifest)
+    old_name = str(live["experiment"])
+    new_name = old_name if old_name.endswith("_live") else f"{old_name}_live"
+    live["experiment"] = new_name
+    for spec in live.get("runs", []):
+        overrides = list(spec.get("overrides", []))
+        overrides = [
+            (
+                [str(x).replace(f"runs/{old_name}/", f"runs/{new_name}/") for x in o]
+                if isinstance(o, (list, tuple))
+                else str(o).replace(f"runs/{old_name}/", f"runs/{new_name}/")
+            )
+            for o in overrides
+        ]
+        spec["overrides"] = list(LIVE_OVERRIDES) + overrides
+    return live
+
+
 def expand_matrix(manifest: dict) -> list[ResolvedRun]:
     """Expand (runs × seeds) into concrete run dirs + override lists."""
     out_root = Path(manifest.get("output_root", "runs")) / manifest["experiment"]
@@ -415,6 +456,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print the matrix and exit")
     parser.add_argument("--resume", action="store_true", help="skip done runs, resume failed ones")
     parser.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "run the manifest with live teacher models (teachers.mode=live, KD active): "
+            "every spec gets the live overrides and results go to runs/<experiment>_live"
+        ),
+    )
+    parser.add_argument(
         "--only", type=str, default=None, help="run only these spec ids (comma-separated)"
     )
     parser.add_argument(
@@ -481,6 +530,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     manifest = load_manifest(args.manifest)
+    if args.live:
+        manifest = apply_live(manifest)
     nproc_requested = int(args.nproc_per_node or manifest.get("nproc_per_node", 1))
     runs = expand_matrix(manifest)
 

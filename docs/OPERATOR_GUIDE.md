@@ -487,12 +487,26 @@ code live teachers are stand-ins for the models that wrote the cached text.
 - **Cost:** ~30 GB and ~2× wall clock per run (four teacher forwards per
   step); `CONCURRENT=2–3`. Full campaign ≈ 300 GPU-hours; E1 + E5 only
   ≈ 55 runs, the sensible scope.
-- **How:** copy the manifest, add the `live: &live` anchor from
-  `configs/experiments/live_kd_small.yaml` (`teachers.mode=live`,
-  `teachers.num_teachers=4`, `distillation.lambda_ce=0.5`,
-  `++data.router_strict=true`), splice `- *live` into every spec's
-  overrides, rename `experiment:` with a `_live` suffix. Health check at
-  step 0: `loss/kd` > 0 and `loss/kd_row_hit_frac` = 1.0.
+- **How:** add `--live` to any runner command. It rewrites the manifest in
+  memory — every spec gets `teachers.mode=live`, `teachers.num_teachers=4`,
+  `distillation.lambda_ce=0.5`, `data.router_strict=true`; results go to
+  `runs/<experiment>_live/`; `random_routing`'s action-share path is
+  redirected to the live directory. Same order as cache mode:
+
+  ```bash
+  python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --only trihope
+  python -m analysis.run_report runs/baselines_small_v1_live
+  python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --resume --skip random_routing --concurrent 3
+  python -m analysis.run_report runs/baselines_small_v1_live
+  python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --resume --only random_routing --concurrent 2
+  python scripts/run_experiment.py configs/experiments/bad_teacher_small.yaml --live --resume --concurrent 3
+  # rollbacks as in §5, with runs/bad_teacher_small_v1_live/ paths
+  python -m analysis.run_report runs/baselines_small_v1_live runs/bad_teacher_small_v1_live
+  ```
+
+  Health check at step 0 of any live run: `loss/kd` > 0 and
+  `loss/kd_row_hit_frac` = 1.0. Pre-download the four teachers once
+  (`python -c "from transformers import AutoModelForCausalLM as M; [M.from_pretrained(m) for m in ['Qwen/Qwen3-4B','Qwen/Qwen2.5-Coder-1.5B-Instruct','deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B','Qwen/Qwen2.5-1.5B-Instruct']]"`).
 - **If the teachers must score their own text everywhere:** regenerate
   `teacher_output_text` for general and code with the live models first.
   That is a new dataset and a new stream digest, so it is a new campaign,
