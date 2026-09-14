@@ -163,8 +163,9 @@ E4 and the ablations do not exist yet. That is what you are producing.
 | 2026-09-08 | Tier 4 live KD | done, 5 specs, reported (STATUS §4b) |
 | 2026-09-14 | gate + e1 (E1, 33 runs) | done — **go** on the forgetting axis (§5b) |
 | 2026-09-14 | tier3: E2 (15 runs), E3 sweep (22 runs) | done |
-| — | e5 (21 runs + 9 rollbacks) | **next** |
-| — | tier3: E4 `p_study_small` (5), `ablation_grid` (12), reports | after e5 |
+| 2026-09-14 | e5 (21 runs), E4 (5), ablation grid (12) | done — E4 and grid ran **replay off** (§5c) |
+| — | e5 again: `trihope_forced` + `molf_snr` (6 runs) + rollbacks | **next** |
+| — | tier3 again: grid (13) + E4 (5) with replay on | after e5 |
 | — | plasticity columns of E1/E2/E3, threshold-tag check, determinism check | owed (§5b) |
 
 ## 3. Machine and setup
@@ -371,24 +372,34 @@ the stability gate rather than from the R tier. Because nothing reached P,
 `rollback_teacher.py` had nothing to roll back and the selective-rollback
 comparison was never exercised.
 
-**Decisions this forces (team, not operator):**
-1. **Which configuration is "TriHOPE" in the paper.** E2, E3 and the grid
-   all say replay costs forgetting and a leaner controller (replay off or
-   `repetition_low` 0.2, strict consolidation) sits on the Pareto front.
-   If the headline stays replay-on, rerun `ablation_grid` and
-   `p_study_small` with `controller.retrieval.replay_on_hit=true` added to
-   every spec (17 runs, ~5 h at 5 concurrent). If the headline becomes the
-   replay-off variant, the existing grid already matches it and E1's row
-   is `no_retrieval` / E2's `trihope_r_terminal` (3 seeds each, 0.119).
-2. **Make rollback happen.** Add to `bad_teacher_small.yaml` a
-   `trihope_forced` spec = trihope + `controller.debug.force_consolidate_steps`
-   inside `math_recurrent` (as `p_forced_plausible`), so corrupted evidence
-   is merged on purpose; then `rollback_teacher.py` selective vs
-   `--baseline full_restore` on it. That is the run that turns "attributable
-   and revertible" from a design property into a measured one.
-3. **Say what E5 shows honestly:** containment is a property of
-   stability-gated permanence shared with the SNR baseline; attribution and
-   selective rollback are what only this system has.
+**Fixed in the manifests (commit after 2026-09-14) — reruns owed:**
+1. `ablation_grid.yaml` now carries a `_method` anchor (replay on, i.e. the
+   shipped E1 `trihope`) on every spec plus an in-grid `trihope` baseline,
+   so its deltas are self-contained and against the right run. The
+   2026-09-14 grid (replay off) stays valid as the ablation of the
+   replay-off variant; keep both `analysis/` folders, label them.
+   **Rerun:** `scripts/run_campaign.sh tier3` picks up the 13 new grid
+   runs and the 5 E4 runs (`p_study_small` now also replay on) — ~18 runs,
+   ~5 h at 5 concurrent. Old grid outputs are in `runs/ablation_grid_v1`;
+   move that directory aside first (`mv runs/ablation_grid_v1
+   runs/ablation_grid_v1_replay_off`, same for `p_study_small_v1`).
+2. `bad_teacher_small.yaml` gains `trihope_forced` (a merge of every
+   adapter forced at step 3000, 850 steps into the corrupted math phase, so
+   attributed merges exist) and `molf_snr` (the fair SNR-rule MoLF that
+   contained identically in the operator's run, now reproducible from the
+   manifest). `scripts/run_campaign.sh e5` runs the 6 new runs with
+   `--resume` and rolls `trihope_forced` back both ways (`--min-share 0.3`
+   selective vs `full_restore`). That is the measurement behind
+   "attributable and revertible".
+3. **Team decision that remains:** which configuration is called TriHOPE in
+   the paper. E2, E3 and the grid say replay costs forgetting and the
+   leaner controller (replay off, or `repetition_low` 0.2) sits on the
+   Pareto front. Replay-on is the manifests' default because it is what E1
+   ran; switching the headline to replay-off is one anchor line in the
+   grid and E4 manifests, and E1's row becomes `no_retrieval` (3 seeds,
+   0.119). Say what E5 shows honestly either way: containment is a property
+   of stability-gated permanence shared with the SNR baseline; attribution
+   and selective rollback are what only this system has.
 
 ### What each stage executes (the manual equivalents)
 
@@ -443,13 +454,15 @@ Same stream, same student, same LoRA budget; only the write policy varies.
 | `random_routing` | trihope's per-phase action shares, assignment shuffled — proves the signals carry information |
 | `gold_ce` | supervise on gold answers where they exist instead of teacher text (objective ablation) |
 
-**E5 `bad_teacher_small.yaml` → `runs/bad_teacher_small_v1`, 7 specs × 3 seeds.**
+**E5 `bad_teacher_small.yaml` → `runs/bad_teacher_small_v1`, 9 specs × 3 seeds.**
 Half the math buckets in `math_recurrent` get shuffled answers under the
 tag `math_teacher_corrupted`; every pre-merge checkpoint is kept.
 `trihope`, `trihope_nogate` (confidence gate off), `trihope_lowconf`
 (corrupted rows also carry confidence 0.2), `full_ft`, `lora_only`,
 `molf_style`, `gradient_routing` (Cloud et al.: one rank slice per teacher,
-the corrupted slice zeroed at step 3649). Reports: containment (where the
+the corrupted slice zeroed at step 3649), `molf_snr` (the fair SNR-rule
+MoLF), `trihope_forced` (merge forced at step 3000 so rollback is
+exercised). Reports: containment (where the
 bad teacher's actions went), damage on the other domains, selective
 rollback vs full restore.
 
@@ -471,7 +484,8 @@ identity figure.
 `p_forced_lowconf` (3850, medical). Reports `p_selection_stats` (when P
 fires and the signals at those moments) and `damage_recovery`.
 
-**Ablations `ablation_grid.yaml` → `runs/ablation_grid_v1`, 12 × 1.** One
+**Ablations `ablation_grid.yaml` → `runs/ablation_grid_v1`, 13 × 1** (an
+in-grid `trihope` baseline plus twelve ablations, all with replay on). One
 signal removed per run (`no_surprise`, `no_repetition`, `no_cosine`,
 `no_volatility`, `no_teacher_conf`), top-M {2, all}, top-K {25 %, 100 %},
 `stability_instant`, `consolidation_strict`, and `moments_optimizer` (the

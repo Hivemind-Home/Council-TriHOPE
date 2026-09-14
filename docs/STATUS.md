@@ -68,7 +68,8 @@ recovers more than a full restore.
   (8.2e7 vs 1.35e8). Containment comes from the stability gate, not the R
   tier. To exercise attribution + rollback, a corrupted-stream run must be
   forced to merge during the corrupted phase (E4's `p_forced_*` pattern on
-  `bad_teacher_small`) — see OPERATOR_GUIDE §5c.
+  `bad_teacher_small`) — added as `trihope_forced` (+ `molf_snr`) in the
+  manifest; rerun owed (OPERATOR_GUIDE §5c).
 
 ## 4. E2 / E3 / E4
 

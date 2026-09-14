@@ -73,3 +73,31 @@ runs:
       - controller.ablation.use_teacher_confidence=false
       - controller.retrieval.replay_on_hit=false
       - "controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_corrupted}"
+  - id: trihope_forced
+    # Containment held in every trihope seed (0 % corrupted → P), so the
+    # selective-rollback-vs-full-restore comparison was never exercised.
+    # This arm forces a merge of every adapter at step 3000 — 850 steps into
+    # the corrupted math phase (2150–3649), after corrupted evidence has
+    # accumulated in the adapters — so attributed merges exist to roll
+    # back. Not a containment arm; report it only through
+    # rollback_summary.json (selective vs full_restore).
+    overrides:
+      - *common
+      - controller.retrieval.replay_on_hit=true
+      - controller.debug.force_consolidate_steps=[3000]
+      - eval.on_consolidation=true
+  - id: molf_snr
+    # The FAIR two-tier baseline for containment: MoLF's SNR-threshold rule
+    # (m²/v ≥ 0.5 → base, else LoRA), no R, no merge — mirrors
+    # budget_sweep_small/molf_style_a0p5. The EPD-argmax `molf_style` above
+    # sends ~80 % of corrupted decisions to base; this variant contains as
+    # well as trihope, which the paper must say.
+    overrides:
+      - *common
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=snr_threshold
+      - controller.policy.adam_score_high=0.5
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false

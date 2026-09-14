@@ -230,7 +230,7 @@ python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resu
 python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resume --concurrent 3
 python -m analysis.run_report runs/baselines_small_v1
 
-# Tier 2 — E5 bad teacher + rollback (21 runs + rollbacks)
+# Tier 2 — E5 bad teacher + rollback (27 runs + rollbacks)
 python scripts/run_experiment.py configs/experiments/bad_teacher_small.yaml --concurrent 3
 for seed in 1337 2024 7; do
   r=runs/bad_teacher_small_v1/trihope-seed$seed

@@ -77,6 +77,9 @@ stage_e5() {
     [ -d "$r-fullrestore" ] || python scripts/rollback_teacher.py --run "$r" --teacher math_teacher_corrupted --baseline full_restore --out "$r-fullrestore"
     g=runs/bad_teacher_small_v1${SFX}/gradient_routing-seed$seed
     [ -d "$g-fullrestore" ] || python scripts/rollback_teacher.py --run "$g" --teacher math_teacher_corrupted --baseline full_restore --out "$g-fullrestore"
+    f=runs/bad_teacher_small_v1${SFX}/trihope_forced-seed$seed        # the arm with attributed merges to roll back
+    [ -d "$f-rollback" ]    || python scripts/rollback_teacher.py --run "$f" --teacher math_teacher_corrupted --min-share 0.3 --out "$f-rollback"
+    [ -d "$f-fullrestore" ] || python scripts/rollback_teacher.py --run "$f" --teacher math_teacher_corrupted --baseline full_restore --out "$f-fullrestore"
   done
   REPORT runs/bad_teacher_small_v1${SFX}
 }

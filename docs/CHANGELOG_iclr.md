@@ -576,3 +576,11 @@ deviation from the task document with the reason.
   baseline ≈ 0.119, `trihope_r_terminal`). Recorded in STATUS §3/§4 and
   OPERATOR_GUIDE §5c with the two team decisions it forces (headline
   configuration; a forced-merge corrupted run so rollback is measured).
+- **Manifests fixed:** `ablation_grid.yaml` gets a `_method` anchor
+  (replay on = E1 trihope) on every spec and an in-grid `trihope` baseline
+  (13 runs); `p_study_small.yaml` sets replay on in all five specs;
+  `bad_teacher_small.yaml` gains `trihope_forced` (forced merge at step
+  3000 inside the corrupted phase, so selective rollback is measured) and
+  `molf_snr` (the fair SNR-rule MoLF). `run_campaign.sh e5` rolls the
+  forced arm back both ways. Reruns owed: grid + E4 (18 runs), the two new
+  E5 arms (6 runs) + rollbacks.

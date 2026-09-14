@@ -28,6 +28,7 @@ runs:
     # defaults since T1; only the routing thresholds and the merge
     # checkpoints are spec-specific now.
     overrides:
+      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
       - controller.consolidation.checkpoint_before_merge=true
       - controller.policy.repetition_medium=0.35
       - controller.policy.stability_high_C=0.35
@@ -37,6 +38,7 @@ runs:
     # Same lowered routing thresholds, but the P branch is disabled — the
     # adapter-reuse and retention control.
     overrides:
+      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
       - controller.ablation.disable_stores=[P]
       - controller.policy.repetition_medium=0.35
       - controller.policy.stability_high_C=0.35
@@ -46,6 +48,7 @@ runs:
     # maximally wrong timing. Pre-merge checkpoint saved for rollback.
     # 2075 = midpoint of novel_inject (2000-2149).
     overrides:
+      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
       - controller.consolidation.checkpoint_before_merge=true
       - controller.debug.force_consolidate_steps=[2075]
       - eval.on_consolidation=true
@@ -54,6 +57,7 @@ runs:
     # (repetition rising but stability unproven).
     # 2350 = math_recurrent start (2150) + 200.
     overrides:
+      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
       - controller.consolidation.checkpoint_before_merge=true
       - controller.debug.force_consolidate_steps=[2350]
       - eval.on_consolidation=true
@@ -62,6 +66,7 @@ runs:
     # phase where teacher confidence dips below the 0.3 gate, i.e. the one
     # regime the confidence gate was meant to protect against consolidating.
     overrides:
+      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
       - controller.consolidation.checkpoint_before_merge=true
       - controller.debug.force_consolidate_steps=[3850]
       - eval.on_consolidation=true
