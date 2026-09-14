@@ -561,3 +561,18 @@ deviation from the task document with the reason.
   forgetting table cannot say whether that is stale write-back or simply
   more adapter updates. On the CPU smoke: 5 replays, 40 % cross-phase.
   Test in `tests/test_analysis.py`.
+
+## 2026-09-14 (later) — E4 / E5 / ablations recorded; replay confound found
+
+- Operator report: E5 containment 0.00 % corrupted→P for trihope and the
+  SNR-rule MoLF baseline alike (81 % for EPD-rule MoLF); rollback never
+  exercised (nothing reached P). E4: mistimed forced merges +28–37 %
+  forgetting, worst at low confidence; P neutral on forgetting. Ablations:
+  no_cosine catastrophic (0.354, ×100 writes), stability_instant +0.07,
+  surprise and strict consolidation neutral.
+- **Confound:** `ablation_grid.yaml` and `p_study_small.yaml` run with
+  `replay_on_hit=false` (base default) while E1 `trihope` runs with it on,
+  so their "vs trihope" deltas are against the wrong baseline (correct
+  baseline ≈ 0.119, `trihope_r_terminal`). Recorded in STATUS §3/§4 and
+  OPERATOR_GUIDE §5c with the two team decisions it forces (headline
+  configuration; a forced-merge corrupted run so rollback is measured).

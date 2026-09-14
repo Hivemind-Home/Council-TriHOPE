@@ -55,16 +55,37 @@ influence stays out of P; TriHOPE's damage on general/code/medical is
 lower than full FT and MoLF-style at matched budget; selective rollback
 recovers more than a full restore.
 
-- Containment: `analysis/containment.csv`, `containment_bars.png` — _pending_
-- Damage: `analysis/budget_curve.csv` (retention deltas per spec) — _pending_
-- Rollback: `*-rollback/rollback_summary.json` vs `*-fullrestore/rollback_summary.json` — _pending_
-- Verdict: _pending_
+- Containment (operator report 2026-09-14, 3 seeds): corrupted teacher →
+  P share 0.00 % for trihope, trihope_lowconf, gradient_routing and the
+  SNR-rule MoLF variant; 80.98 % for EPD-rule molf_style (2.7e11 base
+  coordinates reached directly). Confidence gate tightens attributed
+  merges ~300×. Rollback: "nothing to roll back (containment held)" —
+  the selective-rollback-vs-full-restore comparison was therefore not
+  exercised.
+- Damage columns: owed.
+- Verdict: containment holds, but it is **not unique** — the fair two-tier
+  Adam-SNR baseline contains identically with ~40 % fewer permanent writes
+  (8.2e7 vs 1.35e8). Containment comes from the stability gate, not the R
+  tier. To exercise attribution + rollback, a corrupted-stream run must be
+  forced to merge during the corrupted phase (E4's `p_forced_*` pattern on
+  `bad_teacher_small`) — see OPERATOR_GUIDE §5c.
 
 ## 4. E2 / E3 / E4
 
 - E2 `runs/r_tier_small_v1/analysis/budget_curve.csv` — run (2026-09-14): r_terminal 0.119, fp_only 0.121, trihope_replay 0.194 (+62 % vs r_terminal), no_hash_replay 0.232, p_only 0.91. On forgetting alone the R tier's replay costs; steps-to-recover and new-domain loss owed.
 - E3 `runs/budget_sweep_small_v1` — run (2026-09-14, 1 seed/point): best trihope_s4_r0p2 0.130 (1.7e8); s1_r0p45 worst at 0.238; pooled `runs/figure1` owed.
-- E4 `runs/p_study_small_v1/analysis/{p_selection_stats,damage_recovery}.csv` — _pending_
+- E4 (2026-09-14, 1 seed, **replay off** in every spec): p_off_control 0.091
+  (0 writes), p_study 0.094 (3.4e8), forced merges 0.120 / 0.121 / 0.129
+  (bad / plausible / low-confidence timing): mistimed permanence costs
+  +28–37 %, worst under low confidence (supports the gate); P as configured
+  neither helps nor hurts forgetting.
+- Ablation grid (2026-09-14, 1 seed, **replay off**): consolidation_strict
+  0.115, no_surprise 0.117, no_repetition 0.134, no_teacher_conf 0.141,
+  stability_instant 0.185, no_cosine 0.354 (1.8e10 writes). **Read against
+  the replay-off baseline (r_terminal / no_retrieval ≈ 0.119), not against
+  E1 trihope (0.188):** cosine is essential (+0.24, ×100 writes without
+  it), sustained C̄ matters (+0.07), confidence and repetition help a
+  little, surprise and strict consolidation are neutral.
 
 ### 4b. Tier 4 — live logit-KD (`runs/live_kd_small_v1`, appendix)
 

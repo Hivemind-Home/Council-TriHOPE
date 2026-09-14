@@ -335,6 +335,61 @@ not "the no-write tier reduces forgetting".
    the GPU path is nondeterministic (then the error bars already cover it).
    Check: `diff <(grep -v hydra runs/baselines_small_v1/trihope-seed1337/hydra/rank0/.hydra/config.yaml) <(grep -v hydra runs/r_tier_small_v1/trihope_replay-seed1337/hydra/rank0/.hydra/config.yaml)`.
 
+### 5c. E4 / E5 / ablations (operator report of 2026-09-14) and the replay confound
+
+**A confound to fix before reading the ablations.** `ablation_grid.yaml` and
+`p_study_small.yaml` inherit `controller.retrieval.replay_on_hit: false`
+from `stream_small.yaml`; the E1 `trihope` spec sets it true. So every
+ablation and E4 run is an ablation of *TriHOPE without replay*, whose own
+forgetting is ≈ 0.119 (`trihope_r_terminal`, `no_retrieval`), not 0.188.
+Deltas "vs trihope" that ignore this attribute replay's cost to whichever
+knob was removed. Read the grid against 0.119:
+
+| Ablation (1 seed, replay off) | Worst Δ | Writes | vs 0.119 | Reading |
+|---|---|---|---|---|
+| no_cosine | 0.354 | 1.8e10 | +0.24, ×100 writes | **the stability cosine is the signal that matters** |
+| stability_instant | 0.185 | 6.2e8 | +0.07 | sustained C̄ (T1) earns its place |
+| no_teacher_conf | 0.141 | 1.5e8 | +0.02 | the gate helps a little |
+| no_repetition | 0.134 | 4.5e8 | +0.015 | repetition helps a little |
+| no_surprise | 0.117 | 1.8e8 | ≈ 0 | surprise is neutral on forgetting |
+| consolidation_strict | 0.115 | 8.8e7 | ≈ 0, fewer writes | the T1 loosening bought nothing on this axis |
+
+**E4** (1 seed, replay off): p_off_control 0.091 at zero writes, p_study
+0.094, forced merges at bad / plausible / low-confidence timing 0.120 /
+0.121 / 0.129. Mistimed permanence costs 28–37 % more forgetting, worst
+under low confidence — the timing claim and the gate are supported; P as
+configured neither helps nor hurts forgetting (its case rests on reuse and
+persistence, still to be read from `adapter_reuse_aulc` and
+`damage_recovery`).
+
+**E5** (3 seeds): the corrupted teacher reached P in 0.00 % of decisions
+and touched zero base coordinates under trihope, trihope_lowconf,
+gradient_routing *and* the SNR-rule MoLF variant; the EPD-rule MoLF sent
+81 % of it to base. Containment holds, but a fair two-tier baseline
+contains identically with 40 % fewer writes, so containment comes from
+the stability gate rather than from the R tier. Because nothing reached P,
+`rollback_teacher.py` had nothing to roll back and the selective-rollback
+comparison was never exercised.
+
+**Decisions this forces (team, not operator):**
+1. **Which configuration is "TriHOPE" in the paper.** E2, E3 and the grid
+   all say replay costs forgetting and a leaner controller (replay off or
+   `repetition_low` 0.2, strict consolidation) sits on the Pareto front.
+   If the headline stays replay-on, rerun `ablation_grid` and
+   `p_study_small` with `controller.retrieval.replay_on_hit=true` added to
+   every spec (17 runs, ~5 h at 5 concurrent). If the headline becomes the
+   replay-off variant, the existing grid already matches it and E1's row
+   is `no_retrieval` / E2's `trihope_r_terminal` (3 seeds each, 0.119).
+2. **Make rollback happen.** Add to `bad_teacher_small.yaml` a
+   `trihope_forced` spec = trihope + `controller.debug.force_consolidate_steps`
+   inside `math_recurrent` (as `p_forced_plausible`), so corrupted evidence
+   is merged on purpose; then `rollback_teacher.py` selective vs
+   `--baseline full_restore` on it. That is the run that turns "attributable
+   and revertible" from a design property into a measured one.
+3. **Say what E5 shows honestly:** containment is a property of
+   stability-gated permanence shared with the SNR baseline; attribution and
+   selective rollback are what only this system has.
+
 ### What each stage executes (the manual equivalents)
 
 ```bash
