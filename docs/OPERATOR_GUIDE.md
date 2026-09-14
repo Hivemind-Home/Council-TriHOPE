@@ -487,11 +487,27 @@ code live teachers are stand-ins for the models that wrote the cached text.
 - **Cost:** ~30 GB and ~2× wall clock per run (four teacher forwards per
   step); `CONCURRENT=2–3`. Full campaign ≈ 300 GPU-hours; E1 + E5 only
   ≈ 55 runs, the sensible scope.
-- **How:** add `--live` to any runner command. It rewrites the manifest in
-  memory — every spec gets `teachers.mode=live`, `teachers.num_teachers=4`,
-  `distillation.lambda_ce=0.5`, `data.router_strict=true`; results go to
-  `runs/<experiment>_live/`; `random_routing`'s action-share path is
-  redirected to the live directory. Same order as cache mode:
+- **How, the short version:** the same four stages with `LIVE=1`:
+
+  ```bash
+  LIVE=1 scripts/run_campaign.sh gate      # live trihope × 3 seeds + diagnostic
+  LIVE=1 scripts/run_campaign.sh e1        # live E1, random_routing last
+  LIVE=1 scripts/run_campaign.sh e5        # live E5 + rollbacks
+  LIVE=1 scripts/run_campaign.sh tier3     # live E2 / E3 / E4 / ablations (optional; E1 + E5 is the sensible scope)
+  ```
+
+  `LIVE=1` passes `--live` to the runner and points every report, diagnostic
+  and rollback at `runs/<experiment>_live/`; concurrency defaults to 3.
+  The stops are the same two: the diagnostic after `gate`, Figure 1 after
+  `e1` — but **do not change any threshold for the live run**; it must use
+  whatever the cache-mode E1 used so the two tables are comparable.
+
+- **How, by hand:** add `--live` to any runner command. It rewrites the
+  manifest in memory — every spec gets `teachers.mode=live`,
+  `teachers.num_teachers=4`, `distillation.lambda_ce=0.5`,
+  `data.router_strict=true`; results go to `runs/<experiment>_live/`;
+  `random_routing`'s action-share path is redirected to the live directory.
+  Same order as cache mode:
 
   ```bash
   python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --only trihope

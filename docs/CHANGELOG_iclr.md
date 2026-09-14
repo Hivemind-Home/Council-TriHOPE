@@ -550,3 +550,6 @@ deviation from the task document with the reason.
   (`apply_live`: live overrides prepended to every spec, experiment name
   suffixed `_live`, `random_routing`'s shares path redirected). Two tests.
   `docs/OPERATOR_GUIDE.md` §9 now gives the live replication as commands.
+- **`LIVE=1 scripts/run_campaign.sh <stage>`:** the four campaign stages in
+  live-teacher mode (`--live`, `_live` directories everywhere, concurrency
+  3). Dry-run verified for gate / e5 live and tier3 cache.
