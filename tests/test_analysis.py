@@ -192,5 +192,5 @@ def test_replay_timing_splits_same_phase_from_cross_phase(tmp_path: Path) -> Non
     assert row["replays"] == 4
     assert row["cross_phase_replays"] == 2 and abs(row["cross_phase_share"] - 0.5) < 1e-9
     assert row["replays_in_warm"] == 1 and row["replays_in_recurrent"] == 3
-    assert row["delay_median_steps"] == 35.0  # delays 10, 10, 50, 60
+    assert row["delay_median_steps"] == 30.0  # delays 10, 10, 50, 60
     assert replay_timing(load_experiment(tmp_path / "exp_v1"))["seed"].iloc[0] == 1
