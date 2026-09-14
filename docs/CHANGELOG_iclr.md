@@ -534,3 +534,15 @@ deviation from the task document with the reason.
   against E1 in one pooled call (`--out runs/ablations`); test added.
 - Docs corrected: `--dry-run` prints the matrix only — preflight runs at a
   real launch (the runbooks said otherwise).
+
+## 2026-09-14 — E1 / E2 / E3 results recorded; guide progress log
+
+- Operator report (3 seeds): E1 is a **go** on worst retention delta —
+  trihope 0.188 at 1.3e8 permanent writes vs 0.35–0.37 for the three
+  zero-write baselines, 0.65 for random_routing, 0.81 / 5.1 for MoLF /
+  full FT. Ablations: R off or R-without-replay 0.119, P off 0.192 at zero
+  writes, replay +62 % forgetting. Recorded in `docs/STATUS.md` §2/§4 and
+  `docs/OPERATOR_GUIDE.md` §5b with the three items still owed (plasticity
+  columns, E1 threshold tag, trihope vs trihope_replay discrepancy).
+- `docs/OPERATOR_GUIDE.md`: §2b progress log, §5b results reading, §9
+  live-teacher replication (later), gaps renumbered to §10.

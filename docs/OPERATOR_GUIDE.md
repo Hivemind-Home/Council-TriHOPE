@@ -3,7 +3,7 @@
 **Audience:** the person running the GPU campaign. This is the one document
 to follow. Every command in it has been executed on a 96 GB card or on the
 CPU dev box against real data; the numbers quoted are observed. Written
-2026-09-09 against `main` at `c5ebaaf` or later.
+2026-09-09 against `main` at `c5ebaaf` or later; progress log §2b updated 2026-09-14.
 
 **Deadlines:** abstract Sep 18, paper Sep 25 (AoE). The E1 go/no-go was
 planned for Sep 13.
@@ -156,6 +156,17 @@ E4 and the ablations do not exist yet. That is what you are producing.
 
 ---
 
+## 2b. Progress log (update this as stages finish)
+
+| Date | Stage | State |
+|---|---|---|
+| 2026-09-08 | Tier 4 live KD | done, 5 specs, reported (STATUS §4b) |
+| 2026-09-14 | gate + e1 (E1, 33 runs) | done — **go** on the forgetting axis (§5b) |
+| 2026-09-14 | tier3: E2 (15 runs), E3 sweep (22 runs) | done |
+| — | e5 (21 runs + 9 rollbacks) | **next** |
+| — | tier3: E4 `p_study_small` (5), `ablation_grid` (12), reports | after e5 |
+| — | plasticity columns of E1/E2/E3, threshold-tag check, determinism check | owed (§5b) |
+
 ## 3. Machine and setup
 
 - One 96 GB GPU is enough. Two cards halve the wall clock (`--parallel-gpus 2`
@@ -274,6 +285,48 @@ weights; y = worst retention delta, and mean final eval loss).
 Write `runs/baselines_small_v1/RESULTS.md` and fill STATUS §2 either way.
 Note which baseline sat closest to trihope — E5 rollbacks and the optional
 headline use it.
+
+### 5b. What E1 / E2 / E3 said (operator report of 2026-09-14, worst retention delta, 3 seeds unless noted)
+
+| Spec | Exp | Worst Δ | ± | Permanent writes | Reading |
+|---|---|---|---|---|---|
+| trihope | E1 | 0.188 | 0.004 | 1.3e8 | **the method; fewest writes of any writer** |
+| trihope_no_hash | E1 | 0.232 | 0.050 | 4.0e8 | bucket counter earns its place |
+| no_consolidation | E1 | 0.192 | 0.006 | 0 | P off: same forgetting, zero writes |
+| no_retrieval | E1 | 0.119 | 0.009 | 2.1e8 | R off: *less* forgetting |
+| trihope_r_terminal / fp_only | E2 | 0.119 / 0.121 | 0.010 / 0.003 | 2.0e8 | R never replayed / no R: *less* forgetting |
+| trihope_replay | E2 | 0.194 | 0.011 | 1.4e8 | replay on: +62 % forgetting vs r_terminal |
+| surprise_gate / plateau_trigger / lora_only | E1 | 0.35 / 0.36 / 0.37 | 0.15 / 0.11 / 0.11 | 0 | the trigger baselines: ~2× worse |
+| random_routing | E1 | 0.650 | 0.103 | 2.1e8 | **the control: 3.5× worse — the signals carry information** |
+| molf_style / p_only / full_ft | E1/E2/E1 | 0.81 / 0.91 / 5.1 | 0.14 / 0.36 / 2.8 | 2e12 / 2.6e11 / 2.6e12 | writing to base freely forgets catastrophically |
+| best sweep point trihope_s4_r0p2 (1 seed) | E3 | 0.130 | — | 1.7e8 | fewer R decisions → less forgetting; the s1_r0p45 point (most R) is worst at 0.238 |
+
+**Verdict on reframe §9: go.** TriHOPE is on the Pareto front (nothing with
+fewer writes forgets less; every external controller forgets ≥ 2× more) and
+is separated from random_routing by far more than the error bars.
+
+**What the ablations add, and the paper must say.** On the forgetting axis
+the gain comes from signal-driven, sparse, exactly-masked F writes.
+Replay (the R tier's return path) *increases* worst-case forgetting, and P
+adds nothing to it. Neither was designed to reduce forgetting: replay
+exists so deferred rows are still learned (plasticity, anytime loss), P so
+adapters are reused and knowledge becomes base (E4). Their justification
+therefore has to come from the columns not in the table above and from E5.
+Until those are in, E2's claim is "deferral costs X forgetting and buys Y",
+not "the no-write tier reduces forgetting".
+
+**Owed before writing (operator, please send):**
+1. From the same `budget_curve.csv` files: `final_loss_*`,
+   `mean_retention_delta`, `steps_to_recover_code`, and
+   `runs/figure1/pareto_budget.png` (both panels).
+2. The `threshold_tag` of the E1 `trihope` rows — the sweep note says the
+   shipped default is now surprise 1.0 (was 2.0). Figure 1 must state the
+   values E1 ran with, and STATUS §8 must record the change.
+3. Why `trihope` (E1, 0.188) and `trihope_replay` (E2, 0.194) differ: they
+   are the same spec and seeds. Either the default changed between the two
+   launches (then E2 was run against a different default — say which) or
+   the GPU path is nondeterministic (then the error bars already cover it).
+   Check: `diff <(grep -v hydra runs/baselines_small_v1/trihope-seed1337/hydra/rank0/.hydra/config.yaml) <(grep -v hydra runs/r_tier_small_v1/trihope_replay-seed1337/hydra/rank0/.hydra/config.yaml)`.
 
 ### What each stage executes (the manual equivalents)
 
@@ -424,7 +477,30 @@ results section is written from those.
 
 ---
 
-## 9. Known gaps (do not fix during the campaign; report them)
+## 9. Later: replicating the campaign with live teacher models
+
+Tier 4 already ran the five E1-style controllers with four live teachers
+(§1.3). A full live replication is possible but is a second, separate
+table — never pooled with the cache-mode figures — because the general and
+code live teachers are stand-ins for the models that wrote the cached text.
+
+- **Cost:** ~30 GB and ~2× wall clock per run (four teacher forwards per
+  step); `CONCURRENT=2–3`. Full campaign ≈ 300 GPU-hours; E1 + E5 only
+  ≈ 55 runs, the sensible scope.
+- **How:** copy the manifest, add the `live: &live` anchor from
+  `configs/experiments/live_kd_small.yaml` (`teachers.mode=live`,
+  `teachers.num_teachers=4`, `distillation.lambda_ce=0.5`,
+  `++data.router_strict=true`), splice `- *live` into every spec's
+  overrides, rename `experiment:` with a `_live` suffix. Health check at
+  step 0: `loss/kd` > 0 and `loss/kd_row_hit_frac` = 1.0.
+- **If the teachers must score their own text everywhere:** regenerate
+  `teacher_output_text` for general and code with the live models first.
+  That is a new dataset and a new stream digest, so it is a new campaign,
+  not a rerun.
+- **Do this after** E5, E4 and the ablations are in and the paper's
+  cache-mode figures are final.
+
+## 10. Known gaps (do not fix during the campaign; report them)
 
 - `stable_gate` (STABLE, probe-gated merge) is not implemented; reviewers
   may ask (STATUS §5).

@@ -35,10 +35,18 @@ on or above the Pareto front of `molf_style`, `plateau_trigger`,
 `surprise_gate` at matched permanent writes, and clearly separated from
 `random_routing` (non-overlapping error bars on worst retention delta).
 
-- Table: `runs/baselines_small_v1/analysis/budget_curve.csv` — _pending_
-- Figure 1: `runs/baselines_small_v1/analysis/pareto_budget.png` — _pending_
-- Action shares: `action_share_by_phase.csv` — _pending_
-- Verdict: _pending_ (go / conditional go / no-go)
+- Table: `runs/baselines_small_v1/analysis/budget_curve.csv` — run (operator
+  report 2026-09-14, 3 seeds): trihope 0.188 ± 0.004 at 1.3e8 permanent
+  writes; surprise_gate 0.35, plateau_trigger 0.36, lora_only 0.37 (0
+  writes); random_routing 0.65 ± 0.10; molf_style 0.81 (2.2e12); full_ft
+  5.1 ± 2.8 (2.6e12). Ablations: no_retrieval 0.119, no_consolidation
+  0.192 (0 writes), trihope_no_hash 0.232, gold_ce 0.114.
+- Figure 1: `runs/figure1/pareto_budget.png` — owed (both panels)
+- Action shares: `action_share_by_phase.csv` — owed
+- Verdict: **go** on worst retention delta (Pareto front + 3.5× separation
+  from random_routing). Plasticity columns, the E1 `threshold_tag`, and the
+  trihope-vs-trihope_replay discrepancy are owed before the verdict is
+  final (`docs/OPERATOR_GUIDE.md` §5b).
 
 ## 3. E5 — containment and rollback (`runs/bad_teacher_small_v1`)
 
@@ -54,8 +62,8 @@ recovers more than a full restore.
 
 ## 4. E2 / E3 / E4
 
-- E2 `runs/r_tier_small_v1/analysis/budget_curve.csv` (steps-to-recover on `code_revisit`) — _pending_
-- E3 `runs/figure1/pareto_budget.png` (E1 + sweep pooled) — _pending_
+- E2 `runs/r_tier_small_v1/analysis/budget_curve.csv` — run (2026-09-14): r_terminal 0.119, fp_only 0.121, trihope_replay 0.194 (+62 % vs r_terminal), no_hash_replay 0.232, p_only 0.91. On forgetting alone the R tier's replay costs; steps-to-recover and new-domain loss owed.
+- E3 `runs/budget_sweep_small_v1` — run (2026-09-14, 1 seed/point): best trihope_s4_r0p2 0.130 (1.7e8); s1_r0p45 worst at 0.238; pooled `runs/figure1` owed.
 - E4 `runs/p_study_small_v1/analysis/{p_selection_stats,damage_recovery}.csv` — _pending_
 
 ### 4b. Tier 4 — live logit-KD (`runs/live_kd_small_v1`, appendix)
