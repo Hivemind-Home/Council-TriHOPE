@@ -48,6 +48,43 @@ on or above the Pareto front of `molf_style`, `plateau_trigger`,
   trihope-vs-trihope_replay discrepancy are owed before the verdict is
   final (`docs/OPERATOR_GUIDE.md` §5b).
 
+## 2a. The fair MoLF baseline (independent confirmation, 3 seeds)
+
+Recorded here because it is measured, not inferred. `molf_style` in E1 runs
+`adam_score_rule=epd_argmax` **with `top_k_fraction=1.0`** — every coordinate
+open — while `trihope` runs at the config default 0.5. The 4.3x margin
+(0.811 vs 0.188) is a budget artefact.
+
+The fair variant already in `budget_sweep_small.yaml`
+(`adam_score_rule=snr_threshold`, top-k inherited at 0.5), run at 3 seeds:
+
+| | worst ret D | +/- | permanent writes |
+|---|---|---|---|
+| `molf_style_a0p5` (snr rule) | **0.0841** | 0.0062 | **1.03e8** |
+| `trihope` | 0.1883 | 0.0036 | 1.31e8 |
+
+Non-overlapping (0.0903 vs 0.1847) by the same standard used for the
+`random_routing` claim: 2.24x better retention, 21% fewer permanent writes.
+Matches the containment-side finding above (8.2e7 vs 1.35e8) from the other
+direction.
+
+## 2b. Reported error bars understate uncertainty by 2-3x
+
+`baselines_small_v1/trihope` and `r_tier_small_v1/trihope_replay` are the same
+configuration — their override files diff to nothing. At matched seeds they
+differ by a mean of **0.0089** (1337: 0.1899/0.1999, 2024: 0.1833/0.1783,
+7: 0.1917/0.2035), against a reported seed-to-seed sd of **0.0036**. GPU
+nondeterminism exceeds seed variance.
+
+Headline gaps are unaffected (8-51x the noise). But differences under ~0.02
+are **not resolved** — including `trihope` vs `no_consolidation` (0.0038),
+`stability_instant` vs `trihope` (0.0031), `r_terminal` vs `fp_only` (0.0017),
+and `consolidation_strict` vs `no_surprise` (0.0016). The n=1 matrices carry
+this spread with no error bar shown at all.
+
+**For the paper:** report repeat-run variance alongside seed variance, or state
+that differences below ~0.02 are unresolved.
+
 ## 3. E5 — containment and rollback (`runs/bad_teacher_small_v1`)
 
 **Pass condition (reframe §5 E5):** most of the corrupted teacher's
@@ -71,7 +108,7 @@ recovers more than a full restore.
   `bad_teacher_small`) — added as `trihope_forced` (+ `molf_snr`) in the
   manifest; rerun owed (OPERATOR_GUIDE §5c).
 
-## 4. E2 / E3 / E4
+21 runs + 7 rollback replays, 0 failures. Corrupted-teacher routing:
 
 - E2 `runs/r_tier_small_v1/analysis/budget_curve.csv` — run (2026-09-14): r_terminal 0.119, fp_only 0.121, trihope_replay 0.194 (+62 % vs r_terminal), no_hash_replay 0.232, p_only 0.91. On forgetting alone the R tier's replay costs; steps-to-recover and new-domain loss owed.
 - E3 `runs/budget_sweep_small_v1` — run (2026-09-14, 1 seed/point): best trihope_s4_r0p2 0.130 (1.7e8); s1_r0p45 worst at 0.238; pooled `runs/figure1` owed.
