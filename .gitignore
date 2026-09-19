@@ -73,4 +73,10 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-CLAUDE.mdruns_backup/
+CLAUDE.md
+runs_backup/
+
+# Raw per-step event logs: 2.7 GB, and single files reach 235 MB --
+# past GitHub's 100 MB hard limit. Kept on the box and in the local
+# mirror; every table in results/ is reproducible from run_summary.json.
+events.jsonl

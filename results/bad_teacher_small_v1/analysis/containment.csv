@@ -1,0 +1,16 @@
+spec_id,teacher,actions_mean,actions_std,r_share_mean,r_share_std,f_share_mean,f_share_std,p_share_mean,p_share_std,coords_P_direct_mean,coords_P_direct_std,consolidations_attributed_mean,consolidations_attributed_std,merged_coords_attributed_mean,merged_coords_attributed_std
+full_ft,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+gradient_routing,math_teacher_corrupted,42130.666666666664,85.54141297250881,0.0,0.0,100.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+gradient_routing-seed1337-fullrestore,math_teacher_corrupted,0.0,,,,,,,,0.0,,0.0,,0.0,
+gradient_routing-seed2024-fullrestore,math_teacher_corrupted,0.0,,,,,,,,0.0,,0.0,,0.0,
+gradient_routing-seed7-fullrestore,math_teacher_corrupted,56.0,,0.0,,100.0,,0.0,,0.0,,0.0,,0.0,
+lora_only,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+molf_snr,math_teacher_corrupted,4514.0,9.16515138991168,0.0,0.0,100.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+molf_style,math_teacher_corrupted,42130.666666666664,85.54141297250881,0.0,0.0,19.019652398017197,2.2688518928616537,80.98034760198281,2.2688518928616577,272712597504.0,6259360057.213872,0.0,0.0,0.0,0.0
+trihope,math_teacher_corrupted,4514.0,9.16515138991168,14.03797148613549,0.30943773840194794,85.9620285138645,0.30943773840194466,0.0,0.0,0.0,0.0,0.6450444183745316,0.7382445643181929,4390610.222747799,4618289.599536056
+trihope-seed1337-fullrestore,math_teacher_corrupted,0.0,,,,,,,,0.0,,0.0,,0.0,
+trihope-seed2024-fullrestore,math_teacher_corrupted,0.0,,,,,,,,0.0,,0.0,,0.0,
+trihope-seed2024-rollback,math_teacher_corrupted,720.0,,7.5,,92.5,,0.0,,0.0,,0.0,,0.0,
+trihope-seed7-fullrestore,math_teacher_corrupted,0.0,,,,,,,,0.0,,0.0,,0.0,
+trihope_lowconf,math_teacher_corrupted,4514.0,9.16515138991168,0.2216807828706564,0.11118391751328047,99.77831921712935,0.11118391751327886,0.0,0.0,0.0,0.0,0.0015503875968992248,0.0026853500892540733,14631.293023255814,25342.14289670711
+trihope_nogate,math_teacher_corrupted,4514.0,9.16515138991168,13.986345446343023,0.19220390176641106,86.01365455365698,0.19220390176642022,0.0,0.0,0.0,0.0,0.648267349790889,0.5060222904664822,4531350.609236452,3381775.9876181795

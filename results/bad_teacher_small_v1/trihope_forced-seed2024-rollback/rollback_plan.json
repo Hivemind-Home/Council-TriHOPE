@@ -1,0 +1,35 @@
+{
+  "mode": "selective",
+  "restore_step": 3000,
+  "module": "L0.attn.F",
+  "attribution_share": {
+    "math_teacher_corrupted": 0.5,
+    "math_teacher_deepseek_r1_distill_qwen_1p5b": 0.5
+  },
+  "teacher": "math_teacher_corrupted",
+  "checkpoint": "runs/bad_teacher_small_v1/trihope_forced-seed2024/checkpoints/step_00003000_pre_merge",
+  "cmd": [
+    "/home/a6000/miniconda3/envs/trihope/bin/python",
+    "/home/a6000/asif/Council-TriHOPE/train.py",
+    "--config-name",
+    "stream_small",
+    "++data.corrupt_teacher.enabled=true",
+    "++controller.consolidation.checkpoint_before_merge=true",
+    "++checkpoint.keep_tagged=0",
+    "++checkpoint.save_before_phases=[math_recurrent]",
+    "++controller.retrieval.replay_on_hit=true",
+    "++controller.debug.force_consolidate_steps=[3000]",
+    "++eval.on_consolidation=true",
+    "++train.seed=2024",
+    "++checkpoint.dir=runs/bad_teacher_small_v1/trihope_forced-seed2024-rollback/checkpoints",
+    "++logging.path=runs/bad_teacher_small_v1/trihope_forced-seed2024-rollback/metrics.jsonl",
+    "++logging.events_path=runs/bad_teacher_small_v1/trihope_forced-seed2024-rollback/events.jsonl",
+    "++run.dir=runs/bad_teacher_small_v1/trihope_forced-seed2024-rollback",
+    "++hydra.run.dir=runs/bad_teacher_small_v1/trihope_forced-seed2024-rollback/hydra/rank${oc.env:RANK,0}",
+    "++checkpoint.resume_from=runs/bad_teacher_small_v1/trihope_forced-seed2024/checkpoints/step_00003000_pre_merge",
+    "++controller.debug.block_p_for_teachers=[math_teacher_corrupted]",
+    "++controller.debug.block_min_share=0.3"
+  ],
+  "original_run": "runs/bad_teacher_small_v1/trihope_forced-seed2024",
+  "out": "runs/bad_teacher_small_v1/trihope_forced-seed2024-rollback"
+}

@@ -1,0 +1,12 @@
+- ++controller.policy.mode=adam_score
+- ++controller.policy.adam_score_rule=snr_threshold
+- ++controller.policy.adam_score_high=0.7
+- ++controller.ablation.disable_stores=[R]
+- ++controller.consolidation.period=0
+- ++controller.writer.flag_p_for_consolidation=false
+- ++controller.ablation.use_teacher_confidence=false
+- ++train.seed=1337
+- ++checkpoint.dir=runs/budget_sweep_small_v1/molf_style_a0p7-seed1337/checkpoints
+- ++logging.path=runs/budget_sweep_small_v1/molf_style_a0p7-seed1337/metrics.jsonl
+- ++logging.events_path=runs/budget_sweep_small_v1/molf_style_a0p7-seed1337/events.jsonl
+- ++run.dir=runs/budget_sweep_small_v1/molf_style_a0p7-seed1337

@@ -1,0 +1,6 @@
+- ++controller.ablation.disable_stores=[R]
+- ++train.seed=1337
+- ++checkpoint.dir=runs/r_tier_small_v1/fp_only-seed1337/checkpoints
+- ++logging.path=runs/r_tier_small_v1/fp_only-seed1337/metrics.jsonl
+- ++logging.events_path=runs/r_tier_small_v1/fp_only-seed1337/events.jsonl
+- ++run.dir=runs/r_tier_small_v1/fp_only-seed1337

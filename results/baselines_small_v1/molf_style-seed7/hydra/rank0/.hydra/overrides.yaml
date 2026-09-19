@@ -1,0 +1,12 @@
+- ++controller.policy.mode=adam_score
+- ++controller.policy.adam_score_rule=epd_argmax
+- ++controller.writer.top_k_fraction=1.0
+- ++controller.ablation.disable_stores=[R]
+- ++controller.consolidation.period=0
+- ++controller.writer.flag_p_for_consolidation=false
+- ++controller.ablation.use_teacher_confidence=false
+- ++train.seed=7
+- ++checkpoint.dir=runs/baselines_small_v1/molf_style-seed7/checkpoints
+- ++logging.path=runs/baselines_small_v1/molf_style-seed7/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/molf_style-seed7/events.jsonl
+- ++run.dir=runs/baselines_small_v1/molf_style-seed7

@@ -1,0 +1,6 @@
+- ++controller.writer.top_k_fraction=1.0
+- ++train.seed=1337
+- ++checkpoint.dir=runs/ablation_grid_v1/topk_100-seed1337/checkpoints
+- ++logging.path=runs/ablation_grid_v1/topk_100-seed1337/metrics.jsonl
+- ++logging.events_path=runs/ablation_grid_v1/topk_100-seed1337/events.jsonl
+- ++run.dir=runs/ablation_grid_v1/topk_100-seed1337

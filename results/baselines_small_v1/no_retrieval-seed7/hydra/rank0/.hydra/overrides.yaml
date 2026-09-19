@@ -1,0 +1,6 @@
+- ++controller.ablation.disable_stores=[R]
+- ++train.seed=7
+- ++checkpoint.dir=runs/baselines_small_v1/no_retrieval-seed7/checkpoints
+- ++logging.path=runs/baselines_small_v1/no_retrieval-seed7/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/no_retrieval-seed7/events.jsonl
+- ++run.dir=runs/baselines_small_v1/no_retrieval-seed7

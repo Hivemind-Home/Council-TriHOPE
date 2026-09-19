@@ -1,0 +1,13 @@
+- ++data.corrupt_teacher.enabled=true
+- ++controller.consolidation.checkpoint_before_merge=true
+- ++checkpoint.keep_tagged=0
+- ++checkpoint.save_before_phases=[math_recurrent]
+- ++controller.retrieval.replay_on_hit=true
+- ++train.seed=2024
+- ++checkpoint.dir=runs/bad_teacher_small_v1/trihope-seed2024-rollback/checkpoints
+- ++logging.path=runs/bad_teacher_small_v1/trihope-seed2024-rollback/metrics.jsonl
+- ++logging.events_path=runs/bad_teacher_small_v1/trihope-seed2024-rollback/events.jsonl
+- ++run.dir=runs/bad_teacher_small_v1/trihope-seed2024-rollback
+- ++checkpoint.resume_from=runs/bad_teacher_small_v1/trihope-seed2024/checkpoints/step_00003250_pre_merge
+- ++controller.debug.block_p_for_teachers=[math_teacher_corrupted]
+- ++controller.debug.block_min_share=0.5

@@ -1,0 +1,142 @@
+{
+  "experiment": "r_tier_small_v1",
+  "base_config": "stream_small",
+  "updated": 1789470257.0843391,
+  "runs": [
+    {
+      "run_id": "trihope_replay-seed1337",
+      "spec_id": "trihope_replay",
+      "seed": 1337,
+      "dir": "runs/r_tier_small_v1/trihope_replay-seed1337",
+      "state": "done",
+      "updated": 1789309050.352598,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_replay-seed2024",
+      "spec_id": "trihope_replay",
+      "seed": 2024,
+      "dir": "runs/r_tier_small_v1/trihope_replay-seed2024",
+      "state": "done",
+      "updated": 1789309038.754213,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_replay-seed7",
+      "spec_id": "trihope_replay",
+      "seed": 7,
+      "dir": "runs/r_tier_small_v1/trihope_replay-seed7",
+      "state": "done",
+      "updated": 1789309043.1809716,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_r_terminal-seed1337",
+      "spec_id": "trihope_r_terminal",
+      "seed": 1337,
+      "dir": "runs/r_tier_small_v1/trihope_r_terminal-seed1337",
+      "state": "done",
+      "updated": 1789311956.4563103,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_r_terminal-seed2024",
+      "spec_id": "trihope_r_terminal",
+      "seed": 2024,
+      "dir": "runs/r_tier_small_v1/trihope_r_terminal-seed2024",
+      "state": "done",
+      "updated": 1789311982.0229897,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_r_terminal-seed7",
+      "spec_id": "trihope_r_terminal",
+      "seed": 7,
+      "dir": "runs/r_tier_small_v1/trihope_r_terminal-seed7",
+      "state": "done",
+      "updated": 1789311989.5764518,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_replay-seed1337",
+      "spec_id": "trihope_no_hash_replay",
+      "seed": 1337,
+      "dir": "runs/r_tier_small_v1/trihope_no_hash_replay-seed1337",
+      "state": "done",
+      "updated": 1789314840.5608337,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_replay-seed2024",
+      "spec_id": "trihope_no_hash_replay",
+      "seed": 2024,
+      "dir": "runs/r_tier_small_v1/trihope_no_hash_replay-seed2024",
+      "state": "done",
+      "updated": 1789314911.2191772,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_replay-seed7",
+      "spec_id": "trihope_no_hash_replay",
+      "seed": 7,
+      "dir": "runs/r_tier_small_v1/trihope_no_hash_replay-seed7",
+      "state": "done",
+      "updated": 1789314959.0946674,
+      "exit_code": 0
+    },
+    {
+      "run_id": "fp_only-seed1337",
+      "spec_id": "fp_only",
+      "seed": 1337,
+      "dir": "runs/r_tier_small_v1/fp_only-seed1337",
+      "state": "done",
+      "updated": 1789317772.6362476,
+      "exit_code": 0
+    },
+    {
+      "run_id": "fp_only-seed2024",
+      "spec_id": "fp_only",
+      "seed": 2024,
+      "dir": "runs/r_tier_small_v1/fp_only-seed2024",
+      "state": "done",
+      "updated": 1789317888.5705988,
+      "exit_code": 0
+    },
+    {
+      "run_id": "fp_only-seed7",
+      "spec_id": "fp_only",
+      "seed": 7,
+      "dir": "runs/r_tier_small_v1/fp_only-seed7",
+      "state": "done",
+      "updated": 1789317914.8045187,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_only-seed1337",
+      "spec_id": "p_only",
+      "seed": 1337,
+      "dir": "runs/r_tier_small_v1/p_only-seed1337",
+      "state": "done",
+      "updated": 1789320815.56697,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_only-seed2024",
+      "spec_id": "p_only",
+      "seed": 2024,
+      "dir": "runs/r_tier_small_v1/p_only-seed2024",
+      "state": "done",
+      "updated": 1789320975.7050853,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_only-seed7",
+      "spec_id": "p_only",
+      "seed": 7,
+      "dir": "runs/r_tier_small_v1/p_only-seed7",
+      "state": "done",
+      "updated": 1789321063.2057934,
+      "exit_code": 0
+    }
+  ]
+}

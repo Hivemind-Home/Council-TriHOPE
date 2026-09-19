@@ -1,0 +1,250 @@
+{
+  "experiment": "bad_teacher_small_v1",
+  "base_config": "stream_small",
+  "updated": 1789470255.7878895,
+  "runs": [
+    {
+      "run_id": "trihope-seed1337",
+      "spec_id": "trihope",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/trihope-seed1337",
+      "state": "done",
+      "updated": 1789291760.9504154,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope-seed2024",
+      "spec_id": "trihope",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/trihope-seed2024",
+      "state": "done",
+      "updated": 1789291781.9063883,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope-seed7",
+      "spec_id": "trihope",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/trihope-seed7",
+      "state": "done",
+      "updated": 1789291788.3057554,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_nogate-seed1337",
+      "spec_id": "trihope_nogate",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/trihope_nogate-seed1337",
+      "state": "done",
+      "updated": 1789276476.8690665,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_nogate-seed2024",
+      "spec_id": "trihope_nogate",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/trihope_nogate-seed2024",
+      "state": "done",
+      "updated": 1789276466.2921758,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_nogate-seed7",
+      "spec_id": "trihope_nogate",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/trihope_nogate-seed7",
+      "state": "done",
+      "updated": 1789276486.37241,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_lowconf-seed1337",
+      "spec_id": "trihope_lowconf",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/trihope_lowconf-seed1337",
+      "state": "done",
+      "updated": 1789279984.940395,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_lowconf-seed2024",
+      "spec_id": "trihope_lowconf",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/trihope_lowconf-seed2024",
+      "state": "done",
+      "updated": 1789279994.2503788,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_lowconf-seed7",
+      "spec_id": "trihope_lowconf",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/trihope_lowconf-seed7",
+      "state": "done",
+      "updated": 1789279999.376431,
+      "exit_code": 0
+    },
+    {
+      "run_id": "full_ft-seed1337",
+      "spec_id": "full_ft",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/full_ft-seed1337",
+      "state": "done",
+      "updated": 1789282337.777386,
+      "exit_code": 0
+    },
+    {
+      "run_id": "full_ft-seed2024",
+      "spec_id": "full_ft",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/full_ft-seed2024",
+      "state": "done",
+      "updated": 1789282377.8302333,
+      "exit_code": 0
+    },
+    {
+      "run_id": "full_ft-seed7",
+      "spec_id": "full_ft",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/full_ft-seed7",
+      "state": "done",
+      "updated": 1789282330.3356552,
+      "exit_code": 0
+    },
+    {
+      "run_id": "lora_only-seed1337",
+      "spec_id": "lora_only",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/lora_only-seed1337",
+      "state": "done",
+      "updated": 1789284934.779376,
+      "exit_code": 0
+    },
+    {
+      "run_id": "lora_only-seed2024",
+      "spec_id": "lora_only",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/lora_only-seed2024",
+      "state": "done",
+      "updated": 1789284966.5076954,
+      "exit_code": 0
+    },
+    {
+      "run_id": "lora_only-seed7",
+      "spec_id": "lora_only",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/lora_only-seed7",
+      "state": "done",
+      "updated": 1789284967.2879703,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style-seed1337",
+      "spec_id": "molf_style",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/molf_style-seed1337",
+      "state": "done",
+      "updated": 1789288385.1372736,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style-seed2024",
+      "spec_id": "molf_style",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/molf_style-seed2024",
+      "state": "done",
+      "updated": 1789288336.9919832,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style-seed7",
+      "spec_id": "molf_style",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/molf_style-seed7",
+      "state": "done",
+      "updated": 1789288360.6357062,
+      "exit_code": 0
+    },
+    {
+      "run_id": "gradient_routing-seed1337",
+      "spec_id": "gradient_routing",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/gradient_routing-seed1337",
+      "state": "done",
+      "updated": 1789295396.2013988,
+      "exit_code": 0
+    },
+    {
+      "run_id": "gradient_routing-seed2024",
+      "spec_id": "gradient_routing",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/gradient_routing-seed2024",
+      "state": "done",
+      "updated": 1789295465.4993703,
+      "exit_code": 0
+    },
+    {
+      "run_id": "gradient_routing-seed7",
+      "spec_id": "gradient_routing",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/gradient_routing-seed7",
+      "state": "done",
+      "updated": 1789295546.2150857,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_forced-seed1337",
+      "spec_id": "trihope_forced",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/trihope_forced-seed1337",
+      "state": "done",
+      "updated": 1789467935.3419182,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_forced-seed2024",
+      "spec_id": "trihope_forced",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/trihope_forced-seed2024",
+      "state": "done",
+      "updated": 1789467964.6672149,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_forced-seed7",
+      "spec_id": "trihope_forced",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/trihope_forced-seed7",
+      "state": "done",
+      "updated": 1789467966.6699886,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_snr-seed1337",
+      "spec_id": "molf_snr",
+      "seed": 1337,
+      "dir": "runs/bad_teacher_small_v1/molf_snr-seed1337",
+      "state": "done",
+      "updated": 1789467857.6769516,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_snr-seed2024",
+      "spec_id": "molf_snr",
+      "seed": 2024,
+      "dir": "runs/bad_teacher_small_v1/molf_snr-seed2024",
+      "state": "done",
+      "updated": 1789467865.890194,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_snr-seed7",
+      "spec_id": "molf_snr",
+      "seed": 7,
+      "dir": "runs/bad_teacher_small_v1/molf_snr-seed7",
+      "state": "done",
+      "updated": 1789470255.7839615,
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+- ++controller.ablation.use_teacher_confidence=false
+- ++distillation.use_teacher_confidence=false
+- ++distillation.ce_confidence_weighting=false
+- ++train.seed=1337
+- ++checkpoint.dir=runs/ablation_grid_v1/no_teacher_conf-seed1337/checkpoints
+- ++logging.path=runs/ablation_grid_v1/no_teacher_conf-seed1337/metrics.jsonl
+- ++logging.events_path=runs/ablation_grid_v1/no_teacher_conf-seed1337/events.jsonl
+- ++run.dir=runs/ablation_grid_v1/no_teacher_conf-seed1337

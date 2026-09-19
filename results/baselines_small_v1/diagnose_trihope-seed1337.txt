@@ -1,0 +1,55 @@
+thresholds from runs/baselines_small_v1/trihope-seed1337/hydra/rank0/.hydra/config.yaml
+policy P needs: R >= 0.5, C(sustained) >= 0.3, V <= 0.3
+sweep merge needs: R >= 0.4, C_bar >= 0.25, every 250 steps
+
+== general_warm  decisions=3000  actions={'R': 239, 'F': 2761, 'P': 0}
+   R     p10 0.263  p50 0.403  p90 0.448  max 0.595   pass 2.23%
+   C     p10 0.053  p50 0.102  p90 0.266  max 0.604   pass 6.43%
+   V     p10 0.005  p50 0.009  p90 0.014  max 0.347   pass 99.90%
+   S     p10 0.519  p50 0.693  p90 0.978  max 20.000
+   all three at once: 0.00%
+   at sweep steps (12 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+== code_recurrent  decisions=9000  actions={'R': 1040, 'F': 7958, 'P': 2}
+   R     p10 0.268  p50 0.456  p90 0.503  max 0.685   pass 11.36%
+   C     p10 0.022  p50 0.068  p90 0.150  max 0.336   pass 0.02%
+   V     p10 0.038  p50 0.103  p90 0.195  max 16.578   pass 98.56%
+   S     p10 0.322  p50 0.654  p90 2.075  max 20.000
+   all three at once: 0.02%
+   at sweep steps (36 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+== novel_inject  decisions=900  actions={'R': 428, 'F': 472, 'P': 0}
+   R     p10 0.106  p50 0.258  p90 0.285  max 0.323   pass 0.00%
+   C     p10 0.081  p50 0.141  p90 0.223  max 0.359   pass 2.33%
+   V     p10 0.006  p50 0.009  p90 0.056  max 0.346   pass 99.78%
+   S     p10 0.497  p50 0.747  p90 1.064  max 7.232
+   all three at once: 0.00%
+   at sweep steps (6 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+== math_recurrent  decisions=9000  actions={'R': 1399, 'F': 7601, 'P': 0}
+   R     p10 0.243  p50 0.423  p90 0.508  max 0.573   pass 13.80%
+   C     p10 0.010  p50 0.052  p90 0.138  max 0.317   pass 0.13%
+   V     p10 0.050  p50 0.164  p90 0.281  max 2.653   pass 92.16%
+   S     p10 0.160  p50 0.411  p90 1.896  max 20.000
+   all three at once: 0.00%
+   at sweep steps (36 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+== medical_recurrent  decisions=7800  actions={'R': 1396, 'F': 6404, 'P': 0}
+   R     p10 0.225  p50 0.411  p90 0.538  max 0.672   pass 15.94%
+   C     p10 0.008  p50 0.049  p90 0.121  max 0.408   pass 0.63%
+   V     p10 0.146  p50 0.484  p90 0.760  max 1.906   pass 25.04%
+   S     p10 0.086  p50 0.308  p90 3.662  max 20.000
+   all three at once: 0.00%
+   at sweep steps (30 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+== code_revisit  decisions=2700  actions={'R': 605, 'F': 2095, 'P': 0}
+   R     p10 0.270  p50 0.372  p90 0.629  max 0.693   pass 26.11%
+   C     p10 -0.000  p50 0.026  p90 0.137  max 0.405   pass 1.15%
+   V     p10 0.102  p50 0.222  p90 0.426  max 1.091   pass 69.30%
+   S     p10 0.331  p50 1.233  p90 4.827  max 20.000
+   all three at once: 0.00%
+   at sweep steps (12 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+== mixed_tail  decisions=3600  actions={'R': 356, 'F': 3240, 'P': 4}
+   R     p10 0.283  p50 0.411  p90 0.495  max 0.673   pass 8.89%
+   C     p10 0.017  p50 0.081  p90 0.191  max 0.349   pass 0.31%
+   V     p10 0.037  p50 0.077  p90 0.209  max 0.488   pass 98.50%
+   S     p10 0.509  p50 1.422  p90 3.465  max 19.232
+   all three at once: 0.11%
+   at sweep steps (12 decisions): R>=0.4 & C_bar>=0.25 -> 0.00%
+
+consolidation events: 12

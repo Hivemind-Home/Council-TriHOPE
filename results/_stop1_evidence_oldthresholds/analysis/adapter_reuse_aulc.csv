@@ -1,0 +1,2 @@
+spec_id,phase,aulc_mean,aulc_std,final_loss_mean,final_loss_std
+trihope,math_recurrent,0.24396858287152945,0.018769546679133577,0.17542215685049692,0.03904200321452748

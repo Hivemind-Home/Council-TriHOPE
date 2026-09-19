@@ -1,0 +1,12 @@
+- ++controller.enabled=false
+- ++train.trainable=lora
+- ++controller.consolidation.trigger=plateau
+- ++controller.consolidation.plateau_window=200
+- ++controller.consolidation.plateau_tolerance=0.01
+- ++controller.consolidation.plateau_min_gap=200
+- ++controller.consolidation.plateau_require_peak=true
+- ++train.seed=1337
+- ++checkpoint.dir=runs/budget_sweep_small_v1/plateau_trigger_t0p01-seed1337/checkpoints
+- ++logging.path=runs/budget_sweep_small_v1/plateau_trigger_t0p01-seed1337/metrics.jsonl
+- ++logging.events_path=runs/budget_sweep_small_v1/plateau_trigger_t0p01-seed1337/events.jsonl
+- ++run.dir=runs/budget_sweep_small_v1/plateau_trigger_t0p01-seed1337

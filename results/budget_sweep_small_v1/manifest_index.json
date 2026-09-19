@@ -1,0 +1,205 @@
+{
+  "experiment": "budget_sweep_small_v1",
+  "base_config": "stream_small",
+  "updated": 1789470258.051661,
+  "runs": [
+    {
+      "run_id": "trihope_s1_r0p2-seed1337",
+      "spec_id": "trihope_s1_r0p2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s1_r0p2-seed1337",
+      "state": "done",
+      "updated": 1789324298.3842306,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s1_r0p3-seed1337",
+      "spec_id": "trihope_s1_r0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s1_r0p3-seed1337",
+      "state": "done",
+      "updated": 1789324363.8263721,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s1_r0p45-seed1337",
+      "spec_id": "trihope_s1_r0p45",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s1_r0p45-seed1337",
+      "state": "done",
+      "updated": 1789324406.8543549,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s2_r0p2-seed1337",
+      "spec_id": "trihope_s2_r0p2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s2_r0p2-seed1337",
+      "state": "done",
+      "updated": 1789327236.4056559,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s2_r0p3-seed1337",
+      "spec_id": "trihope_s2_r0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s2_r0p3-seed1337",
+      "state": "done",
+      "updated": 1789327369.5327113,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s2_r0p45-seed1337",
+      "spec_id": "trihope_s2_r0p45",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s2_r0p45-seed1337",
+      "state": "done",
+      "updated": 1789327487.4354048,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s4_r0p2-seed1337",
+      "spec_id": "trihope_s4_r0p2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s4_r0p2-seed1337",
+      "state": "done",
+      "updated": 1789330178.1238308,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s4_r0p3-seed1337",
+      "spec_id": "trihope_s4_r0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s4_r0p3-seed1337",
+      "state": "done",
+      "updated": 1789330342.4779458,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s4_r0p45-seed1337",
+      "spec_id": "trihope_s4_r0p45",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_s4_r0p45-seed1337",
+      "state": "done",
+      "updated": 1789330457.1263788,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_s1-seed1337",
+      "spec_id": "trihope_no_hash_s1",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_no_hash_s1-seed1337",
+      "state": "done",
+      "updated": 1789333161.7832167,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_s2-seed1337",
+      "spec_id": "trihope_no_hash_s2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_no_hash_s2-seed1337",
+      "state": "done",
+      "updated": 1789333264.4962986,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_s4-seed1337",
+      "spec_id": "trihope_no_hash_s4",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/trihope_no_hash_s4-seed1337",
+      "state": "done",
+      "updated": 1789333403.5680313,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s1-seed1337",
+      "spec_id": "surprise_gate_s1",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/surprise_gate_s1-seed1337",
+      "state": "done",
+      "updated": 1789339502.501902,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s2-seed1337",
+      "spec_id": "surprise_gate_s2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/surprise_gate_s2-seed1337",
+      "state": "done",
+      "updated": 1789339566.5758967,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s4-seed1337",
+      "spec_id": "surprise_gate_s4",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/surprise_gate_s4-seed1337",
+      "state": "done",
+      "updated": 1789339630.6890533,
+      "exit_code": 0
+    },
+    {
+      "run_id": "plateau_trigger_t0p005-seed1337",
+      "spec_id": "plateau_trigger_t0p005",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/plateau_trigger_t0p005-seed1337",
+      "state": "done",
+      "updated": 1789341782.834879,
+      "exit_code": 0
+    },
+    {
+      "run_id": "plateau_trigger_t0p01-seed1337",
+      "spec_id": "plateau_trigger_t0p01",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/plateau_trigger_t0p01-seed1337",
+      "state": "done",
+      "updated": 1789341841.46391,
+      "exit_code": 0
+    },
+    {
+      "run_id": "plateau_trigger_t0p02-seed1337",
+      "spec_id": "plateau_trigger_t0p02",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/plateau_trigger_t0p02-seed1337",
+      "state": "done",
+      "updated": 1789341891.033127,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_epd-seed1337",
+      "spec_id": "molf_style_epd",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/molf_style_epd-seed1337",
+      "state": "done",
+      "updated": 1789344951.857103,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p3-seed1337",
+      "spec_id": "molf_style_a0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/molf_style_a0p3-seed1337",
+      "state": "done",
+      "updated": 1789344864.526956,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p5-seed1337",
+      "spec_id": "molf_style_a0p5",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/molf_style_a0p5-seed1337",
+      "state": "done",
+      "updated": 1789344848.5371785,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p7-seed1337",
+      "spec_id": "molf_style_a0p7",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1/molf_style_a0p7-seed1337",
+      "state": "done",
+      "updated": 1789347287.3724148,
+      "exit_code": 0
+    }
+  ]
+}

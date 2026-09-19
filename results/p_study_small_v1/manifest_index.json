@@ -1,0 +1,52 @@
+{
+  "experiment": "p_study_small_v1",
+  "base_config": "stream_small",
+  "updated": 1789475000.2248123,
+  "runs": [
+    {
+      "run_id": "p_study-seed1337",
+      "spec_id": "p_study",
+      "seed": 1337,
+      "dir": "runs/p_study_small_v1/p_study-seed1337",
+      "state": "done",
+      "updated": 1789475000.0635405,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_off_control-seed1337",
+      "spec_id": "p_off_control",
+      "seed": 1337,
+      "dir": "runs/p_study_small_v1/p_off_control-seed1337",
+      "state": "done",
+      "updated": 1789474929.1679265,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_forced_bad-seed1337",
+      "spec_id": "p_forced_bad",
+      "seed": 1337,
+      "dir": "runs/p_study_small_v1/p_forced_bad-seed1337",
+      "state": "done",
+      "updated": 1789474928.3364093,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_forced_plausible-seed1337",
+      "spec_id": "p_forced_plausible",
+      "seed": 1337,
+      "dir": "runs/p_study_small_v1/p_forced_plausible-seed1337",
+      "state": "done",
+      "updated": 1789474998.2760575,
+      "exit_code": 0
+    },
+    {
+      "run_id": "p_forced_lowconf-seed1337",
+      "spec_id": "p_forced_lowconf",
+      "seed": 1337,
+      "dir": "runs/p_study_small_v1/p_forced_lowconf-seed1337",
+      "state": "done",
+      "updated": 1789474997.7189443,
+      "exit_code": 0
+    }
+  ]
+}

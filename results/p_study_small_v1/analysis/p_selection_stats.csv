@@ -1,0 +1,6 @@
+spec_id,seed,p_decisions,consolidations,forced_consolidations,first_p_step,first_merge_step,mean_S_at_P,mean_C_at_P,mean_V_at_P,mean_R_at_P
+p_forced_bad,1337,0,60,56,,250.0,,,,
+p_forced_lowconf,1337,0,58,56,,250.0,,,,
+p_forced_plausible,1337,0,60,56,,250.0,,,,
+p_off_control,1337,0,0,0,,,,,,
+p_study,1337,20,3,0,21.0,750.0,1.14778695,0.4736108499999999,0.09861155,0.44049459999999996

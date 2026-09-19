@@ -1,0 +1,11 @@
+- ++data.corrupt_teacher.enabled=true
+- ++controller.consolidation.checkpoint_before_merge=true
+- ++checkpoint.keep_tagged=0
+- ++checkpoint.save_before_phases=[math_recurrent]
+- ++controller.enabled=false
+- ++train.trainable=lora
+- ++train.seed=2024
+- ++checkpoint.dir=runs/bad_teacher_small_v1/lora_only-seed2024/checkpoints
+- ++logging.path=runs/bad_teacher_small_v1/lora_only-seed2024/metrics.jsonl
+- ++logging.events_path=runs/bad_teacher_small_v1/lora_only-seed2024/events.jsonl
+- ++run.dir=runs/bad_teacher_small_v1/lora_only-seed2024

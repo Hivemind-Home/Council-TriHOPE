@@ -1,0 +1,36 @@
+{
+  "mode": "full_restore",
+  "phase": "math_recurrent",
+  "skip_range": [
+    2150,
+    3649
+  ],
+  "restore_step": 2149,
+  "teacher": "math_teacher_corrupted",
+  "checkpoint": "runs/bad_teacher_small_v1/gradient_routing-seed2024/checkpoints/step_00002149_pre_phase_math_recurrent",
+  "cmd": [
+    "/home/a6000/miniconda3/envs/trihope/bin/python",
+    "/home/a6000/asif/Council-TriHOPE/train.py",
+    "--config-name",
+    "stream_small",
+    "++data.corrupt_teacher.enabled=true",
+    "++controller.consolidation.checkpoint_before_merge=true",
+    "++checkpoint.keep_tagged=0",
+    "++checkpoint.save_before_phases=[math_recurrent]",
+    "++controller.policy.mode=teacher_partition",
+    "++controller.consolidation.period=0",
+    "++controller.ablation.use_teacher_confidence=false",
+    "++controller.retrieval.replay_on_hit=false",
+    "++controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_corrupted}",
+    "++train.seed=2024",
+    "++checkpoint.dir=runs/bad_teacher_small_v1/gradient_routing-seed2024-fullrestore/checkpoints",
+    "++logging.path=runs/bad_teacher_small_v1/gradient_routing-seed2024-fullrestore/metrics.jsonl",
+    "++logging.events_path=runs/bad_teacher_small_v1/gradient_routing-seed2024-fullrestore/events.jsonl",
+    "++run.dir=runs/bad_teacher_small_v1/gradient_routing-seed2024-fullrestore",
+    "++hydra.run.dir=runs/bad_teacher_small_v1/gradient_routing-seed2024-fullrestore/hydra/rank${oc.env:RANK,0}",
+    "++checkpoint.resume_from=runs/bad_teacher_small_v1/gradient_routing-seed2024/checkpoints/step_00002149_pre_phase_math_recurrent",
+    "++train.skip_step_ranges=[[2150,3649]]"
+  ],
+  "original_run": "runs/bad_teacher_small_v1/gradient_routing-seed2024",
+  "out": "runs/bad_teacher_small_v1/gradient_routing-seed2024-fullrestore"
+}
