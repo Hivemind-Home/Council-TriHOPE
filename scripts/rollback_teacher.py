@@ -142,7 +142,7 @@ def rewrite_overrides(overrides: list[str], out_dir: Path, extra: list[str]) -> 
     return kept + ours + list(extra)
 
 
-def plan(
+def plan(  # returns None when containment holds
     run_dir: Path,
     teacher: str,
     out_dir: Path,
@@ -171,10 +171,16 @@ def plan(
     else:
         point = find_rollback_point(events, teacher, min_share)
         if point is None:
-            raise SystemExit(
-                f"no consolidation event attributes ≥ {min_share:.2f} of a merge to "
+            # Containment holding is a RESULT, not an error (OPERATOR_GUIDE §5).
+            # Signal it to the caller; raising SystemExit(<str>) here exits 1,
+            # and run_campaign.sh runs under `set -euo pipefail`, so stage_e5
+            # aborted at the first well-behaved arm -- before trihope_forced's
+            # rollbacks or the E5 report could run.
+            print(
+                f"no consolidation event attributes >= {min_share:.2f} of a merge to "
                 f"{teacher!r}; nothing to roll back (containment held)."
             )
+            return None
         step = int(point["step"])
         ckpt = ckpt_root / f"step_{step:08d}_pre_merge"
         extra = [
@@ -243,6 +249,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     info = plan(args.run, args.teacher, args.out, min_share=args.min_share,
                 baseline=args.baseline)
+    if info is None:
+        return 0  # containment held -- a result, not a failure
     print(json.dumps({k: v for k, v in info.items() if k != "cmd"}, indent=2))
     print(" ".join(info["cmd"]))
     if args.dry_run:
