@@ -302,3 +302,56 @@ replay-off) gives std ~0.0042 on the mean-forgetting statistic, so a
 single-seed difference carries ~0.0059. E4 is n=1 per arm; deltas in the 2-4x
 band need n=3 before they go in a paper. This borrows one arm's variance for
 all arms and should be stated as such.
+
+---
+
+## §10 — STOP-1, live mode (2026-09-19)
+
+The live pass hit the same gate §1 describes, for a different reason, and the
+thresholds had to be re-derived rather than inherited.
+
+**The box was running the shipped thresholds, not §1's.** `configs/stream_small.yaml`
+on the GPU box was byte-identical to `stream_small.yaml.pre_stop1.bak` — the §1
+retune (`surprise_high` 0.75, `stability_high_C` 0.30, `min_stability_C` 0.25) was
+never persisted there. So the first live gate ran at `surprise_high: 2.0`, the
+value §1 measured at a **negative** margin (−13.4).
+
+Result: `novel_inject` R share **107/900 = 11.9%**, against the guide's "around
+half" target. Live `novel_inject` surprise is p50 1.658 / p90 4.158, so the 2.0
+gate is cleared by a minority — the same failure mode as cache mode (0.8/1.4/0.4%),
+just less severe because live surprise runs higher.
+
+**Why the values were not inherited from §1.** Live and cache differ in both
+signals that matter here. Live `novel_inject` surprise p50 is 1.658 against cache's
+0.75, and live repetition has shifted up (p10 0.227 / p50 0.373 / p90 0.409), so
+`Rp < 0.3` — which selected 99.3% of `novel_inject` in cache mode — now selects
+only ~12%. In cache mode surprise was the blocker; in live mode repetition is.
+
+**Joint sweep**, 108,000 decisions across the three live seeds, scored as in §1
+(recall in the phase built for R against the worst leak into a recurrent phase):
+
+| `surprise_high` | `repetition_low` | novel recall | worst leak | margin |
+|---:|---:|---:|---:|---:|
+| 2.00 (shipped) | 0.30 | 11.9% | — | negative per §1 |
+| 0.75 | 0.38 | 51.4% | 16.1% | +35.2 |
+| 1.00 | 0.38 | 47.5% | 14.4% | +33.0 |
+| **1.25** | **0.40** | **57.6%** | **14.9%** | **+42.7** |
+| 1.50 | 0.42 | 55.9% | 15.1% | +40.7 |
+
+Applied: `surprise_high: 1.25`, `repetition_low: 0.40` — max margin inside the
+40–60% band. Two lines; backup `stream_small.yaml.pre_live_stop1.bak`.
+
+**The C̄ gates were deliberately left alone.** §1 lowered them because C̄ maxed at
+0.33–0.42 in cache mode and blocked P entirely (2–7 consolidation events). Live
+does not have that problem: C̄ reaches 0.906 and the first live gate logged **153
+consolidation events**. Changing them would fix a failure that is not occurring.
+
+The three old-threshold live runs are kept as
+`runs/_live_stop1_evidence_oldthresholds/`, mirroring the cache-mode evidence dir,
+rather than deleted.
+
+**Consequence for the tables:** live numbers are not comparable to the cache-mode
+tables, and not only because of the thresholds — in cache mode `lambda_kd` is
+inert without logit caches (`loss/kd = 0.0`, `kd_row_hit_frac = 0.0`), so every
+cached result measured CE + regularization only. Live is the only configuration
+where the distillation term is actually non-zero (`loss/kd = 4.199`).
