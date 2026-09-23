@@ -42,9 +42,17 @@ for m in priority_s3 priority_s2 priority_s1; do
 
 ```bash
 python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3 && \
+python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3 && \
 python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 && \
 python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3
 ```
+
+> **Added after the first push (2026-09-23, `priority_s4`):** if you already launched
+> `priority_s3`, just `git pull` on this branch (running jobs are unaffected: the only code
+> change is a new `policy_override=random_commit` branch that no other arm reaches) and run
+> `priority_s4` right after `priority_s3` finishes, before `priority_s2`. It needs
+> `runs/baselines_small_v1_live/analysis/action_share_by_phase.csv`, which the live E1 report
+> already wrote.
 
 **Within 2 minutes of the first launch**, as soon as each run's `.hydra/config.yaml` exists, check drift:
 
@@ -59,6 +67,7 @@ Every line must say `ok`. Any `[DRIFT]` line means the resolved config differs f
 | `priority_s3` (3 seeds) | `frozen_blocks` | Only the unrouted (shared) params train. How much of forgetting and learning comes from them alone? **Decides the paper's framing.** |
 | | `trihope_sentinel` | Identical to E1 `trihope`. Detects drift and grows the reference pool to 10 runs. |
 | | `periodic_merge` | LoRA plus merge-and-reset every 250 steps. A merge-schedule baseline that actually fires; `plateau_trigger` never did. |
+| `priority_s4` (3 seeds) | `random_commit` | TriHOPE's own defer/replay decisions, commits reassigned at random at TriHOPE's per-phase commit share. Isolates *commit selection* from replay volume; `random_routing` confounds the two (it replays ~4.7x more rows). **Tests the paper's headline claim.** |
 | `priority_s2` (seeds 2024, 7) | `surprise_gate_s4`, `molf_style_a0p7`, `no_cosine`, `molf_style_a0p5`, `moments_optimizer`, `no_surprise`, `topm_2`, `topk_25`, `topm_all` | Brings the strongest competitors and the load-bearing ablations to n=3. |
 | `priority_s1` (seed 1337) | `pgate_c0p35`, `pgate_c0p65`, `pgate_c0p2`, `pgate_c0p8` | Dose-response of the C̄ permanence gate. |
 
@@ -71,7 +80,7 @@ Every line must say `ok`. Any `[DRIFT]` line means the resolved config differs f
 6. the rest of `pgate` (keep `c0p35`)
 7. `molf_style_a0p5`
 
-**Never cut:** `frozen_blocks` ×3, `trihope_sentinel` ×1 or more, `surprise_gate_s4`, `molf_style_a0p7`, `no_cosine`.
+**Never cut:** `frozen_blocks` ×3, `random_commit` ×3, `trihope_sentinel` ×1 or more, `surprise_gate_s4`, `molf_style_a0p7`, `no_cosine`.
 
 **Rules:**
 - A crashed run is **restarted from scratch with identical overrides**. Delete its dir and rerun with `--only <id>`. Never resume it with a changed override; that is what invalidated live `gradient_routing`.
@@ -105,7 +114,7 @@ for m in baselines_small_v1_live bad_teacher_small_v1_live r_tier_small_v1_live 
 Copy into `results_live/` exactly as the first live campaign did: `run_summary.json`, `metrics.jsonl`, `status.json`, `stdout.log` and `hydra/`. Do **not** copy `events.jsonl` or `checkpoints/`. Then:
 
 ```bash
-rsync -a --exclude events.jsonl --exclude checkpoints runs/priority_s{1,2,3}_v1_live results_live/
+rsync -a --exclude events.jsonl --exclude checkpoints runs/priority_s{1,2,3,4}_v1_live results_live/
 for d in runs/*_live; do   # T2/T3/T4 reductions of every live matrix (small files only)
   rsync -am --include '*/' --include 'analysis_t2/**' --include 'weight_drift.json' --include 'analysis/**' \
         --exclude '*' "$d" results_live/; done
@@ -118,3 +127,4 @@ Push **as waves finish**, not only at the end. The paper pipeline picks up new s
 - **DP1**, after `frozen_blocks` ×3: its M1 and final macro loss.
 - **DP2**, after `trihope_sentinel`: whether it lands inside 0.0838 ± 0.012 (M1).
 - **DP3**, after `surprise_gate_s4` and `molf_style_a0p7` ×2.
+- **DP4**, after `random_commit` ×3: its M1, final loss and replayed rows.

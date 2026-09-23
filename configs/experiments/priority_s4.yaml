@@ -1,0 +1,30 @@
+# ICLR-2027 final batch, part 4: the commit-selection control (3 seeds).
+#
+#   python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3
+#
+# Why: random_routing relabels ALL decisions (defer, withhold, commit) at
+# trihope's per-phase shares. It matches trihope's commit count but also
+# defers rows from recurring buckets, so it replays ~4.7x more rows, and each
+# replay step also updates adapters and shared parameters. Its extra
+# forgetting therefore mixes commit selection with replay volume.
+# random_commit isolates commit selection: the policy classifies exactly as
+# trihope does (its defers -- and the replay they trigger -- are trihope's
+# own), then trihope's commits are withheld and random non-deferred selected
+# blocks are committed at trihope's per-phase commit share.
+#
+# Needs the live E1 trihope action shares (already on the box):
+#   runs/baselines_small_v1_live/analysis/action_share_by_phase.csv
+experiment: priority_s4_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+runs:
+  - id: random_commit
+    overrides:
+      - controller.policy.surprise_high=1.25
+      - controller.policy.repetition_low=0.40
+      - controller.retrieval.replay_on_hit=true
+      - controller.debug.policy_override=random_commit
+      - controller.debug.random_shares_path=runs/baselines_small_v1_live/analysis/action_share_by_phase.csv
+      - controller.debug.random_shares_spec_id=trihope

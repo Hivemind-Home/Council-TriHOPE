@@ -113,7 +113,7 @@ class RFPPolicy:
         self.debug = debug or DebugConfig()
         self.seed = int(seed)
         self._random_shares: dict[str, tuple[float, float, float]] = {}
-        if override == "random_matched":
+        if override in ("random_matched", "random_commit"):
             self._random_shares = load_random_shares(
                 self.debug.random_shares_path, self.debug.random_shares_spec_id
             )
@@ -176,6 +176,19 @@ class RFPPolicy:
         for rank, sig in enumerate(selected):
             if self.override == "random_matched":
                 store = self._random_store(step or 0, phase, rank)
+            elif self.override == "random_commit":
+                # Commit-selection control: classify exactly as the policy
+                # does (so defers, and the replay they trigger, are the
+                # policy's own), then withhold the policy's commits and commit
+                # random non-deferred blocks at the reference's per-phase
+                # commit share. Only WHICH blocks are committed changes.
+                store = self._classify(sig)
+                if store == "P":
+                    store = "F"
+                if store != "R" and self._random_commit_draw(step or 0, phase, rank):
+                    store = "P"
+                if low_confidence and store == "P":
+                    store = "F"
             elif self.override is not None:
                 store = self.override.removeprefix("always_").upper()
             else:
@@ -317,6 +330,28 @@ class RFPPolicy:
                 teacher_slot=slot,
             ))
         return actions
+
+    def _random_commit_draw(self, step: int, phase: str | None, module_rank: int) -> bool:
+        """Bernoulli commit draw for ``policy_override="random_commit"``.
+
+        Probability ``p_P / (p_F + p_P)`` from the reference's per-phase
+        shares, so that among non-deferred decisions the commit share matches
+        the reference's overall commit share. Seeded like ``_random_store``
+        (salted differently), identical on every rank and bit-exact under
+        resume; ``disable_stores=[P]`` suppresses it.
+        """
+        if "P" in self.ablation.disable_stores:
+            return False
+        shares = self._random_shares.get(phase or "") if self._random_shares else None
+        if shares is None:
+            return False
+        _p_r, p_f, p_p = shares
+        if p_f + p_p <= 0:
+            return False
+        gen = torch.Generator().manual_seed(
+            (self.seed * 1_000_033 + int(step) * 104_729 + module_rank * 31 + 17) % (2**63 - 1)
+        )
+        return bool(torch.rand(1, generator=gen).item() < p_p / (p_f + p_p))
 
     def _random_store(self, step: int, phase: str | None, module_rank: int) -> str:
         """Budget-matched random label (``policy_override="random_matched"``).

@@ -283,3 +283,50 @@ class TestPlateau:
         cons = torch.load(tmp_path / "ckpt" / "step_00000009" / "consolidation.pt",
                           weights_only=False)
         assert cons["plateau"]["last_fire"] == 7
+
+
+class TestRandomCommit:
+    """Commit-selection control: the policy's own defers, random commits."""
+
+    def test_config_accepts_random_commit(self) -> None:
+        DebugConfig(policy_override="random_commit")
+
+    def test_defers_match_policy_and_commit_share_matches_reference(self, tmp_path: Path) -> None:
+        _shares_csv(tmp_path / "shares.csv")
+        dbg = DebugConfig(policy_override="random_commit",
+                          random_shares_path=str(tmp_path / "shares.csv"))
+        ref = RFPPolicy(PolicyConfig())
+        pol = RFPPolicy(PolicyConfig(), override="random_commit", debug=dbg, seed=5)
+        pol2 = RFPPolicy(PolicyConfig(), override="random_commit", debug=dbg, seed=5)
+        # defers are exactly the policy's own, across the whole signal grid
+        for step in range(50):
+            for kw in _GRID:
+                sig = _sig(0, **kw)
+                (want,) = ref.decide({sig.module_id: sig})
+                (got,) = pol.decide({sig.module_id: sig}, step=step, phase="recurrent")
+                (again,) = pol2.decide({sig.module_id: sig}, step=step, phase="recurrent")
+                assert got.store == again.store  # deterministic given (seed, step)
+                assert (got.store == "R") == (want.store == "R")
+        # "recurrent": p_R .1, p_F .6, p_P .3 -> commit prob among non-R = .3/.9
+        sig = _sig(0)  # a non-deferred block (the policy itself would commit it)
+        commits = sum(
+            pol.decide({sig.module_id: sig}, step=step, phase="recurrent")[0].store == "P"
+            for step in range(4000)
+        )
+        assert commits / 4000 == pytest.approx(0.3 / 0.9, abs=0.025)
+
+    def test_no_commits_without_shares_or_with_P_disabled(self, tmp_path: Path) -> None:
+        _shares_csv(tmp_path / "shares.csv")
+        dbg = DebugConfig(policy_override="random_commit",
+                          random_shares_path=str(tmp_path / "shares.csv"))
+        warm = RFPPolicy(PolicyConfig(), override="random_commit", debug=dbg, seed=1)
+        nop = RFPPolicy(PolicyConfig(), AblationConfig(disable_stores=["P"]),
+                        override="random_commit", debug=dbg, seed=1)
+        for step in range(200):
+            for kw in _GRID:
+                sig = _sig(0, **kw)
+                # "warm" has p_P = 0: never commit, even where the policy would
+                (a,) = warm.decide({sig.module_id: sig}, step=step, phase="warm")
+                assert a.store != "P"
+                (b,) = nop.decide({sig.module_id: sig}, step=step, phase="recurrent")
+                assert b.store != "P"
