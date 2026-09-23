@@ -1,0 +1,11 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.ablation.disable_signals=[cosine]
+- ++train.seed=1337
+- ++checkpoint.dir=runs/ablation_grid_v1_live/no_cosine-seed1337/checkpoints
+- ++logging.path=runs/ablation_grid_v1_live/no_cosine-seed1337/metrics.jsonl
+- ++logging.events_path=runs/ablation_grid_v1_live/no_cosine-seed1337/events.jsonl
+- ++run.dir=runs/ablation_grid_v1_live/no_cosine-seed1337

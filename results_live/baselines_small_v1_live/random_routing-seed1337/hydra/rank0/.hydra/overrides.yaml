@@ -1,0 +1,13 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.debug.policy_override=random_matched
+- ++controller.debug.random_shares_path=runs/baselines_small_v1_live/analysis/action_share_by_phase.csv
+- ++controller.debug.random_shares_spec_id=trihope
+- ++controller.retrieval.replay_on_hit=true
+- ++train.seed=1337
+- ++checkpoint.dir=runs/baselines_small_v1_live/random_routing-seed1337/checkpoints
+- ++logging.path=runs/baselines_small_v1_live/random_routing-seed1337/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1_live/random_routing-seed1337/events.jsonl
+- ++run.dir=runs/baselines_small_v1_live/random_routing-seed1337

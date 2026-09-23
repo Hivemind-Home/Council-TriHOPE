@@ -1,0 +1,124 @@
+{
+  "experiment": "ablation_grid_v1_live",
+  "base_config": "stream_small",
+  "updated": 1790095042.7861102,
+  "runs": [
+    {
+      "run_id": "trihope-seed1337",
+      "spec_id": "trihope",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/trihope-seed1337",
+      "state": "done",
+      "updated": 1790067051.682167,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_surprise-seed1337",
+      "spec_id": "no_surprise",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/no_surprise-seed1337",
+      "state": "done",
+      "updated": 1790066929.0631812,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_repetition-seed1337",
+      "spec_id": "no_repetition",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/no_repetition-seed1337",
+      "state": "done",
+      "updated": 1790070038.699926,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_cosine-seed1337",
+      "spec_id": "no_cosine",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/no_cosine-seed1337",
+      "state": "done",
+      "updated": 1790070755.6145144,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_volatility-seed1337",
+      "spec_id": "no_volatility",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/no_volatility-seed1337",
+      "state": "done",
+      "updated": 1790073816.3537776,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_teacher_conf-seed1337",
+      "spec_id": "no_teacher_conf",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/no_teacher_conf-seed1337",
+      "state": "done",
+      "updated": 1790074500.7680664,
+      "exit_code": 0
+    },
+    {
+      "run_id": "topm_2-seed1337",
+      "spec_id": "topm_2",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/topm_2-seed1337",
+      "state": "done",
+      "updated": 1790078915.000781,
+      "exit_code": 0
+    },
+    {
+      "run_id": "topm_all-seed1337",
+      "spec_id": "topm_all",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/topm_all-seed1337",
+      "state": "done",
+      "updated": 1790081568.733345,
+      "exit_code": 0
+    },
+    {
+      "run_id": "topk_25-seed1337",
+      "spec_id": "topk_25",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/topk_25-seed1337",
+      "state": "done",
+      "updated": 1790084078.8694856,
+      "exit_code": 0
+    },
+    {
+      "run_id": "topk_100-seed1337",
+      "spec_id": "topk_100",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/topk_100-seed1337",
+      "state": "done",
+      "updated": 1790088624.3065224,
+      "exit_code": 0
+    },
+    {
+      "run_id": "stability_instant-seed1337",
+      "spec_id": "stability_instant",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/stability_instant-seed1337",
+      "state": "done",
+      "updated": 1790090560.7172449,
+      "exit_code": 0
+    },
+    {
+      "run_id": "consolidation_strict-seed1337",
+      "spec_id": "consolidation_strict",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/consolidation_strict-seed1337",
+      "state": "done",
+      "updated": 1790094021.4020936,
+      "exit_code": 0
+    },
+    {
+      "run_id": "moments_optimizer-seed1337",
+      "spec_id": "moments_optimizer",
+      "seed": 1337,
+      "dir": "runs/ablation_grid_v1_live/moments_optimizer-seed1337",
+      "state": "done",
+      "updated": 1790095042.7760935,
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "experiment": "baselines_small_v1_live",
+  "base_config": "stream_small",
+  "updated": 1789885680.0126293,
+  "runs": [
+    {
+      "run_id": "random_routing-seed1337",
+      "spec_id": "random_routing",
+      "seed": 1337,
+      "dir": "runs/baselines_small_v1_live/random_routing-seed1337",
+      "state": "done",
+      "updated": 1789885679.9998944,
+      "exit_code": 0
+    },
+    {
+      "run_id": "random_routing-seed2024",
+      "spec_id": "random_routing",
+      "seed": 2024,
+      "dir": "runs/baselines_small_v1_live/random_routing-seed2024",
+      "state": "done",
+      "updated": 1789885507.6914542,
+      "exit_code": 0
+    },
+    {
+      "run_id": "random_routing-seed7",
+      "spec_id": "random_routing",
+      "seed": 7,
+      "dir": "runs/baselines_small_v1_live/random_routing-seed7",
+      "state": "done",
+      "updated": 1789885441.2926307,
+      "exit_code": 0
+    }
+  ]
+}

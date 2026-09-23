@@ -1,0 +1,11 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.ablation.disable_signals=[repetition_hash]
+- ++train.seed=7
+- ++checkpoint.dir=runs/r_tier_small_v1_live/trihope_no_hash_replay-seed7/checkpoints
+- ++logging.path=runs/r_tier_small_v1_live/trihope_no_hash_replay-seed7/metrics.jsonl
+- ++logging.events_path=runs/r_tier_small_v1_live/trihope_no_hash_replay-seed7/events.jsonl
+- ++run.dir=runs/r_tier_small_v1_live/trihope_no_hash_replay-seed7

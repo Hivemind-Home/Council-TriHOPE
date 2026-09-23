@@ -1,0 +1,1698 @@
+--- 10:20:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   82G  91% /
+--- 10:30:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   82G  91% /
+--- 10:40:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   82G  91% /
+--- 10:50:22 ---
+PRUNE baselines_small_v1_live/trihope-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  788G   82G  91% /
+--- 11:00:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   82G  91% /
+--- 11:10:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   82G  91% /
+--- 11:20:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 11:30:22 ---
+PRUNE baselines_small_v1_live/trihope-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  783G   86G  91% /
+--- 11:40:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 11:50:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 12:00:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 12:10:22 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 12:20:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 12:30:23 ---
+PRUNE baselines_small_v1_live/trihope-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  784G   86G  91% /
+--- 12:40:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 12:50:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 13:00:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 13:10:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 13:20:23 ---
+PRUNE baselines_small_v1_live/trihope-seed2024  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  784G   85G  91% /
+--- 13:30:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  784G   85G  91% /
+--- 13:40:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 13:50:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   81G  91% /
+--- 14:00:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   81G  91% /
+--- 14:10:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   81G  91% /
+--- 14:20:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   81G  91% /
+--- 14:30:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   81G  91% /
+--- 14:40:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   81G  91% /
+--- 14:50:23 ---
+PRUNE baselines_small_v1_live/trihope-seed7  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  784G   85G  91% /
+--- 15:00:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  784G   85G  91% /
+--- 15:10:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  784G   85G  91% /
+--- 15:20:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  794G   76G  92% /
+--- 15:30:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  794G   76G  92% /
+--- 15:40:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  794G   76G  92% /
+--- 15:50:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  794G   76G  92% /
+--- 16:00:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  794G   76G  92% /
+--- 16:10:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  794G   76G  92% /
+--- 16:20:23 ---
+PRUNE baselines_small_v1_live/trihope_no_hash-seed1337  4.5 GB
+PRUNE baselines_small_v1_live/trihope_no_hash-seed2024  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  784G   85G  91% /
+--- 16:30:23 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   77G  92% /
+--- 16:40:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   77G  92% /
+--- 16:50:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   77G  92% /
+--- 17:00:24 ---
+PRUNE baselines_small_v1_live/full_ft-seed1337  3.6 GB
+freed: 3.6 GB
+/dev/nvme0n1p2  915G  793G   77G  92% /
+--- 17:10:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   77G  92% /
+--- 17:20:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   77G  92% /
+--- 17:30:24 ---
+PRUNE baselines_small_v1_live/full_ft-seed2024  3.6 GB
+PRUNE baselines_small_v1_live/trihope_no_hash-seed7  4.5 GB
+freed: 8.2 GB
+/dev/nvme0n1p2  915G  788G   81G  91% /
+--- 17:40:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  790G   80G  91% /
+--- 17:50:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  790G   80G  91% /
+--- 18:00:24 ---
+PRUNE baselines_small_v1_live/full_ft-seed7  3.6 GB
+freed: 3.6 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 18:10:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  787G   82G  91% /
+--- 18:20:24 ---
+PRUNE baselines_small_v1_live/lora_only-seed1337  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 18:30:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  787G   82G  91% /
+--- 18:40:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  787G   82G  91% /
+--- 18:50:24 ---
+PRUNE baselines_small_v1_live/lora_only-seed2024  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 19:00:24 ---
+PRUNE baselines_small_v1_live/lora_only-seed7  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  789G   80G  91% /
+--- 19:10:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   80G  91% /
+--- 19:20:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   76G  92% /
+--- 19:30:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   76G  92% /
+--- 19:40:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  793G   76G  92% /
+--- 19:50:24 ---
+PRUNE baselines_small_v1_live/no_retrieval-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 20:00:24 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 20:10:25 ---
+PRUNE baselines_small_v1_live/no_retrieval-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 20:20:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 20:30:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 20:40:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 20:50:25 ---
+PRUNE baselines_small_v1_live/no_retrieval-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 21:00:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 21:10:25 ---
+PRUNE baselines_small_v1_live/no_consolidation-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 21:20:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 21:30:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   75G  92% /
+--- 21:40:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 21:50:25 ---
+PRUNE baselines_small_v1_live/no_consolidation-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 22:00:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 22:10:25 ---
+PRUNE baselines_small_v1_live/no_consolidation-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 22:20:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 22:30:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 22:40:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 22:50:25 ---
+PRUNE baselines_small_v1_live/surprise_gate-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 23:00:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 23:10:25 ---
+PRUNE baselines_small_v1_live/surprise_gate-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 23:20:25 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 23:30:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 23:40:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 23:50:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 00:00:26 ---
+PRUNE baselines_small_v1_live/surprise_gate-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 00:10:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 00:20:26 ---
+PRUNE baselines_small_v1_live/molf_style-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 00:30:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  790G   79G  91% /
+--- 00:40:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 00:50:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 01:00:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 01:10:26 ---
+PRUNE baselines_small_v1_live/molf_style-seed2024  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 01:20:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  792G   77G  92% /
+--- 01:30:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  792G   77G  92% /
+--- 01:40:26 ---
+PRUNE baselines_small_v1_live/molf_style-seed7  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  787G   82G  91% /
+--- 01:50:26 ---
+PRUNE baselines_small_v1_live/plateau_trigger-seed1337  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  787G   82G  91% /
+--- 02:00:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   80G  91% /
+--- 02:10:26 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  789G   80G  91% /
+--- 02:20:26 ---
+PRUNE baselines_small_v1_live/plateau_trigger-seed2024  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  787G   82G  91% /
+--- 02:30:26 ---
+PRUNE baselines_small_v1_live/plateau_trigger-seed7  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 02:40:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 02:50:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 03:00:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 03:10:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  795G   74G  92% /
+--- 03:20:27 ---
+PRUNE baselines_small_v1_live/gold_ce-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 03:30:27 ---
+PRUNE baselines_small_v1_live/gold_ce-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 03:40:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 03:50:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   79G  91% /
+--- 04:00:27 ---
+PRUNE baselines_small_v1_live/gold_ce-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 04:10:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 04:20:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 04:30:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 04:40:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 04:50:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 05:00:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 05:10:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 05:20:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 05:30:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 05:40:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 05:50:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 06:00:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   69G  93% /
+--- 06:10:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 06:20:27 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  800G   70G  93% /
+--- 06:30:27 ---
+PRUNE baselines_small_v1_live/random_routing-seed1337  4.6 GB
+PRUNE baselines_small_v1_live/random_routing-seed2024  4.6 GB
+PRUNE baselines_small_v1_live/random_routing-seed7  4.6 GB
+freed: 13.7 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 06:40:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 06:50:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 07:00:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 07:10:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 07:20:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 07:30:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  786G   83G  91% /
+--- 07:40:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  822G   48G  95% /
+--- 07:50:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  849G   20G  98% /
+--- 08:00:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  867G  1.9G 100% /
+--- 08:10:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  867G  1.9G 100% /
+--- 08:20:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  867G  1.9G 100% /
+--- 08:30:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  868G  371M 100% /
+--- 08:40:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  868G  356M 100% /
+--- 08:50:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  868G  321M 100% /
+--- 09:00:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  868G  291M 100% /
+--- 09:10:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  868G  264M 100% /
+--- 09:20:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  868G  251M 100% /
+--- 09:30:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  247M 100% /
+--- 09:40:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  243M 100% /
+--- 09:50:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  239M 100% /
+--- 10:00:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  233M 100% /
+--- 10:10:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  228M 100% /
+--- 10:20:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  223M 100% /
+--- 10:30:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  216M 100% /
+--- 10:40:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  212M 100% /
+--- 10:50:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  208M 100% /
+--- 11:00:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  211M 100% /
+--- 11:10:28 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  210M 100% /
+--- 11:20:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  210M 100% /
+--- 11:30:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  211M 100% /
+--- 11:40:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  210M 100% /
+--- 11:50:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  210M 100% /
+--- 12:00:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  208M 100% /
+--- 12:10:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  208M 100% /
+--- 12:20:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  208M 100% /
+--- 12:30:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  207M 100% /
+--- 12:40:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  208M 100% /
+--- 12:50:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  208M 100% /
+--- 13:00:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  207M 100% /
+--- 13:10:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  206M 100% /
+--- 13:20:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  206M 100% /
+--- 13:30:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  206M 100% /
+--- 13:40:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  207M 100% /
+--- 13:50:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  207M 100% /
+--- 14:00:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  207M 100% /
+--- 14:10:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G  207M 100% /
+--- 14:20:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G     0 100% /
+--- 14:30:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  869G     0 100% /
+--- 14:40:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  832G   37G  96% /
+--- 14:50:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  818G   51G  95% /
+--- 15:00:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  783G   87G  91% /
+--- 15:10:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   78G  92% /
+--- 15:20:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   78G  92% /
+--- 15:30:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   78G  92% /
+--- 15:40:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   78G  92% /
+--- 15:50:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  792G   77G  92% /
+--- 16:00:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  737G  132G  85% /
+--- 16:10:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  782G   87G  91% /
+--- 16:20:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  791G   78G  92% /
+--- 16:30:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  656G  213G  76% /
+--- 16:40:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  649G  220G  75% /
+--- 16:50:29 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  658G  211G  76% /
+--- 17:00:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  659G  211G  76% /
+--- 17:10:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  667G  202G  77% /
+--- 17:20:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  667G  202G  77% /
+--- 17:30:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  667G  202G  77% /
+--- 17:40:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  667G  202G  77% /
+--- 17:50:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  667G  202G  77% /
+--- 18:00:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  677G  193G  78% /
+--- 18:10:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  681G  188G  79% /
+--- 18:20:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  184G  79% /
+--- 18:30:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  184G  79% /
+--- 18:40:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  184G  79% /
+--- 18:50:30 ---
+PRUNE bad_teacher_small_v1_live/trihope_nogate-seed1337  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  677G  193G  78% /
+--- 19:00:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  681G  188G  79% /
+--- 19:10:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  184G  79% /
+--- 19:20:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 19:30:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 19:40:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 19:50:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 20:00:30 ---
+PRUNE bad_teacher_small_v1_live/trihope_nogate-seed2024  9.1 GB
+PRUNE bad_teacher_small_v1_live/trihope_nogate-seed7  9.1 GB
+freed: 18.2 GB
+/dev/nvme0n1p2  915G  677G  193G  78% /
+--- 20:10:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  184G  79% /
+--- 20:20:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 20:30:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 20:40:30 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 20:50:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  80% /
+--- 21:00:31 ---
+PRUNE bad_teacher_small_v1_live/trihope_lowconf-seed1337  9.1 GB
+PRUNE bad_teacher_small_v1_live/trihope_lowconf-seed2024  9.1 GB
+freed: 18.2 GB
+/dev/nvme0n1p2  915G  677G  193G  78% /
+--- 21:10:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  685G  184G  79% /
+--- 21:20:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  688G  181G  80% /
+--- 21:30:31 ---
+PRUNE bad_teacher_small_v1_live/full_ft-seed1337  7.2 GB
+freed: 7.2 GB
+/dev/nvme0n1p2  915G  686G  183G  79% /
+--- 21:40:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  689G  180G  80% /
+--- 21:50:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  693G  176G  80% /
+--- 22:00:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  693G  176G  80% /
+--- 22:10:31 ---
+PRUNE bad_teacher_small_v1_live/full_ft-seed2024  7.2 GB
+PRUNE bad_teacher_small_v1_live/trihope_lowconf-seed7  9.1 GB
+freed: 16.3 GB
+/dev/nvme0n1p2  915G  680G  189G  79% /
+--- 22:20:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  685G  184G  79% /
+--- 22:30:31 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  687G  182G  80% /
+--- 22:40:31 ---
+PRUNE bad_teacher_small_v1_live/full_ft-seed7  7.2 GB
+freed: 7.2 GB
+/dev/nvme0n1p2  915G  680G  190G  79% /
+--- 22:50:31 ---
+PRUNE bad_teacher_small_v1_live/lora_only-seed1337  2.9 GB
+freed: 2.9 GB
+/dev/nvme0n1p2  915G  678G  191G  79% /
+--- 23:00:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  681G  188G  79% /
+--- 23:10:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  683G  187G  79% /
+--- 23:20:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  683G  187G  79% /
+--- 23:30:32 ---
+PRUNE bad_teacher_small_v1_live/lora_only-seed2024  2.9 GB
+freed: 2.9 GB
+/dev/nvme0n1p2  915G  680G  190G  79% /
+--- 23:40:32 ---
+PRUNE bad_teacher_small_v1_live/lora_only-seed7  2.9 GB
+freed: 2.9 GB
+/dev/nvme0n1p2  915G  681G  188G  79% /
+--- 23:50:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  183G  79% /
+--- 00:00:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  690G  179G  80% /
+--- 00:10:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  81% /
+--- 00:20:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  81% /
+--- 00:30:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  81% /
+--- 00:40:32 ---
+PRUNE bad_teacher_small_v1_live/molf_style-seed1337  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  686G  183G  79% /
+--- 00:50:32 ---
+PRUNE bad_teacher_small_v1_live/molf_style-seed2024  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  682G  188G  79% /
+--- 01:00:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  686G  183G  79% /
+--- 01:10:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  691G  179G  80% /
+--- 01:20:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  81% /
+--- 01:30:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  695G  174G  81% /
+--- 01:40:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  700G  169G  81% /
+--- 01:50:32 ---
+PRUNE bad_teacher_small_v1_live/molf_style-seed7  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  691G  178G  80% /
+--- 02:00:32 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  700G  169G  81% /
+--- 02:10:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  700G  169G  81% /
+--- 02:20:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  709G  160G  82% /
+--- 02:30:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  709G  160G  82% /
+--- 02:40:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  718G  151G  83% /
+--- 02:50:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  718G  151G  83% /
+--- 03:00:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  723G  146G  84% /
+--- 03:10:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  723G  146G  84% /
+--- 03:20:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  723G  146G  84% /
+--- 03:30:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  727G  142G  84% /
+--- 03:40:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  736G  133G  85% /
+--- 03:50:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  736G  133G  85% /
+--- 04:00:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 04:10:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 04:20:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 04:30:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  750G  119G  87% /
+--- 04:40:33 ---
+PRUNE bad_teacher_small_v1_live/molf_snr-seed1337  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 04:50:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 05:00:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  750G  119G  87% /
+--- 05:10:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  750G  119G  87% /
+--- 05:20:33 ---
+PRUNE bad_teacher_small_v1_live/molf_snr-seed2024  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 05:30:33 ---
+PRUNE bad_teacher_small_v1_live/molf_snr-seed7  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  732G  138G  85% /
+--- 05:40:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  129G  86% /
+--- 05:50:33 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  129G  86% /
+--- 06:00:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 06:10:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 06:20:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 06:30:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 06:40:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 06:50:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 07:00:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 07:10:34 ---
+PRUNE r_tier_small_v1_live/trihope_replay-seed1337  4.5 GB
+PRUNE r_tier_small_v1_live/trihope_replay-seed2024  4.6 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  732G  137G  85% /
+--- 07:20:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 07:30:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 07:40:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 07:50:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 08:00:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 08:10:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 08:20:34 ---
+PRUNE r_tier_small_v1_live/trihope_replay-seed7  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  736G  133G  85% /
+--- 08:30:34 ---
+PRUNE r_tier_small_v1_live/trihope_r_terminal-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  732G  137G  85% /
+--- 08:40:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  732G  137G  85% /
+--- 08:50:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  736G  133G  85% /
+--- 09:00:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 09:10:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 09:20:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 09:30:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 09:40:34 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 09:50:35 ---
+PRUNE r_tier_small_v1_live/trihope_r_terminal-seed2024  4.5 GB
+PRUNE r_tier_small_v1_live/trihope_r_terminal-seed7  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  732G  137G  85% /
+--- 10:00:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 10:10:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 10:20:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 10:30:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 10:40:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 10:50:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 11:00:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 11:10:35 ---
+PRUNE r_tier_small_v1_live/trihope_no_hash_replay-seed1337  4.5 GB
+PRUNE r_tier_small_v1_live/trihope_no_hash_replay-seed2024  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  732G  137G  85% /
+--- 11:20:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 11:30:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 11:40:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 11:50:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 12:00:35 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 12:10:35 ---
+PRUNE r_tier_small_v1_live/fp_only-seed1337  4.5 GB
+PRUNE r_tier_small_v1_live/trihope_no_hash_replay-seed7  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  732G  137G  85% /
+--- 12:20:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  737G  133G  85% /
+--- 12:30:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 12:40:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 12:50:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 13:00:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 13:10:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 13:20:36 ---
+PRUNE r_tier_small_v1_live/fp_only-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  737G  132G  85% /
+--- 13:30:36 ---
+PRUNE r_tier_small_v1_live/fp_only-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  733G  137G  85% /
+--- 13:40:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  737G  132G  85% /
+--- 13:50:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  742G  128G  86% /
+--- 14:00:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  742G  127G  86% /
+--- 14:10:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  742G  127G  86% /
+--- 14:20:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 14:30:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 14:40:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 14:50:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 15:00:36 ---
+PRUNE r_tier_small_v1_live/p_only-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 15:10:36 ---
+PRUNE r_tier_small_v1_live/p_only-seed2024  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 15:20:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 15:30:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 15:40:36 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 15:50:37 ---
+PRUNE r_tier_small_v1_live/p_only-seed7  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  734G  135G  85% /
+--- 16:00:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  744G  125G  86% /
+--- 16:10:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 16:20:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 16:30:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 16:40:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 16:50:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 17:00:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 17:10:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 17:20:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 17:30:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 17:40:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 17:50:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 18:00:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 18:10:37 ---
+PRUNE budget_sweep_small_v1_live/trihope_s1_r0p2-seed1337  4.5 GB
+PRUNE budget_sweep_small_v1_live/trihope_s1_r0p3-seed1337  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  736G  133G  85% /
+--- 18:20:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 18:30:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 18:40:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 18:50:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 19:00:37 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 19:10:37 ---
+PRUNE budget_sweep_small_v1_live/trihope_s1_r0p45-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 19:20:37 ---
+PRUNE budget_sweep_small_v1_live/trihope_s2_r0p2-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  736G  133G  85% /
+--- 19:30:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 19:40:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 19:50:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 20:00:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 20:10:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 20:20:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 20:30:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 20:40:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 20:50:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 21:00:38 ---
+PRUNE budget_sweep_small_v1_live/trihope_s2_r0p3-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 21:10:38 ---
+PRUNE budget_sweep_small_v1_live/trihope_s2_r0p45-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 21:20:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 21:30:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 21:40:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 21:50:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 22:00:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 22:10:38 ---
+PRUNE budget_sweep_small_v1_live/trihope_s4_r0p2-seed1337  4.5 GB
+PRUNE budget_sweep_small_v1_live/trihope_s4_r0p3-seed1337  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  737G  133G  85% /
+--- 22:20:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 22:30:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 22:40:38 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 22:50:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 23:00:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 23:10:39 ---
+PRUNE budget_sweep_small_v1_live/trihope_no_hash_s1-seed1337  4.5 GB
+PRUNE budget_sweep_small_v1_live/trihope_s4_r0p45-seed1337  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  737G  133G  85% /
+--- 23:20:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 23:30:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 23:40:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 23:50:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 00:00:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 00:10:39 ---
+PRUNE budget_sweep_small_v1_live/trihope_no_hash_s2-seed1337  4.5 GB
+PRUNE budget_sweep_small_v1_live/trihope_no_hash_s4-seed1337  4.5 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  737G  133G  85% /
+--- 00:20:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 00:30:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 00:40:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 00:50:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 01:00:39 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  124G  86% /
+--- 01:10:39 ---
+PRUNE budget_sweep_small_v1_live/surprise_gate_s1-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 01:20:39 ---
+PRUNE budget_sweep_small_v1_live/surprise_gate_s2-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  737G  133G  85% /
+--- 01:30:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 01:40:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 01:50:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 02:00:40 ---
+PRUNE budget_sweep_small_v1_live/plateau_trigger_t0p005-seed1337  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 02:10:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  743G  127G  86% /
+--- 02:20:40 ---
+PRUNE budget_sweep_small_v1_live/surprise_gate_s4-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 02:30:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  740G  130G  86% /
+--- 02:40:40 ---
+PRUNE budget_sweep_small_v1_live/plateau_trigger_t0p01-seed1337  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 02:50:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  738G  131G  85% /
+--- 03:00:40 ---
+PRUNE budget_sweep_small_v1_live/plateau_trigger_t0p02-seed1337  1.5 GB
+freed: 1.5 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 03:10:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 03:20:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 03:30:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 03:40:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 03:50:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 04:00:40 ---
+PRUNE budget_sweep_small_v1_live/molf_style_a0p3-seed1337  4.5 GB
+PRUNE budget_sweep_small_v1_live/molf_style_epd-seed1337  4.6 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  737G  132G  85% /
+--- 04:10:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 04:20:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 04:30:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 04:40:40 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 04:50:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  746G  123G  86% /
+--- 05:00:41 ---
+PRUNE budget_sweep_small_v1_live/molf_style_a0p5-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  741G  128G  86% /
+--- 05:10:41 ---
+PRUNE budget_sweep_small_v1_live/molf_style_a0p7-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  745G  124G  86% /
+--- 05:20:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  764G  105G  88% /
+--- 05:30:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  764G  105G  88% /
+--- 05:40:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  767G  102G  89% /
+--- 05:50:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  781G   89G  90% /
+--- 06:00:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  781G   88G  90% /
+--- 06:10:41 ---
+PRUNE p_study_small_v1_live/p_off_control-seed1337  4.5 GB
+PRUNE p_study_small_v1_live/p_study-seed1337  22.7 GB
+freed: 27.3 GB
+/dev/nvme0n1p2  915G  762G  107G  88% /
+--- 06:20:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  798G   71G  92% /
+--- 06:30:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  799G   70G  92% /
+--- 06:40:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  801G   68G  93% /
+--- 06:50:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  799G   70G  92% /
+--- 07:00:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  799G   70G  92% /
+--- 07:10:41 ---
+PRUNE p_study_small_v1_live/p_forced_bad-seed1337  22.7 GB
+PRUNE p_study_small_v1_live/p_forced_plausible-seed1337  22.7 GB
+freed: 45.5 GB
+/dev/nvme0n1p2  915G  758G  112G  88% /
+--- 07:20:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  776G   93G  90% /
+--- 07:30:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  776G   93G  90% /
+--- 07:40:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  776G   93G  90% /
+--- 07:50:41 ---
+PRUNE p_study_small_v1_live/p_forced_lowconf-seed1337  22.7 GB
+freed: 22.7 GB
+/dev/nvme0n1p2  915G  754G  116G  87% /
+--- 08:00:41 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 08:10:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 08:20:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 08:30:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 08:40:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 08:50:42 ---
+PRUNE ablation_grid_v1_live/no_surprise-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 09:00:42 ---
+PRUNE ablation_grid_v1_live/trihope-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  758G  112G  88% /
+--- 09:10:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  762G  107G  88% /
+--- 09:20:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  762G  107G  88% /
+--- 09:30:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  762G  107G  88% /
+--- 09:40:42 ---
+PRUNE ablation_grid_v1_live/no_repetition-seed1337  4.1 GB
+freed: 4.1 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 09:50:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 10:00:42 ---
+PRUNE ablation_grid_v1_live/no_cosine-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 10:10:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 10:20:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 10:30:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  766G  103G  89% /
+--- 10:40:42 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 10:50:42 ---
+PRUNE ablation_grid_v1_live/no_volatility-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 11:00:42 ---
+PRUNE ablation_grid_v1_live/no_teacher_conf-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 11:10:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 11:20:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 11:30:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 11:40:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 11:50:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 12:00:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 12:10:43 ---
+PRUNE ablation_grid_v1_live/topm_2-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 12:20:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 12:30:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 12:40:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 12:50:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 13:00:43 ---
+PRUNE ablation_grid_v1_live/topm_all-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  759G  111G  88% /
+--- 13:10:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 13:20:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 13:30:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 13:40:43 ---
+PRUNE ablation_grid_v1_live/topk_25-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  759G  111G  88% /
+--- 13:50:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  759G  111G  88% /
+--- 14:00:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 14:10:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 14:20:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 14:30:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 14:40:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 14:50:43 ---
+PRUNE ablation_grid_v1_live/topk_100-seed1337  4.5 GB
+freed: 4.5 GB
+/dev/nvme0n1p2  915G  759G  111G  88% /
+--- 15:00:43 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  759G  111G  88% /
+--- 15:10:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 15:20:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 15:30:44 ---
+PRUNE ablation_grid_v1_live/stability_instant-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  759G  111G  88% /
+--- 15:40:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  107G  88% /
+--- 15:50:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 16:00:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 16:10:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 16:20:44 ---
+PRUNE ablation_grid_v1_live/consolidation_strict-seed1337  4.6 GB
+freed: 4.6 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 16:30:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  758G  111G  88% /
+--- 16:40:44 ---
+PRUNE ablation_grid_v1_live/moments_optimizer-seed1337  4.1 GB
+freed: 4.1 GB
+/dev/nvme0n1p2  915G  754G  115G  87% /
+--- 16:50:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  754G  115G  87% /
+--- 17:00:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  754G  115G  87% /
+--- 17:10:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  763G  106G  88% /
+--- 17:20:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  835G   35G  97% /
+--- 17:30:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  780G   89G  90% /
+--- 17:40:44 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  780G   89G  90% /
+--- 17:50:44 ---
+PRUNE bad_teacher_small_v1_live/gradient_routing-seed1337  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  771G   98G  89% /
+--- 18:00:44 ---
+PRUNE bad_teacher_small_v1_live/gradient_routing-seed2024  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  762G  107G  88% /
+--- 18:10:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  762G  107G  88% /
+--- 18:20:45 ---
+PRUNE bad_teacher_small_v1_live/gradient_routing-seed7  9.1 GB
+freed: 9.1 GB
+/dev/nvme0n1p2  915G  753G  117G  87% /
+--- 18:30:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  753G  116G  87% /
+--- 18:40:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  753G  116G  87% /
+--- 18:50:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  753G  116G  87% /
+--- 19:00:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  753G  116G  87% /
+--- 19:10:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   97G  89% /
+--- 19:20:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   97G  89% /
+--- 19:30:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   97G  89% /
+--- 19:40:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   97G  89% /
+--- 19:50:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   97G  89% /
+--- 20:00:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   97G  89% /
+--- 20:10:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 20:20:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 20:30:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 20:40:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 20:50:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 21:00:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 21:10:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 21:20:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 21:30:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  773G   96G  89% /
+--- 21:40:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 21:50:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 22:00:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 22:10:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 22:20:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 22:30:45 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 22:40:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 22:50:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 23:00:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 23:10:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 23:20:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 23:30:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 23:40:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 23:50:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 00:00:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 00:10:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 00:20:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 00:30:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 00:40:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 00:50:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 01:00:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 01:10:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 01:20:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 01:30:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 01:40:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 01:50:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 02:00:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 02:10:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /
+--- 02:20:46 ---
+freed: 0.0 GB
+/dev/nvme0n1p2  915G  774G   95G  90% /

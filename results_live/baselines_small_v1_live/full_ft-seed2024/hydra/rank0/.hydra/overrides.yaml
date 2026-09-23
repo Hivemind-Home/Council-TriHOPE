@@ -1,0 +1,12 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.enabled=false
+- ++model.lora.rank=0
+- ++train.trainable=all
+- ++train.seed=2024
+- ++checkpoint.dir=runs/baselines_small_v1_live/full_ft-seed2024/checkpoints
+- ++logging.path=runs/baselines_small_v1_live/full_ft-seed2024/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1_live/full_ft-seed2024/events.jsonl
+- ++run.dir=runs/baselines_small_v1_live/full_ft-seed2024

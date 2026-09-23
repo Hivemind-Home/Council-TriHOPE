@@ -1,0 +1,302 @@
+model:
+  backbone: hf
+  pretrained_name: Qwen/Qwen3-0.6B
+  dtype: bfloat16
+  trust_remote_code: false
+  hf_cache_dir: null
+  vocab_size: 151936
+  dim: 1024
+  num_layers: 28
+  heads: 16
+  ffn_hidden_multiplier: 4
+  activation: silu
+  max_seq_len: 512
+  dropout: 0.0
+  gradient_checkpointing: true
+  lora:
+    rank: 16
+    alpha: 32.0
+    dropout: 0.0
+    target_modules:
+    - q
+    - k
+    - v
+    - o
+    - up
+    - gate
+    - down
+teachers:
+  mode: live
+  num_teachers: 4
+  prototype_seed_samples: 100
+  teacher_ids:
+    general: general_teacher_deepseek_r1_distill_llama_70b
+    code: code_teacher_deepseek_r1
+    math: math_teacher_deepseek_r1_distill_qwen_1p5b
+    medical: medical_teacher_qwen2p5_1p5b_instruct_clean
+  dtype: bfloat16
+  trust_remote_code: false
+  hf_cache_dir: null
+  pretrained:
+    general:
+      name: Qwen/Qwen3-4B
+      quantization: null
+    code:
+      name: Qwen/Qwen2.5-Coder-1.5B-Instruct
+      quantization: null
+    math:
+      name: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+      quantization: null
+    medical:
+      name: Qwen/Qwen2.5-1.5B-Instruct
+      quantization: null
+distillation:
+  tau: 4.0
+  lambda_kd: 1.0
+  lambda_ce: 0.5
+  lambda_reg: 0.01
+  use_teacher_confidence: true
+  ce_confidence_weighting: true
+  confidence_floor: 0.1
+  confidence_power: 1.0
+regularization:
+  weight_decay: 0.0
+  trust_region_weight: 0.001
+  anti_forgetting_weight: 0.0
+  lora_sparsity_weight: 0.0001
+controller:
+  enabled: true
+  surprise:
+    s_min: 0.0
+    s_max: 20.0
+    eps: 1.0e-08
+  stability:
+    ema_alpha: 0.1
+    c_ema_alpha: 0.1
+    warmup_threshold: 1.0e-06
+    eps: 1.0e-08
+  moments:
+    source: tracked
+    sketch_stride: 8
+    bias_correct: true
+  repetition:
+    alpha_mom: 0.05
+    alpha_hash: 0.1
+    kappa: 5.0
+    sim_threshold: 0.85
+    bucket_smoothing_k: 10.0
+    lookback_delta: 100
+    lambda_mom: 0.3
+    lambda_hash: 0.5
+    lambda_ret: 0.2
+    buffer_size: 1000
+  policy:
+    top_m_modules: 6
+    surprise_high: 1.25
+    repetition_low: 0.4
+    repetition_medium: 0.5
+    stability_high_C: 0.5
+    stability_low_V: 0.3
+    stability_source: sustained
+  consolidation:
+    period: 250
+    min_stability_C: 0.4
+    min_repetition: 0.4
+    stability_mode: sustained
+    merge_strategy: direct
+    checkpoint_before_merge: false
+  writer:
+    top_k_granularity: rank_components
+    top_k_fraction: 0.5
+  ablation:
+    disable_signals: []
+    disable_stores:
+    - P
+    use_teacher_confidence: true
+    confidence_threshold: 0.3
+    confidence_gate: no_p
+  debug:
+    force_consolidate_steps: []
+    policy_override: null
+  retrieval:
+    replay_on_hit: true
+    hit_threshold: 2
+    replay_batches: 1
+    replay_target: F
+data:
+  source: hf
+  router: metadata
+  vocab_size: ${model.vocab_size}
+  gold_policy: teacher_only
+  append_eos: true
+  strict_load: true
+  shuffle_before_cap: true
+  domains:
+  - name: general
+    layer_c: hivemind-research/general-layerC-200k
+  - name: code
+    layer_c: hivemind-research/code-layerC-200k
+    bucket_columns:
+    - subdomain
+    - difficulty
+    - source
+  - name: math
+    layer_c: hivemind-research/math-layerC-200K
+  - name: medical
+    layer_c: hivemind-research/medical-layerC-200k
+  split: train
+  tokenizer: Qwen/Qwen3-0.6B
+  max_seq_len: 512
+  teacher_logits_root: null
+  hf_cache_dir: null
+  max_rows_per_domain: 40000
+  batch_size: 2
+  num_workers: 0
+  seed: 42
+  corrupt_teacher:
+    enabled: false
+    domain: math
+    phase: math_recurrent
+    fraction: 0.5
+    mode: shuffle
+    confidence: null
+    tag: math_teacher_corrupted
+  router_strict: true
+stream:
+  enabled: true
+  seed: null
+  phases:
+  - name: general_warm
+    domain: general
+    steps: 500
+    mode: random
+  - name: code_recurrent
+    domain: code
+    steps: 1500
+    mode: recurrent
+    recurrence:
+      num_buckets: 8
+      samples_per_bucket: 16
+      revisit_period: 10
+      novel_fraction: 0.5
+      exclude_chosen_buckets_from_background: true
+  - name: novel_inject
+    domain: general
+    steps: 150
+    mode: novel
+  - name: math_recurrent
+    domain: math
+    steps: 1500
+    mode: recurrent
+    recurrence:
+      num_buckets: 8
+      samples_per_bucket: 16
+      revisit_period: 10
+      novel_fraction: 0.5
+      exclude_chosen_buckets_from_background: true
+  - name: medical_recurrent
+    domain: medical
+    steps: 1300
+    mode: recurrent
+    recurrence:
+      num_buckets: 8
+      samples_per_bucket: 16
+      revisit_period: 10
+      novel_fraction: 0.5
+      exclude_chosen_buckets_from_background: true
+  - name: code_revisit
+    domain: code
+    steps: 450
+    mode: recurrent
+    recurrence:
+      num_buckets: 8
+      samples_per_bucket: 16
+      revisit_period: 10
+      reuse_from: code_recurrent
+  - name: mixed_tail
+    domains:
+    - general
+    - code
+    - math
+    - medical
+    steps: 600
+    mode: mixed
+    weights:
+    - 0.25
+    - 0.25
+    - 0.25
+    - 0.25
+distributed:
+  enabled: false
+  backend: nccl
+  strategy: ddp
+  world_size: auto
+  find_unused_parameters: false
+  gradient_as_bucket_view: true
+  broadcast_buffers: false
+  assert_rank_consistency: 100
+  eval_mode: rank0
+  consolidation_mode: replicate
+  on_empty_batch: fail
+  allow_world_size_change: false
+  timeout_minutes: 30
+train:
+  steps: null
+  log_interval: 20
+  seed: 1337
+  device: cuda
+  trainable: all
+  mixed_precision:
+    enabled: true
+    dtype: bf16
+optim:
+  type: adamw
+  lr: 0.0001
+  betas:
+  - 0.9
+  - 0.999
+  weight_decay: 0.01
+  eps: 1.0e-08
+  masked: true
+checkpoint:
+  enabled: true
+  dir: runs/baselines_small_v1_live/no_consolidation-seed1337/checkpoints
+  save_every: 1000
+  keep_last: 1
+  keep_tagged: 4
+  resume_from: null
+eval:
+  enabled: true
+  interval: 250
+  interval_by_phase:
+    code_revisit: 50
+  max_batches: 16
+  split: validation
+  batch_size: 2
+  max_rows_per_domain: 256
+  track_forgetting: true
+  at_phase_boundaries: true
+  on_consolidation: false
+  exact_match:
+    enabled: true
+    domains:
+    - code
+    - medical
+    - math
+    num_samples: 64
+    max_scan_rows: 20000
+    max_new_tokens: 64
+profiling:
+  enabled: true
+  sync_cuda: false
+logging:
+  enabled: true
+  backend: json
+  path: runs/baselines_small_v1_live/no_consolidation-seed1337/metrics.jsonl
+  events_path: runs/baselines_small_v1_live/no_consolidation-seed1337/events.jsonl
+  project: hivemind
+  run_name: stream_small
+  id: null
+  resume: allow
+run:
+  dir: runs/baselines_small_v1_live/no_consolidation-seed1337

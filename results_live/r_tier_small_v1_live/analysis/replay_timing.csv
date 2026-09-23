@@ -1,0 +1,7 @@
+spec_id,seed,replays,delay_median_steps,delay_p90_steps,cross_phase_share,cross_phase_replays,replays_in_medical_recurrent,replays_in_mixed_tail,replays_in_general_warm,replays_in_math_recurrent,replays_in_code_revisit,replays_in_code_recurrent
+trihope_no_hash_replay,1337,132,89.5,1895.9000000000003,0.14393939393939395,19,46,45,26,13,2,0.0
+trihope_no_hash_replay,2024,121,135.0,1089.0,0.14049586776859505,17,52,45,19,2,3,0.0
+trihope_no_hash_replay,7,108,60.0,1680.0999999999997,0.14814814814814814,16,47,38,18,3,2,0.0
+trihope_replay,1337,255,97.0,456.9999999999997,0.08235294117647059,21,116,61,41,23,8,6.0
+trihope_replay,2024,273,115.0,507.00000000000045,0.07692307692307693,21,120,63,53,20,10,7.0
+trihope_replay,7,292,80.0,684.5000000000002,0.1095890410958904,32,118,96,43,20,6,9.0

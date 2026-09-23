@@ -1,0 +1,205 @@
+{
+  "experiment": "budget_sweep_small_v1_live",
+  "base_config": "stream_small",
+  "updated": 1790053245.6249828,
+  "runs": [
+    {
+      "run_id": "trihope_s1_r0p2-seed1337",
+      "spec_id": "trihope_s1_r0p2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s1_r0p2-seed1337",
+      "state": "done",
+      "updated": 1790013651.1460044,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s1_r0p3-seed1337",
+      "spec_id": "trihope_s1_r0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s1_r0p3-seed1337",
+      "state": "done",
+      "updated": 1790013762.113402,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s1_r0p45-seed1337",
+      "spec_id": "trihope_s1_r0p45",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s1_r0p45-seed1337",
+      "state": "done",
+      "updated": 1790017716.4819736,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s2_r0p2-seed1337",
+      "spec_id": "trihope_s2_r0p2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s2_r0p2-seed1337",
+      "state": "done",
+      "updated": 1790017909.908053,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s2_r0p3-seed1337",
+      "spec_id": "trihope_s2_r0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s2_r0p3-seed1337",
+      "state": "done",
+      "updated": 1790024246.7865107,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s2_r0p45-seed1337",
+      "spec_id": "trihope_s2_r0p45",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s2_r0p45-seed1337",
+      "state": "done",
+      "updated": 1790024645.6384597,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s4_r0p2-seed1337",
+      "spec_id": "trihope_s4_r0p2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s4_r0p2-seed1337",
+      "state": "done",
+      "updated": 1790028094.2162359,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s4_r0p3-seed1337",
+      "spec_id": "trihope_s4_r0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s4_r0p3-seed1337",
+      "state": "done",
+      "updated": 1790028301.060619,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_s4_r0p45-seed1337",
+      "spec_id": "trihope_s4_r0p45",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_s4_r0p45-seed1337",
+      "state": "done",
+      "updated": 1790031841.9102743,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_s1-seed1337",
+      "spec_id": "trihope_no_hash_s1",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_no_hash_s1-seed1337",
+      "state": "done",
+      "updated": 1790032059.3030968,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_s2-seed1337",
+      "spec_id": "trihope_no_hash_s2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_no_hash_s2-seed1337",
+      "state": "done",
+      "updated": 1790035569.6410158,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_no_hash_s4-seed1337",
+      "spec_id": "trihope_no_hash_s4",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/trihope_no_hash_s4-seed1337",
+      "state": "done",
+      "updated": 1790035837.0540216,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s1-seed1337",
+      "spec_id": "surprise_gate_s1",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/surprise_gate_s1-seed1337",
+      "state": "done",
+      "updated": 1790039382.153799,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s2-seed1337",
+      "spec_id": "surprise_gate_s2",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/surprise_gate_s2-seed1337",
+      "state": "done",
+      "updated": 1790039580.0592265,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s4-seed1337",
+      "spec_id": "surprise_gate_s4",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/surprise_gate_s4-seed1337",
+      "state": "done",
+      "updated": 1790043418.9011502,
+      "exit_code": 0
+    },
+    {
+      "run_id": "plateau_trigger_t0p005-seed1337",
+      "spec_id": "plateau_trigger_t0p005",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/plateau_trigger_t0p005-seed1337",
+      "state": "done",
+      "updated": 1790042105.6756592,
+      "exit_code": 0
+    },
+    {
+      "run_id": "plateau_trigger_t0p01-seed1337",
+      "spec_id": "plateau_trigger_t0p01",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/plateau_trigger_t0p01-seed1337",
+      "state": "done",
+      "updated": 1790044719.444091,
+      "exit_code": 0
+    },
+    {
+      "run_id": "plateau_trigger_t0p02-seed1337",
+      "spec_id": "plateau_trigger_t0p02",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/plateau_trigger_t0p02-seed1337",
+      "state": "done",
+      "updated": 1790045976.2044265,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_epd-seed1337",
+      "spec_id": "molf_style_epd",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/molf_style_epd-seed1337",
+      "state": "done",
+      "updated": 1790049128.5769641,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p3-seed1337",
+      "spec_id": "molf_style_a0p3",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/molf_style_a0p3-seed1337",
+      "state": "done",
+      "updated": 1790049639.9865856,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p5-seed1337",
+      "spec_id": "molf_style_a0p5",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/molf_style_a0p5-seed1337",
+      "state": "done",
+      "updated": 1790052818.69493,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p7-seed1337",
+      "spec_id": "molf_style_a0p7",
+      "seed": 1337,
+      "dir": "runs/budget_sweep_small_v1_live/molf_style_a0p7-seed1337",
+      "state": "done",
+      "updated": 1790053245.6192148,
+      "exit_code": 0
+    }
+  ]
+}
