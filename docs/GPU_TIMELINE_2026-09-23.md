@@ -11,17 +11,19 @@ changes. If you already started, find the row you are on and continue from there
 
 | When (UTC / BDT) | What |
 |---|---|
-| **Wed 19:00 / Thu 01:00** | Latest launch that still finishes the full batch before the freeze. Launching later: cut runs (see "Running late"). |
+| **Wed 17:30 / Wed 23:30** | Latest launch that still finishes the full batch (about 14 h, 17 h with slack) before the freeze. Launching later: cut runs (see "Running late"). |
 | **Thu 08:00 / Thu 14:00** | Target: all runs done, reductions pushed. |
 | **Thu 12:00 / Thu 18:00** | **Data freeze for the main text.** Anything later goes to the appendix only. |
 | Fri 12:00 / Fri 18:00 | Appendix freeze. Nothing after this is used. |
 | Sat 11:59 / Sat 17:59 | Paper deadline (Fri 25 Sep AoE). |
 
-## The list: 34 runs, 12 waves of 3
+## The list: 34 runs, about 14 h
 
-The runner goes spec by spec, then seed by seed, 3 at a time. One wave is about 75 min.
+The runner goes spec by spec, then seed by seed, and keeps 3 runs going at once (a new one starts as
+soon as one finishes). With 3 sharing the GPU, one run takes 0.75–2 h, as measured in the earlier live
+campaign (`topm_all` is the slowest, about 2 h). The "Group" column is the approximate order.
 
-| Wave | Runs | Manifest | Why it matters | If late |
+| Group | Runs | Manifest | Why it matters | If late |
 |---|---|---|---|---|
 | 1 | `frozen_blocks` seeds 1337, 2024, 7 | `priority_s3` | Only the shared params train. **Decides the paper's framing (DP1)**, and checks Theorem 1 at scale (routed weights bit-identical). | never cut |
 | 2 | `trihope_sentinel` 1337, 2024, 7 | `priority_s3` | Same as E1 TriHOPE. Detects drift; grows the reference pool to 10 (DP2). | keep ≥1 |
@@ -53,6 +55,15 @@ git checkout campaign/iclr-2027-final-batch
 git pull
 ```
 
+`random_commit` reads TriHOPE's per-phase decision shares from the E1 report. Make sure the file is
+there (if it's missing, the 3 `random_commit` runs stop with an error):
+
+```bash
+ls runs/baselines_small_v1_live/analysis/action_share_by_phase.csv || \
+  { mkdir -p runs/baselines_small_v1_live/analysis && \
+    cp results_live/baselines_small_v1_live/analysis/action_share_by_phase.csv runs/baselines_small_v1_live/analysis/; }
+```
+
 1-step dry run of every manifest. Each should list its runs as `pending` with no error:
 
 ```bash
@@ -62,16 +73,18 @@ for m in priority_s3 priority_s4 priority_s2 priority_s1; do
 
 ### ☐ 15:30 UTC / 21:30 BDT: launch the whole chain in tmux
 
-It runs about 15 h unattended, so start it in tmux, where it survives an SSH disconnect:
+It runs about 14 h unattended, so start it in tmux, where it survives an SSH disconnect. The four
+manifests are joined with `;`, **not** `&&`. The runner exits with an error if any single run
+fails, and with `&&` one crash would stop every later manifest overnight.
 
 ```bash
 tmux new -s batch
 cd /home/a6000/asif/Council-TriHOPE
 mkdir -p logs
-( python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3 && \
-  python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3 && \
-  python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 && \
-  python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3 ) 2>&1 | tee logs/final_batch.log
+( python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3 ; \
+  python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3 ; \
+  python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 ; \
+  python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3 ) 2>&1 | tee -a logs/final_batch.log
 # detach: Ctrl-b then d      reattach: tmux attach -t batch
 ```
 
@@ -85,7 +98,7 @@ python scripts/check_config_drift.py runs/priority_s3_v1_live/*-seed* --committe
 
 Every line must say `ok`. **Any `[DRIFT]` line: stop the chain (Ctrl-c in window 0) and send the output.**
 
-### ☐ 16:45 UTC / 22:45 BDT: wave 1 done (frozen_blocks ×3): push (DP1)
+### ☐ ~16:30 UTC / 22:30 BDT: frozen_blocks ×3 done: push (DP1)
 
 Define the push helper once per shell. It copies only small files, skips runs still in progress, and
 doesn't pull code:
@@ -97,7 +110,7 @@ push_results () {
   git add results_live provenance
   git commit -q -m "final batch: $1" && git push origin campaign/iclr-2027-final-batch
 }
-push_results "wave 1: frozen_blocks x3"
+push_results "frozen_blocks x3"
 ```
 
 Then run the Theorem-1 bit-identity check on the frozen runs (CPU, loads Qwen3-0.6B once):
@@ -108,7 +121,7 @@ python scripts/weight_drift.py runs/priority_s3_v1_live/frozen_blocks-seed* --ex
 
 It must report the routed weights unchanged for all 3 seeds. If it doesn't, send the output.
 
-### ☐ 17:00–18:00 UTC / 23:00–00:00 BDT: CPU reductions on the existing live runs (while waves 2–3 run)
+### ☐ 16:45–18:00 UTC / 22:45–00:00 BDT: CPU reductions on the existing live runs (while the GPU keeps going)
 
 ```bash
 # T2: decision counts by action x surface x phase (the 115 earlier live runs; the new ones are done in the morning)
@@ -131,21 +144,18 @@ while true; do push_results "auto $(date -u +%H:%M)"; sleep 7200; done
 
 Nothing else will be pushed to this branch during the batch, so no pull is needed.
 
-### Overnight (runs unattended)
+### Overnight (runs unattended; times approximate, ±1 h)
 
-| UTC | BDT | Wave | Finishes |
-|---|---|---|---|
-| 16:45–18:00 | 22:45–00:00 | 2 | `trihope_sentinel` ×3 (DP2) |
-| 18:00–19:15 | 00:00–01:15 | 3 | `periodic_merge` ×3 |
-| 19:15–20:30 | 01:15–02:30 | 4 | `random_commit` ×3 (DP4) |
-| 20:30–21:45 | 02:30–03:45 | 5 | `surprise_gate_s4` ×2, `molf_style_a0p7` 2024 |
-| 21:45–23:00 | 03:45–05:00 | 6 | `molf_style_a0p7` 7, `no_cosine` ×2 (DP3) |
-| 23:00–00:15 | 05:00–06:15 | 7 | `molf_style_a0p5` ×2, `moments_optimizer` 2024 |
-| 00:15–01:30 | 06:15–07:30 | 8 | `moments_optimizer` 7, `no_surprise` ×2 |
-| 01:30–02:45 | 07:30–08:45 | 9 | `topm_2` ×2, `topk_25` 2024 |
-| 02:45–04:00 | 08:45–10:00 | 10 | `topk_25` 7, `topm_all` ×2 |
-| 04:00–05:15 | 10:00–11:15 | 11 | `pgate_c0p35`, `pgate_c0p65`, `pgate_c0p2` |
-| 05:15–06:30 | 11:15–12:30 | 12 | `pgate_c0p8` |
+| Done by (UTC) | Done by (BDT) | Runs finished |
+|---|---|---|
+| Wed 16:30 | Wed 22:30 | `frozen_blocks` ×3 (DP1) |
+| Wed 17:40 | Wed 23:40 | `trihope_sentinel` ×3 (DP2) |
+| Wed 18:25 | Thu 00:25 | `periodic_merge` ×3 (end of `priority_s3`) |
+| Wed 19:40 | Thu 01:40 | `random_commit` ×3 (DP4; end of `priority_s4`) |
+| Wed 21:50 | Thu 03:50 | `surprise_gate_s4`, `molf_style_a0p7`, `no_cosine` ×2 each (DP3) |
+| Wed 23:50 | Thu 05:50 | `molf_style_a0p5`, `moments_optimizer`, `no_surprise` ×2 each |
+| Thu 03:25 | Thu 09:25 | `topm_2`, `topk_25`, `topm_all` ×2 each (end of `priority_s2`) |
+| Thu 05:40 | Thu 11:40 | `pgate_c0p35`, `pgate_c0p65`, `pgate_c0p2`, `pgate_c0p8` (end of `priority_s1`) |
 
 ### ☐ Thu morning, when you wake: check progress and the later drift checks
 
@@ -159,7 +169,11 @@ python scripts/check_config_drift.py runs/priority_s1_v1_live/*-seed* --committe
 
 Any `failed` run: see "If something goes wrong". Any `[DRIFT]` line: send the output.
 
-### ☐ 06:30–08:00 UTC / 12:30–14:00 BDT: after wave 12, final reductions and final push
+If the batch was started with an older copy of this doc (manifests joined with `&&`) and a run
+failed, the later manifests never started. Check `tail logs/final_batch.log`, and relaunch the
+remaining manifests with the `;` chain above (`--resume` skips everything already done).
+
+### ☐ ~06:00–08:00 UTC / 12:00–14:00 BDT: after the last run, final reductions and final push
 
 Stop the auto-push loop (Ctrl-c in its window) first.
 
@@ -225,9 +239,9 @@ python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --r
 
 ## Not in this batch
 
-A design-faithful variant, where a withheld base block writes its paired LoRA adapter as in
-`docs/theory_101.md`, is **not** part of this batch. If the lead approves it, it will arrive as a
-separate manifest (`priority_s5`, 3 runs, one wave) to run after wave 12. Until then, ignore it.
+This is the final GPU batch. A design-faithful variant, where a withheld base block writes its
+paired LoRA adapter as in `docs/theory_101.md`, and a TriHOPE arm with the shared parameters frozen
+are **not** run. The paper reports both as limitations.
 
 ## What happens on the paper side after each push
 

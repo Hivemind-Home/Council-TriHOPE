@@ -1,8 +1,11 @@
 # Final batch for the ICLR-2027 paper: operator runbook (2026-09-23)
 
+> **Follow `docs/GPU_TIMELINE_2026-09-23.md` for the order, times and commands.** This runbook
+> keeps the background. Where the two differ, the timeline doc is correct.
+
 Paper deadline: **Sat Sep 26, 11:59 UTC** (Fri Sep 25 AoE). Data for the main text is frozen **Thu Sep 24, 12:00 UTC**. Runs that land after that go to the appendix, until Fri 12:00 UTC.
 
-Everything below runs on **the same box and checkout that ran the 115 live runs**, under `--live`, with `--concurrent 3`. That is about 3 runs per 75 minutes. There are 31 runs in total, about 13 h.
+Everything below runs on **the same box and checkout that ran the 115 live runs**, under `--live`, with `--concurrent 3`. One run takes 0.75–2 h with 3 sharing the GPU. There are 34 runs in total, about 14 h.
 
 ## 0. Before switching branches (5 min): record what ran
 
@@ -34,17 +37,18 @@ These were already run on CPU with `stream_smoke` (70 steps):
 On the box, a 1-step dry run of each manifest is enough:
 
 ```bash
-for m in priority_s3 priority_s2 priority_s1; do
+for m in priority_s3 priority_s4 priority_s2 priority_s1; do
   python scripts/run_experiment.py configs/experiments/$m.yaml --live --dry-run; done
 ```
 
 ## 3. Launch (in this order, one after the other)
 
 ```bash
-python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3 && \
-python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3 && \
-python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 && \
+python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3 ; \
+python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3 ; \
+python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 ; \
 python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3
+# joined with ';' not '&&': the runner exits non-zero if any run fails, and '&&' would then skip every later manifest
 ```
 
 > **Added after the first push (2026-09-23, `priority_s4`):** if you already launched
