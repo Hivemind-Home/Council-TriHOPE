@@ -291,6 +291,12 @@ class TestRandomCommit:
     def test_config_accepts_random_commit(self) -> None:
         DebugConfig(policy_override="random_commit")
 
+    def test_missing_shares_is_a_hard_error(self, tmp_path: Path) -> None:
+        for path in (None, str(tmp_path / "absent.csv")):
+            dbg = DebugConfig(policy_override="random_commit", random_shares_path=path)
+            with pytest.warns(UserWarning), pytest.raises(ValueError, match="random_commit"):
+                RFPPolicy(PolicyConfig(), override="random_commit", debug=dbg)
+
     def test_defers_match_policy_and_commit_share_matches_reference(self, tmp_path: Path) -> None:
         _shares_csv(tmp_path / "shares.csv")
         dbg = DebugConfig(policy_override="random_commit",

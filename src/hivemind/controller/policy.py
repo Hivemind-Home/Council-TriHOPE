@@ -117,6 +117,14 @@ class RFPPolicy:
             self._random_shares = load_random_shares(
                 self.debug.random_shares_path, self.debug.random_shares_spec_id
             )
+        if override == "random_commit" and not self._random_shares:
+            # random_matched degrades to uniform draws, but random_commit would
+            # silently never commit -- a different arm. Fail at startup instead.
+            raise ValueError(
+                "policy_override=random_commit needs per-phase shares: "
+                f"{self.debug.random_shares_path!r} is missing or has no rows for "
+                f"spec_id={self.debug.random_shares_spec_id!r}"
+            )
 
     def decide(
         self,
