@@ -1,0 +1,236 @@
+# GPU timeline: final ICLR batch, Wed 23 Sep → Thu 24 Sep 2026
+
+For the GPU operator. It lists everything that still has to run, in order, with the time it should
+happen and the exact command. Background and rationale: `docs/FINAL_BATCH_RUNBOOK.md` (same branch).
+
+All times are **UTC / Bangladesh time (UTC+6)**. The schedule assumes launch at **15:30 UTC
+(21:30 BDT) Wed**. If you launch earlier or later, shift every row by the same amount; nothing else
+changes. If you already started, find the row you are on and continue from there.
+
+## Deadlines
+
+| When (UTC / BDT) | What |
+|---|---|
+| **Wed 19:00 / Thu 01:00** | Latest launch that still finishes the full batch before the freeze. Launching later: cut runs (see "Running late"). |
+| **Thu 08:00 / Thu 14:00** | Target: all runs done, reductions pushed. |
+| **Thu 12:00 / Thu 18:00** | **Data freeze for the main text.** Anything later goes to the appendix only. |
+| Fri 12:00 / Fri 18:00 | Appendix freeze. Nothing after this is used. |
+| Sat 11:59 / Sat 17:59 | Paper deadline (Fri 25 Sep AoE). |
+
+## The list: 34 runs, 12 waves of 3
+
+The runner goes spec by spec, then seed by seed, 3 at a time. One wave is about 75 min.
+
+| Wave | Runs | Manifest | Why it matters | If late |
+|---|---|---|---|---|
+| 1 | `frozen_blocks` seeds 1337, 2024, 7 | `priority_s3` | Only the shared params train. **Decides the paper's framing (DP1)**, and checks Theorem 1 at scale (routed weights bit-identical). | never cut |
+| 2 | `trihope_sentinel` 1337, 2024, 7 | `priority_s3` | Same as E1 TriHOPE. Detects drift; grows the reference pool to 10 (DP2). | keep ≥1 |
+| 3 | `periodic_merge` 1337, 2024, 7 | `priority_s3` | LoRA + merge every 250 steps. A merge baseline that actually fires. | cut to 1 seed (last resort) |
+| 4 | `random_commit` 1337, 2024, 7 | `priority_s4` | **Tests the headline claim (H1b, DP4):** random commits with TriHOPE's own defer/replay. | never cut |
+| 5 | `surprise_gate_s4` 2024, 7; `molf_style_a0p7` 2024 | `priority_s2` | Strongest competitors to n=3. | never cut |
+| 6 | `molf_style_a0p7` 7; `no_cosine` 2024, 7 | `priority_s2` | Competitor + the gate ablation (H3) to n=3 (DP3). | never cut |
+| 7 | `molf_style_a0p5` 2024, 7; `moments_optimizer` 2024 | `priority_s2` | SNR rule (H4) to n=3; tracker ablation. | cut 7th / 5th |
+| 8 | `moments_optimizer` 7; `no_surprise` 2024, 7 | `priority_s2` | Ablations to n=3. | cut 5th / 4th |
+| 9 | `topm_2` 2024, 7; `topk_25` 2024 | `priority_s2` | Ablations to n=3. | cut 3rd |
+| 10 | `topk_25` 7; `topm_all` 2024, 7 | `priority_s2` | Ablations to n=3. | cut 3rd / 2nd |
+| 11 | `pgate_c0p35`, `pgate_c0p65`, `pgate_c0p2` (seed 1337) | `priority_s1` | Dose-response of the C̄ permanence gate. | cut 6th (keep c0p35) |
+| 12 | `pgate_c0p8` (seed 1337) | `priority_s1` | Top of the dose-response. | cut 1st |
+
+Output directories: `runs/priority_s{1,2,3,4}_v1_live/<run>-seed<seed>/`.
+
+## Timeline with commands
+
+### ☐ 15:00 UTC / 21:00 BDT: record what ran before, then get the batch (15 min)
+
+Run this **before switching branches**, in the checkout that ran the 115 live runs. Don't stash first:
+the local `stream_small.yaml` edit is part of what gets recorded.
+
+```bash
+cd /home/a6000/asif/Council-TriHOPE
+git fetch origin campaign/iclr-2027-final-batch
+git show origin/campaign/iclr-2027-final-batch:scripts/provenance_snapshot.sh | bash
+git checkout campaign/iclr-2027-final-batch
+git pull
+```
+
+1-step dry run of every manifest. Each should list its runs as `pending` with no error:
+
+```bash
+for m in priority_s3 priority_s4 priority_s2 priority_s1; do
+  python scripts/run_experiment.py configs/experiments/$m.yaml --live --dry-run | awk '{print $1, $2}'; done
+```
+
+### ☐ 15:30 UTC / 21:30 BDT: launch the whole chain in tmux
+
+It runs about 15 h unattended, so start it in tmux, where it survives an SSH disconnect:
+
+```bash
+tmux new -s batch
+cd /home/a6000/asif/Council-TriHOPE
+mkdir -p logs
+( python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3 && \
+  python scripts/run_experiment.py configs/experiments/priority_s4.yaml --live --resume --concurrent 3 && \
+  python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 && \
+  python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3 ) 2>&1 | tee logs/final_batch.log
+# detach: Ctrl-b then d      reattach: tmux attach -t batch
+```
+
+### ☐ 15:35 UTC / 21:35 BDT: drift check (2 min after launch)
+
+In a second tmux window (`Ctrl-b c`):
+
+```bash
+python scripts/check_config_drift.py runs/priority_s3_v1_live/*-seed* --committed runs
+```
+
+Every line must say `ok`. **Any `[DRIFT]` line: stop the chain (Ctrl-c in window 0) and send the output.**
+
+### ☐ 16:45 UTC / 22:45 BDT: wave 1 done (frozen_blocks ×3): push (DP1)
+
+Define the push helper once per shell. It copies only small files, skips runs still in progress, and
+doesn't pull code:
+
+```bash
+push_results () {
+  rsync -a --exclude events.jsonl --exclude checkpoints \
+        $(ls -d runs/priority_s{1,2,3,4}_v1_live 2>/dev/null) results_live/
+  git add results_live provenance
+  git commit -q -m "final batch: $1" && git push origin campaign/iclr-2027-final-batch
+}
+push_results "wave 1: frozen_blocks x3"
+```
+
+Then run the Theorem-1 bit-identity check on the frozen runs (CPU, loads Qwen3-0.6B once):
+
+```bash
+python scripts/weight_drift.py runs/priority_s3_v1_live/frozen_blocks-seed* --expect-routed-unchanged
+```
+
+It must report the routed weights unchanged for all 3 seeds. If it doesn't, send the output.
+
+### ☐ 17:00–18:00 UTC / 23:00–00:00 BDT: CPU reductions on the existing live runs (while waves 2–3 run)
+
+```bash
+# T2: decision counts by action x surface x phase (the 115 earlier live runs; the new ones are done in the morning)
+python scripts/events_decision_counts.py $(ls -d runs/*_live/*-seed* | grep -v priority_)
+
+# T3: weight drift split routed / adapters / shared for the key E1 runs
+python scripts/weight_drift.py runs/baselines_small_v1_live/{trihope,surprise_gate,no_consolidation,random_routing,full_ft,molf_style}-seed1337 \
+    runs/r_tier_small_v1_live/p_only-seed1337 runs/budget_sweep_small_v1_live/molf_style_a0p7-seed1337
+```
+
+### ☐ Before sleeping (~00:00 BDT): start the auto-push loop
+
+It pushes every 2 hours, so results reach the paper overnight. Run it in a third tmux window
+(`Ctrl-b c`), after pasting the `push_results` definition from above into that window too:
+
+```bash
+cd /home/a6000/asif/Council-TriHOPE
+while true; do push_results "auto $(date -u +%H:%M)"; sleep 7200; done
+```
+
+Nothing else will be pushed to this branch during the batch, so no pull is needed.
+
+### Overnight (runs unattended)
+
+| UTC | BDT | Wave | Finishes |
+|---|---|---|---|
+| 16:45–18:00 | 22:45–00:00 | 2 | `trihope_sentinel` ×3 (DP2) |
+| 18:00–19:15 | 00:00–01:15 | 3 | `periodic_merge` ×3 |
+| 19:15–20:30 | 01:15–02:30 | 4 | `random_commit` ×3 (DP4) |
+| 20:30–21:45 | 02:30–03:45 | 5 | `surprise_gate_s4` ×2, `molf_style_a0p7` 2024 |
+| 21:45–23:00 | 03:45–05:00 | 6 | `molf_style_a0p7` 7, `no_cosine` ×2 (DP3) |
+| 23:00–00:15 | 05:00–06:15 | 7 | `molf_style_a0p5` ×2, `moments_optimizer` 2024 |
+| 00:15–01:30 | 06:15–07:30 | 8 | `moments_optimizer` 7, `no_surprise` ×2 |
+| 01:30–02:45 | 07:30–08:45 | 9 | `topm_2` ×2, `topk_25` 2024 |
+| 02:45–04:00 | 08:45–10:00 | 10 | `topk_25` 7, `topm_all` ×2 |
+| 04:00–05:15 | 10:00–11:15 | 11 | `pgate_c0p35`, `pgate_c0p65`, `pgate_c0p2` |
+| 05:15–06:30 | 11:15–12:30 | 12 | `pgate_c0p8` |
+
+### ☐ Thu morning, when you wake: check progress and the later drift checks
+
+```bash
+for m in priority_s3 priority_s4 priority_s2 priority_s1; do
+  python scripts/run_experiment.py configs/experiments/$m.yaml --live --dry-run | awk '{print $1, $2}'; done
+python scripts/check_config_drift.py runs/priority_s4_v1_live/*-seed* --committed runs
+python scripts/check_config_drift.py runs/priority_s2_v1_live/*-seed* --committed runs
+python scripts/check_config_drift.py runs/priority_s1_v1_live/*-seed* --committed runs   # once s1 has started
+```
+
+Any `failed` run: see "If something goes wrong". Any `[DRIFT]` line: send the output.
+
+### ☐ 06:30–08:00 UTC / 12:30–14:00 BDT: after wave 12, final reductions and final push
+
+Stop the auto-push loop (Ctrl-c in its window) first.
+
+```bash
+# T3 on the new sentinel and periodic-merge runs
+python scripts/weight_drift.py runs/priority_s3_v1_live/{trihope_sentinel,periodic_merge}-seed1337
+
+# T2 on the new runs
+python scripts/events_decision_counts.py runs/priority_s*_v1_live/*-seed*
+
+# T4: regenerate every live report
+for m in baselines_small_v1_live bad_teacher_small_v1_live r_tier_small_v1_live p_study_small_v1_live \
+         budget_sweep_small_v1_live ablation_grid_v1_live priority_s3_v1_live priority_s4_v1_live \
+         priority_s2_v1_live priority_s1_v1_live; do
+  python -m analysis.run_report runs/$m; done
+
+# copy results + small reductions (never events.jsonl or checkpoints), commit, push
+rsync -a --exclude events.jsonl --exclude checkpoints runs/priority_s{1,2,3,4}_v1_live results_live/
+for d in runs/*_live; do
+  rsync -am --include '*/' --include 'analysis_t2/**' --include 'weight_drift.json' --include 'analysis/**' \
+        --exclude '*' "$d" results_live/; done
+git add results_live provenance
+git commit -m "final batch: all priority runs, T2/T3/T4 reductions, provenance"
+git push origin campaign/iclr-2027-final-batch
+```
+
+**Must be pushed before Thu 12:00 UTC / 18:00 BDT.**
+
+## If something goes wrong
+
+**A run crashed.** Restart it from scratch with identical settings. Never resume a crashed run with
+a changed override; that is what invalidated live `gradient_routing`.
+
+```bash
+rm -rf runs/priority_s2_v1_live/no_cosine-seed7          # example: the crashed run's dir
+python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --only no_cosine --concurrent 3
+```
+
+`--resume` skips the seeds that are already done, so only the deleted one reruns.
+
+**A run diverged** (loss NaN or exploding). Keep it and report it; don't delete it.
+
+**Drift check fails.** Stop the chain and send the output. Don't run more until it is resolved.
+
+**Running late.** Relaunch the remaining manifests with `--skip`, cutting in this order:
+1. `pgate_c0p8`
+2. `topm_all`
+3. `topk_25`, `topm_2`
+4. `no_surprise`
+5. `moments_optimizer`
+6. `pgate_c0p65`, `pgate_c0p2`
+7. `molf_style_a0p5`
+
+For example:
+
+```bash
+python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3 --skip topm_all,topk_25,topm_2
+python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3 --skip pgate_c0p8
+```
+
+**Never cut:** `frozen_blocks` ×3, `random_commit` ×3, `trihope_sentinel` (at least 1),
+`surprise_gate_s4`, `molf_style_a0p7`, `no_cosine`.
+
+## Not in this batch
+
+A design-faithful variant, where a withheld base block writes its paired LoRA adapter as in
+`docs/theory_101.md`, is **not** part of this batch. If the lead approves it, it will arrive as a
+separate manifest (`priority_s5`, 3 runs, one wave) to run after wave 12. Until then, ignore it.
+
+## What happens on the paper side after each push
+
+The lead pulls this branch, runs the config-drift check, regenerates every table and figure
+(`make data results figures`), and applies the pre-registered decision rules (DP1–DP4). No numbers
+need to be sent by hand; pushing the results is enough.
