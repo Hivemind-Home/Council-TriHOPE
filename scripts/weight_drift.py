@@ -77,9 +77,15 @@ def main(argv: list[str] | None = None) -> int:
             for g in ("routed", "shared")
         }
         unmatched = []
+        seen_storage: set[int] = set()
         for k, v in base.items():
             if not torch.is_floating_point(v):
                 continue
+            # Tied weights (embedding / LM head) are one tensor saved under two
+            # keys; count each storage once.
+            if v.data_ptr() in seen_storage:
+                continue
+            seen_storage.add(v.data_ptr())
             hk = hf_key(k)
             if hk not in ref_sd:
                 unmatched.append(k)
