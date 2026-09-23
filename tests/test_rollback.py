@@ -155,7 +155,9 @@ class TestScriptPlanning:
         assert f"++run.dir={tmp_path}" in out and out[-1] == "++checkpoint.resume_from=/x"
         assert not any(o.startswith("++checkpoint.dir=/old") for o in out)
 
-    def test_plan_selective_and_full_restore(self, tmp_path: Path) -> None:
+    def test_plan_selective_and_full_restore(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         run_dir = tmp_path / "trihope-seed1"
         (run_dir / "checkpoints" / "step_00000012_pre_merge").mkdir(parents=True)
         (run_dir / "checkpoints" / "step_00000099_pre_phase_math").mkdir(parents=True)
@@ -189,8 +191,10 @@ class TestScriptPlanning:
         info = rb.plan(run_dir, "bad", tmp_path / "out2", baseline="full_restore")
         assert info["mode"] == "full_restore" and info["skip_range"] == [100, 249]
         assert "++train.skip_step_ranges=[[100,249]]" in info["cmd"]
-        with pytest.raises(SystemExit, match="nothing to roll back"):
-            rb.plan(run_dir, "nobody", tmp_path / "out3")
+        # Containment holding is a result, not an error (0b6bdf3): plan()
+        # reports it and returns None so run_campaign.sh keeps going.
+        assert rb.plan(run_dir, "nobody", tmp_path / "out3") is None
+        assert "nothing to roll back" in capsys.readouterr().out
 
     def test_write_summary(self, tmp_path: Path) -> None:
         run_dir, out = tmp_path / "r", tmp_path / "o"

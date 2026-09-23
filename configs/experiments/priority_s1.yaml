@@ -1,0 +1,39 @@
+# ICLR-2027 final batch, part 3 of 3: the C̄-gate dose-response sweep (1 seed).
+# The permanence gate is the knob the paper's title asks about; this traces
+# forgetting / final loss / permanent writes as the sustained-cosine bar for
+# committing (policy.stability_high_C) and for consolidating
+# (consolidation.min_stability_C) moves. Shipped: 0.5 / 0.4 (the trihope pool);
+# no_consolidation (never) and no_cosine (gate always passes) are the ends.
+#
+#   python scripts/run_experiment.py configs/experiments/priority_s1.yaml --live --resume --concurrent 3
+experiment: priority_s1_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+_pin: &pin
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+runs:
+  - id: pgate_c0p35
+    overrides:
+      - *pin
+      - controller.policy.stability_high_C=0.35
+      - controller.consolidation.min_stability_C=0.25
+  - id: pgate_c0p65
+    overrides:
+      - *pin
+      - controller.policy.stability_high_C=0.65
+      - controller.consolidation.min_stability_C=0.55
+  - id: pgate_c0p2
+    overrides:
+      - *pin
+      - controller.policy.stability_high_C=0.2
+      - controller.consolidation.min_stability_C=0.1
+  - id: pgate_c0p8
+    # optional; cut first
+    overrides:
+      - *pin
+      - controller.policy.stability_high_C=0.8
+      - controller.consolidation.min_stability_C=0.7

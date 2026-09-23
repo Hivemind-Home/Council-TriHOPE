@@ -1,0 +1,79 @@
+# ICLR-2027 final batch, part 2 of 3: seeds 2024 and 7 for specs whose
+# seed-1337 run already exists (budget_sweep_small / ablation_grid, live).
+# Spec overrides copied verbatim from those manifests; live thresholds
+# pinned wherever the spec does not set them itself.
+#
+#   python scripts/run_experiment.py configs/experiments/priority_s2.yaml --live --resume --concurrent 3
+#
+# Order is priority (cut from the bottom if time runs short).
+experiment: priority_s2_v1
+base_config: stream_small
+output_root: runs
+seeds: [2024, 7]
+cleanup_checkpoints: keep_final
+_pin: &pin
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+_pin_rep: &pin_rep
+  - controller.policy.repetition_low=0.40
+_method: &method
+  - controller.retrieval.replay_on_hit=true
+runs:
+  - id: surprise_gate_s4          # from budget_sweep_small
+    overrides:
+      - *pin_rep
+      - controller.policy.mode=surprise_only
+      - controller.retrieval.replay_on_hit=true
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.policy.surprise_high=4.0
+  - id: molf_style_a0p7           # from budget_sweep_small (fair MoLF, SNR rule)
+    overrides:
+      - *pin
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=snr_threshold
+      - controller.policy.adam_score_high=0.7
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: no_cosine                 # from ablation_grid
+    overrides:
+      - *pin
+      - *method
+      - controller.ablation.disable_signals=[cosine]
+  - id: molf_style_a0p5           # from budget_sweep_small
+    overrides:
+      - *pin
+      - controller.policy.mode=adam_score
+      - controller.policy.adam_score_rule=snr_threshold
+      - controller.policy.adam_score_high=0.5
+      - controller.ablation.disable_stores=[R]
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
+      - controller.ablation.use_teacher_confidence=false
+  - id: moments_optimizer         # from ablation_grid
+    overrides:
+      - *pin
+      - *method
+      - controller.moments.source=optimizer
+  - id: no_surprise               # from ablation_grid
+    overrides:
+      - *pin
+      - *method
+      - controller.ablation.disable_signals=[surprise]
+  - id: topm_2                    # from ablation_grid
+    overrides:
+      - *pin
+      - *method
+      - ++controller.ablation.top_m_override=2
+  - id: topk_25                   # from ablation_grid
+    overrides:
+      - *pin
+      - *method
+      - controller.writer.top_k_fraction=0.25
+  - id: topm_all                  # from ablation_grid
+    overrides:
+      - *pin
+      - *method
+      - ++controller.ablation.top_m_override=999
