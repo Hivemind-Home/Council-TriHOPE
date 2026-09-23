@@ -111,6 +111,15 @@ def main(argv: list[str] | None = None) -> int:
         }
         (run / "weight_drift.json").write_text(json.dumps(out, indent=1))
         print(json.dumps(out))
+        # A key-name mismatch would leave "routed" empty and make the check
+        # below pass vacuously; refuse that instead of reporting 0 changes.
+        if acc["routed"]["coords"] == 0 or unmatched:
+            print(
+                f"{run}: FAIL — {acc['routed']['coords']} routed coords matched the "
+                f"pretrained model, {len(unmatched)} checkpoint keys unmatched "
+                f"(first: {unmatched[:3]})"
+            )
+            failed = True
         if args.expect_routed_unchanged and acc["routed"]["changed_coords"] != 0:
             print(f"{run}: FAIL — {acc['routed']['changed_coords']} routed coords changed")
             failed = True

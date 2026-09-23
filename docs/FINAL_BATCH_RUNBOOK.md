@@ -11,7 +11,7 @@ Everything below runs on **the same box and checkout that ran the 115 live runs*
 
 ```bash
 cd /home/a6000/asif/Council-TriHOPE           # the checkout that ran the live campaign
-git fetch origin campaign/iclr-2027-final-batch
+git fetch origin +refs/heads/campaign/iclr-2027-final-batch:refs/remotes/origin/campaign/iclr-2027-final-batch
 git show origin/campaign/iclr-2027-final-batch:scripts/provenance_snapshot.sh | bash
 ```
 
@@ -22,7 +22,7 @@ the local threshold edit is part of what must be recorded. It is committed in st
 ## 1. Get the batch
 
 ```bash
-git checkout campaign/iclr-2027-final-batch   # keeps your local stream_small.yaml edit (branch does not touch it)
+git checkout -B campaign/iclr-2027-final-batch origin/campaign/iclr-2027-final-batch   # keeps your local stream_small.yaml edit
 ```
 
 The new manifests **pin** `surprise_high=1.25` and `repetition_low=0.40` on every spec. The resolved config is therefore the live one whether or not the local edit survives. Step 3 checks this.
@@ -122,7 +122,11 @@ rsync -a --exclude events.jsonl --exclude checkpoints runs/priority_s{1,2,3,4}_v
 for d in runs/*_live; do   # T2/T3/T4 reductions of every live matrix (small files only)
   rsync -am --include '*/' --include 'analysis_t2/**' --include 'weight_drift.json' --include 'analysis/**' \
         --exclude '*' "$d" results_live/; done
-git add results_live provenance && git commit -m "final batch: priority runs, T2/T3/T4 reductions, provenance" && git push origin campaign/iclr-2027-final-batch
+git add results_live
+find results_live -name '*.log' -size -20M -print0 | xargs -0 -r git add -f   # *.log is gitignored
+[ -d provenance ] && git add provenance
+git commit -m "final batch: priority runs, T2/T3/T4 reductions, provenance"
+git pull --rebase --autostash origin campaign/iclr-2027-final-batch && git push origin campaign/iclr-2027-final-batch
 ```
 
 Push **as waves finish**, not only at the end. The paper pipeline picks up new seeds automatically.

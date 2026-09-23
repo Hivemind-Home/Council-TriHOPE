@@ -49,10 +49,36 @@ the local `stream_small.yaml` edit is part of what gets recorded.
 
 ```bash
 cd /home/a6000/asif/Council-TriHOPE
-git fetch origin campaign/iclr-2027-final-batch
+git fetch origin +refs/heads/campaign/iclr-2027-final-batch:refs/remotes/origin/campaign/iclr-2027-final-batch
 git show origin/campaign/iclr-2027-final-batch:scripts/provenance_snapshot.sh | bash
-git checkout campaign/iclr-2027-final-batch
-git pull
+git checkout -B campaign/iclr-2027-final-batch origin/campaign/iclr-2027-final-batch
+git log --oneline -1          # must show the newest commit of this branch on GitHub
+git status --short            # expect: M configs/stream_small.yaml (the local threshold edit) and ?? provenance/
+```
+
+These forms work on any clone, including a single-branch one. (A plain `git checkout <branch>`
+fails there; tested.) **If you already switched to this branch earlier and have no local commits,
+run `git pull` instead of the checkout line.** `-B` resets the local branch to GitHub's copy.
+
+Disk and tools. Each run keeps its final checkpoint (about 6 GB: weights, optimizer state,
+controller state), so the batch needs **about 250 GB free** (34 × 6 GB, plus 3 runs in flight):
+
+```bash
+df -h .
+command -v rsync tmux        # both must print a path
+```
+
+If there is less than 250 GB free, free space from **finished** runs only. This deletes the
+optimizer, controller and store state from their checkpoints (about 4.5 GB each). It keeps
+`base.pt` and `lora.pt`, which is all the weight-drift check needs. It never touches a run that is
+not `done`, because a crashed run may need that state to resume:
+
+```bash
+for r in runs/*_live/*-seed*; do
+  grep -q '"state": "done"' "$r/status.json" 2>/dev/null || continue
+  rm -f "$r"/checkpoints/step_*/{optimizer,controller,stores}.pt
+done
+df -h .
 ```
 
 `random_commit` reads TriHOPE's per-phase decision shares from the E1 report. Make sure the file is
@@ -107,11 +133,26 @@ doesn't pull code:
 push_results () {
   rsync -a --exclude events.jsonl --exclude checkpoints \
         $(ls -d runs/priority_s{1,2,3,4}_v1_live 2>/dev/null) results_live/
-  git add results_live provenance
-  git commit -q -m "final batch: $1" && git push origin campaign/iclr-2027-final-batch
+  git add results_live
+  find results_live -name '*.log' -size -20M -print0 | xargs -0 -r git add -f   # *.log is gitignored
+  [ -d provenance ] && git add provenance
+  git commit -q -m "final batch: $1"
+  git pull -q --rebase --autostash origin campaign/iclr-2027-final-batch && \
+    git push -q origin campaign/iclr-2027-final-batch
 }
 push_results "frozen_blocks x3"
+git log origin/campaign/iclr-2027-final-batch --oneline -1   # must show the commit you just made
 ```
+
+Three things this helper handles (all tested):
+- `git add` of a missing `provenance/` would make the whole add fail, so nothing would be pushed.
+- `*.log` is gitignored, so without `-f` the runs' `stdout.log` and `train.log` (what we need to
+  debug a crash) would be left out.
+- It rebases onto GitHub before pushing. If the lead pushes a script fix during the night, the
+  auto-push still goes through instead of being rejected every time. Your local `stream_small.yaml`
+  edit is kept. Nothing under `src/` or `configs/` will change during the batch.
+
+"nothing to commit" is harmless; a push that failed earlier is retried on the next call.
 
 Then run the Theorem-1 bit-identity check on the frozen runs (CPU, loads Qwen3-0.6B once):
 
@@ -142,7 +183,7 @@ cd /home/a6000/asif/Council-TriHOPE
 while true; do push_results "auto $(date -u +%H:%M)"; sleep 7200; done
 ```
 
-Nothing else will be pushed to this branch during the batch, so no pull is needed.
+Check in the morning with `git log origin/campaign/iclr-2027-final-batch --oneline -3` that the auto-pushes went through.
 
 ### Overnight (runs unattended; times approximate, ±1 h)
 
@@ -195,9 +236,13 @@ rsync -a --exclude events.jsonl --exclude checkpoints runs/priority_s{1,2,3,4}_v
 for d in runs/*_live; do
   rsync -am --include '*/' --include 'analysis_t2/**' --include 'weight_drift.json' --include 'analysis/**' \
         --exclude '*' "$d" results_live/; done
-git add results_live provenance
+git add results_live
+find results_live -name '*.log' -size -20M -print0 | xargs -0 -r git add -f
+[ -d provenance ] && git add provenance
 git commit -m "final batch: all priority runs, T2/T3/T4 reductions, provenance"
+git pull --rebase --autostash origin campaign/iclr-2027-final-batch
 git push origin campaign/iclr-2027-final-batch
+git log origin/campaign/iclr-2027-final-batch --oneline -1   # must show this commit
 ```
 
 **Must be pushed before Thu 12:00 UTC / 18:00 BDT.**
