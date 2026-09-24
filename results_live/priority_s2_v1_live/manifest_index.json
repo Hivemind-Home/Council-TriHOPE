@@ -1,0 +1,61 @@
+{
+  "experiment": "priority_s2_v1_live",
+  "base_config": "stream_small",
+  "updated": 1790250240.9496193,
+  "runs": [
+    {
+      "run_id": "surprise_gate_s4-seed2024",
+      "spec_id": "surprise_gate_s4",
+      "seed": 2024,
+      "dir": "runs/priority_s2_v1_live/surprise_gate_s4-seed2024",
+      "state": "done",
+      "updated": 1790245002.5655603,
+      "exit_code": 0
+    },
+    {
+      "run_id": "surprise_gate_s4-seed7",
+      "spec_id": "surprise_gate_s4",
+      "seed": 7,
+      "dir": "runs/priority_s2_v1_live/surprise_gate_s4-seed7",
+      "state": "done",
+      "updated": 1790245216.1832492,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p7-seed2024",
+      "spec_id": "molf_style_a0p7",
+      "seed": 2024,
+      "dir": "runs/priority_s2_v1_live/molf_style_a0p7-seed2024",
+      "state": "done",
+      "updated": 1790244916.2928429,
+      "exit_code": 0
+    },
+    {
+      "run_id": "molf_style_a0p7-seed7",
+      "spec_id": "molf_style_a0p7",
+      "seed": 7,
+      "dir": "runs/priority_s2_v1_live/molf_style_a0p7-seed7",
+      "state": "done",
+      "updated": 1790250240.9466782,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_cosine-seed2024",
+      "spec_id": "no_cosine",
+      "seed": 2024,
+      "dir": "runs/priority_s2_v1_live/no_cosine-seed2024",
+      "state": "done",
+      "updated": 1790250005.157604,
+      "exit_code": 0
+    },
+    {
+      "run_id": "no_cosine-seed7",
+      "spec_id": "no_cosine",
+      "seed": 7,
+      "dir": "runs/priority_s2_v1_live/no_cosine-seed7",
+      "state": "done",
+      "updated": 1790250178.1369627,
+      "exit_code": 0
+    }
+  ]
+}

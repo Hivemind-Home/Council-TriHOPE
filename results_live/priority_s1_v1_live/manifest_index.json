@@ -1,0 +1,16 @@
+{
+  "experiment": "priority_s1_v1_live",
+  "base_config": "stream_small",
+  "updated": 1790252627.9805229,
+  "runs": [
+    {
+      "run_id": "pgate_c0p35-seed1337",
+      "spec_id": "pgate_c0p35",
+      "seed": 1337,
+      "dir": "runs/priority_s1_v1_live/pgate_c0p35-seed1337",
+      "state": "done",
+      "updated": 1790252627.9784427,
+      "exit_code": 0
+    }
+  ]
+}

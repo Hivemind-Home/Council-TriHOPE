@@ -1,0 +1,15 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.policy.repetition_low=0.40
+- ++controller.policy.mode=surprise_only
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.consolidation.period=0
+- ++controller.writer.flag_p_for_consolidation=false
+- ++controller.policy.surprise_high=4.0
+- ++train.seed=7
+- ++checkpoint.dir=runs/priority_s2_v1_live/surprise_gate_s4-seed7/checkpoints
+- ++logging.path=runs/priority_s2_v1_live/surprise_gate_s4-seed7/metrics.jsonl
+- ++logging.events_path=runs/priority_s2_v1_live/surprise_gate_s4-seed7/events.jsonl
+- ++run.dir=runs/priority_s2_v1_live/surprise_gate_s4-seed7

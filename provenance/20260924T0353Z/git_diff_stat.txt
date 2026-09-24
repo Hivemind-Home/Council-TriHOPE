@@ -1,0 +1,19 @@
+ .gitignore                                 |   2 +-
+ analysis/run_report.py                     |   1 +
+ analysis/tables.py                         |  61 +++++++++
+ configs/experiments/ablation_grid.yaml     |  52 ++++++--
+ configs/experiments/bad_teacher_small.yaml |  34 ++++-
+ configs/experiments/p_study_small.yaml     |   5 +
+ configs/stream_small.yaml                  |   4 +-
+ docs/CHANGELOG_iclr.md                     |  50 ++++++++
+ docs/OPERATOR_GUIDE.md                     | 192 ++++++++++++++++++++++++++++-
+ docs/RUN_PIPELINE_2026-09-04.md            |   3 +-
+ docs/STATUS.md                             |  95 +++++++++++---
+ scripts/rollback_teacher.py                |  14 ++-
+ scripts/run_campaign.sh                    |  50 +++++---
+ scripts/run_experiment.py                  |  51 ++++++++
+ src/hivemind/checkpoint.py                 |  10 +-
+ src/hivemind/training.py                   |   4 +
+ tests/test_analysis.py                     |  24 ++++
+ tests/test_run_experiment.py               |  29 +++++
+ 18 files changed, 625 insertions(+), 56 deletions(-)

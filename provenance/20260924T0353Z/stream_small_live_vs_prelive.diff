@@ -1,0 +1,6 @@
+140,141c140,141
+<     surprise_high: 2.0
+<     repetition_low: 0.3
+---
+>     surprise_high: 1.25
+>     repetition_low: 0.40

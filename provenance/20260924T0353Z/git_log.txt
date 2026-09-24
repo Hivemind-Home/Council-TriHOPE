@@ -1,0 +1,30 @@
+95c8861 Ablations and E4 now ablate the shipped method (replay on, in-grid baseline); E5 gains a forced-merge arm and the fair SNR-MoLF
+b07a68f docs: E4/E5/ablation results recorded; replay-off confound in the grid and E4 flagged
+452b3a7 test: correct expected replay-delay median
+d0cf21e analysis: replay_timing table (same-phase vs cross-phase write-back, delay) in every report
+113bd7d run_campaign.sh: LIVE=1 runs every stage with live teacher models
+48901f8 runner: --live runs any manifest with live teacher models (runs/<experiment>_live)
+2056ce7 docs: E1/E2/E3 results recorded, operator guide progress log, live replication section
+31b5739 Operator guide, campaign script fixes, pooled ablation report
+c5ebaaf scripts/run_campaign.sh: the campaign as four idempotent stages with the two human stops
+4537eb1 docs: handoff for the GPU campaign operator (2026-09-09)
+371fad0 surprise_gate: no consolidation sweep (Titans reads surprise only)
+6ab1561 runner: force ++ on manifest overrides (baseline knobs are undeclared in the stream YAMLs)
+6a8e763 STATUS: point the restart note at the tracked-moments commit
+5788dac Tracked signal moments: the controller was reading dead Adam state
+3ff1675 diagnose_p: read thresholds from the hydra snapshot, --config override
+f9b422d Fix live-KD row mask (KD was zeroed with live teachers); add P-firing diagnostic
+71c6605 Live logit-KD tier, data-provenance audit, GPU-day runbook fixes
+3e9b33c runner: --skip flag and comma-list --only so random_routing can wait for trihope's shares
+c2a62fd Merge branch 'iclr2027-push': ICLR-2027 push (T1-T10)
+fb26400 docs: pipeline runbook verified command by command
+5e3efb3 docs: dated training-pipeline and test-command runbook (2026-09-04)
+7fecaa5 Audit: DDP replay/attribution test, default-behaviour and preflight checks recorded
+27575b9 T10: STATUS.md, rollback script forwards its threshold to the loop
+3304e14 T9: related-work notes (Part C) and the baseline fixes they forced
+29d19fd T6: gradient-routing baseline (teacher-labelled rank slices + slice ablation)
+149fd4b T5: teacher attribution, ledger completeness, pre-merge tagging, selective rollback
+a95270c T4: corrupted-teacher stream (batch-coherent, digest-tracked, attributable)
+2e83cff T8: E1/E2/E3 manifests, --concurrent shared-GPU runner mode, GPU runbook
+b95237a T7: permanent-write budget accounting, Pareto figure, multi-experiment report
+747b0c8 T2+T3: R->F replay promotion, and the four E1 baseline controllers

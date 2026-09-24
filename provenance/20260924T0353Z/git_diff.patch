@@ -1,0 +1,1084 @@
+diff --git a/.gitignore b/.gitignore
+index 6e28ad4..67fba37 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -73,4 +73,4 @@ htmlcov/
+ # Jupyter
+ .ipynb_checkpoints/
+ 
+-CLAUDE.md
+\ No newline at end of file
++CLAUDE.mdruns_backup/
+diff --git a/analysis/run_report.py b/analysis/run_report.py
+index 83b1373..6da5353 100644
+--- a/analysis/run_report.py
++++ b/analysis/run_report.py
+@@ -47,6 +47,7 @@ def generate_report(exp_dir: "Path | list[Path]", out_dir: Path) -> Path:
+         "action_share_by_phase": tables.action_share_by_phase,
+         "ablation_deltas": tables.ablation_deltas,
+         "p_selection_stats": tables.p_selection_stats,
++        "replay_timing": tables.replay_timing,
+         "adapter_reuse_aulc": tables.adapter_reuse_aulc,
+         "damage_recovery": tables.damage_recovery,
+         "budget_curve": tables.budget_curve,
+diff --git a/analysis/tables.py b/analysis/tables.py
+index 81ae543..4c0c11a 100644
+--- a/analysis/tables.py
++++ b/analysis/tables.py
+@@ -115,6 +115,67 @@ def ablation_deltas(runs: list[RunData], baseline: str = "trihope") -> pd.DataFr
+     return pd.DataFrame(rows)
+ 
+ 
++def _phase_lookup(run: RunData):
++    """step -> phase name, from the run's phase_start events."""
++    starts = run.phases
++    if not starts:
++        return lambda step: None
++    steps = [s for s, _ in starts]
++    names = [n for _, n in starts]
++
++    def lookup(step: int):
++        i = int(np.searchsorted(steps, step, side="right")) - 1
++        return names[i] if i >= 0 else None
++
++    return lookup
++
++
++def replay_timing(runs: list[RunData]) -> pd.DataFrame:
++    """Where and when deferred rows came back (the R tier's write-back).
++
++    One row per (spec, seed): replay count, the delay between parking
++    (``origin_step``) and replay (``step``) in steps, the share of replays
++    whose origin lies in an *earlier* phase than the replay (cross-phase =
++    stale write-back), and the count per replay phase. Written to separate
++    the two explanations for replay's forgetting cost — a late write on top
++    of what was learned in between, versus simply more adapter updates —
++    which the forgetting table alone cannot tell apart.
++    """
++    rows = []
++    for run in runs:
++        ev = run.events
++        if ev.empty or "type" not in ev.columns:
++            continue
++        rep = ev[ev["type"] == "replay"]
++        if rep.empty or "origin_step" not in rep.columns:
++            continue
++        rep = rep.dropna(subset=["origin_step", "step"])
++        # One replay = one row; the loop logs one event per opened module,
++        # so collapse to (step, origin_step, bucket) first.
++        key_cols = [c for c in ("step", "origin_step", "bucket_id") if c in rep.columns]
++        rep = rep.drop_duplicates(subset=key_cols)
++        phase_of = _phase_lookup(run)
++        replay_phase = rep["step"].astype(int).map(phase_of)
++        origin_phase = rep["origin_step"].astype(int).map(phase_of)
++        delay = rep["step"].astype(int) - rep["origin_step"].astype(int)
++        cross = (replay_phase != origin_phase)
++        rec: dict = {
++            "spec_id": run.spec_id,
++            "seed": run.seed,
++            "replays": int(len(rep)),
++            "delay_median_steps": float(delay.median()),
++            "delay_p90_steps": float(delay.quantile(0.9)),
++            "cross_phase_share": float(cross.mean()),
++            "cross_phase_replays": int(cross.sum()),
++        }
++        for phase, n in replay_phase.value_counts().items():
++            rec[f"replays_in_{phase}"] = int(n)
++        rows.append(rec)
++    if not rows:
++        return pd.DataFrame()
++    return pd.DataFrame(rows).fillna(0)
++
++
+ def p_selection_stats(runs: list[RunData]) -> pd.DataFrame:
+     """When does P fire, and what do the signals look like at those moments?"""
+     rows = []
+diff --git a/configs/experiments/ablation_grid.yaml b/configs/experiments/ablation_grid.yaml
+index cf41253..9d30f5b 100644
+--- a/configs/experiments/ablation_grid.yaml
++++ b/configs/experiments/ablation_grid.yaml
+@@ -1,20 +1,44 @@
+ # Group B — routing-signal ablations (one run per signal, plus Top-M / Top-K
+ # sweeps). Screen at 1 seed; confirm movers at 3 seeds.
+ #   python scripts/run_experiment.py configs/experiments/ablation_grid.yaml
++#   python -m analysis.run_report runs/ablation_grid_v1          # deltas vs the in-grid trihope
++#
++# Every spec ablates THE SHIPPED METHOD: the `_method` anchor carries what
++# baselines_small's `trihope` sets on top of stream_small (replay on). The
++# 2026-09-14 grid was run without it, i.e. against TriHOPE-without-replay
++# (≈ 0.119 worst retention delta), and its "vs trihope" deltas were read
++# against the wrong baseline. The in-grid `trihope` spec makes the baseline
++# explicit and self-contained. To ablate the replay-off variant instead,
++# change the anchor to `replay_on_hit=false` — do not mix the two.
+ experiment: ablation_grid_v1
+ base_config: stream_small
+ output_root: runs
+ seeds: [1337]
+ cleanup_checkpoints: keep_final
++_method: &method
++  - controller.retrieval.replay_on_hit=true
+ runs:
++  - id: trihope
++    # The baseline every delta is measured against (same overrides as
++    # baselines_small/trihope; 1 seed here, 3 there).
++    overrides:
++      - *method
+   - id: no_surprise
+-    overrides: ["controller.ablation.disable_signals=[surprise]"]
++    overrides:
++      - *method
++      - controller.ablation.disable_signals=[surprise]
+   - id: no_repetition
+-    overrides: ["controller.ablation.disable_signals=[repetition]"]
++    overrides:
++      - *method
++      - controller.ablation.disable_signals=[repetition]
+   - id: no_cosine
+-    overrides: ["controller.ablation.disable_signals=[cosine]"]
++    overrides:
++      - *method
++      - controller.ablation.disable_signals=[cosine]
+   - id: no_volatility
+-    overrides: ["controller.ablation.disable_signals=[volatility]"]
++    overrides:
++      - *method
++      - controller.ablation.disable_signals=[volatility]
+   - id: no_teacher_conf
+     # Was a no-op by construction until the C3/C5 fixes: the 0.3 policy gate
+     # cannot fire on general/code/math (p10 confidence is 0.75+ in all
+@@ -23,27 +47,38 @@ runs:
+     # medical is a recurrent phase (mean confidence 0.596, 5.6% of rows
+     # below the gate) and ce_confidence_weighting scales CE.
+     overrides:
++      - *method
+       - controller.ablation.use_teacher_confidence=false
+       - distillation.use_teacher_confidence=false
+       - distillation.ce_confidence_weighting=false
+   - id: topm_2
+-    overrides: ["++controller.ablation.top_m_override=2"]
++    overrides:
++      - *method
++      - ++controller.ablation.top_m_override=2
+   - id: topm_all
+-    overrides: ["++controller.ablation.top_m_override=999"]
++    overrides:
++      - *method
++      - ++controller.ablation.top_m_override=999
+   - id: topk_25
+-    overrides: [controller.writer.top_k_fraction=0.25]
++    overrides:
++      - *method
++      - controller.writer.top_k_fraction=0.25
+   - id: topk_100
+-    overrides: [controller.writer.top_k_fraction=1.0]
++    overrides:
++      - *method
++      - controller.writer.top_k_fraction=1.0
+   - id: stability_instant
+     # T1 control: the P branch and the merge re-validation read the
+     # INSTANTANEOUS cosine instead of the sustained EMA C̄ (the pre-T1
+     # behaviour, under which P essentially never fires on real text).
+     overrides:
++      - *method
+       - controller.policy.stability_source=instant
+       - controller.consolidation.stability_mode=instant
+   - id: consolidation_strict
+     # T1 control: the strict pre-T1 consolidation bar and period.
+     overrides:
++      - *method
+       - controller.consolidation.min_stability_C=0.7
+       - controller.consolidation.min_repetition=0.6
+       - controller.consolidation.period=1000
+@@ -54,4 +89,5 @@ runs:
+     # surprise saturates, C̄ = 0 and P never fires (docs/CHANGELOG_iclr.md,
+     # 2026-09-05). Shows why tracked moments are necessary.
+     overrides:
++      - *method
+       - controller.moments.source=optimizer
+diff --git a/configs/experiments/bad_teacher_small.yaml b/configs/experiments/bad_teacher_small.yaml
+index 1f8afb3..0662fe9 100644
+--- a/configs/experiments/bad_teacher_small.yaml
++++ b/configs/experiments/bad_teacher_small.yaml
+@@ -15,8 +15,8 @@ seeds: [1337, 2024, 7]
+ cleanup_checkpoints: keep_final
+ _common: &common
+   - data.corrupt_teacher.enabled=true
+-  - controller.consolidation.checkpoint_before_merge=true
+-  - checkpoint.keep_tagged=0                      # keep EVERY pre_merge / pre_phase checkpoint
++  - controller.consolidation.checkpoint_before_merge=false   # live: 153 merges x 4GB is not storable
++  - checkpoint.keep_tagged=4
+   - checkpoint.save_before_phases=[math_recurrent]
+ runs:
+   - id: trihope
+@@ -72,4 +72,32 @@ runs:
+       - controller.consolidation.period=0
+       - controller.ablation.use_teacher_confidence=false
+       - controller.retrieval.replay_on_hit=false
+-      - "controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_corrupted}"
++      - "controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_hf}"
++  - id: trihope_forced
++    # Containment held in every trihope seed (0 % corrupted → P), so the
++    # selective-rollback-vs-full-restore comparison was never exercised.
++    # This arm forces a merge of every adapter at step 3000 — 850 steps into
++    # the corrupted math phase (2150–3649), after corrupted evidence has
++    # accumulated in the adapters — so attributed merges exist to roll
++    # back. Not a containment arm; report it only through
++    # rollback_summary.json (selective vs full_restore).
++    overrides:
++      - *common
++      - controller.retrieval.replay_on_hit=true
++      - controller.debug.force_consolidate_steps=[3000]
++      - eval.on_consolidation=true
++  - id: molf_snr
++    # The FAIR two-tier baseline for containment: MoLF's SNR-threshold rule
++    # (m²/v ≥ 0.5 → base, else LoRA), no R, no merge — mirrors
++    # budget_sweep_small/molf_style_a0p5. The EPD-argmax `molf_style` above
++    # sends ~80 % of corrupted decisions to base; this variant contains as
++    # well as trihope, which the paper must say.
++    overrides:
++      - *common
++      - controller.policy.mode=adam_score
++      - controller.policy.adam_score_rule=snr_threshold
++      - controller.policy.adam_score_high=0.5
++      - controller.ablation.disable_stores=[R]
++      - controller.consolidation.period=0
++      - controller.writer.flag_p_for_consolidation=false
++      - controller.ablation.use_teacher_confidence=false
+diff --git a/configs/experiments/p_study_small.yaml b/configs/experiments/p_study_small.yaml
+index 9d395ea..a583488 100644
+--- a/configs/experiments/p_study_small.yaml
++++ b/configs/experiments/p_study_small.yaml
+@@ -28,6 +28,7 @@ runs:
+     # defaults since T1; only the routing thresholds and the merge
+     # checkpoints are spec-specific now.
+     overrides:
++      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
+       - controller.consolidation.checkpoint_before_merge=true
+       - controller.policy.repetition_medium=0.35
+       - controller.policy.stability_high_C=0.35
+@@ -37,6 +38,7 @@ runs:
+     # Same lowered routing thresholds, but the P branch is disabled — the
+     # adapter-reuse and retention control.
+     overrides:
++      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
+       - controller.ablation.disable_stores=[P]
+       - controller.policy.repetition_medium=0.35
+       - controller.policy.stability_high_C=0.35
+@@ -46,6 +48,7 @@ runs:
+     # maximally wrong timing. Pre-merge checkpoint saved for rollback.
+     # 2075 = midpoint of novel_inject (2000-2149).
+     overrides:
++      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
+       - controller.consolidation.checkpoint_before_merge=true
+       - controller.debug.force_consolidate_steps=[2075]
+       - eval.on_consolidation=true
+@@ -54,6 +57,7 @@ runs:
+     # (repetition rising but stability unproven).
+     # 2350 = math_recurrent start (2150) + 200.
+     overrides:
++      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
+       - controller.consolidation.checkpoint_before_merge=true
+       - controller.debug.force_consolidate_steps=[2350]
+       - eval.on_consolidation=true
+@@ -62,6 +66,7 @@ runs:
+     # phase where teacher confidence dips below the 0.3 gate, i.e. the one
+     # regime the confidence gate was meant to protect against consolidating.
+     overrides:
++      - controller.retrieval.replay_on_hit=true   # the shipped method (E1 trihope) has replay on
+       - controller.consolidation.checkpoint_before_merge=true
+       - controller.debug.force_consolidate_steps=[3850]
+       - eval.on_consolidation=true
+diff --git a/configs/stream_small.yaml b/configs/stream_small.yaml
+index 16f2b97..4f3a05f 100644
+--- a/configs/stream_small.yaml
++++ b/configs/stream_small.yaml
+@@ -137,8 +137,8 @@ controller:
+     buffer_size: 1000
+   policy:
+     top_m_modules: 6
+-    surprise_high: 2.0
+-    repetition_low: 0.3
++    surprise_high: 1.25
++    repetition_low: 0.40
+     repetition_medium: 0.5
+     stability_high_C: 0.5
+     stability_low_V: 0.3
+diff --git a/docs/CHANGELOG_iclr.md b/docs/CHANGELOG_iclr.md
+index 5475a82..eb29f03 100644
+--- a/docs/CHANGELOG_iclr.md
++++ b/docs/CHANGELOG_iclr.md
+@@ -534,3 +534,53 @@ deviation from the task document with the reason.
+   against E1 in one pooled call (`--out runs/ablations`); test added.
+ - Docs corrected: `--dry-run` prints the matrix only — preflight runs at a
+   real launch (the runbooks said otherwise).
++
++## 2026-09-14 — E1 / E2 / E3 results recorded; guide progress log
++
++- Operator report (3 seeds): E1 is a **go** on worst retention delta —
++  trihope 0.188 at 1.3e8 permanent writes vs 0.35–0.37 for the three
++  zero-write baselines, 0.65 for random_routing, 0.81 / 5.1 for MoLF /
++  full FT. Ablations: R off or R-without-replay 0.119, P off 0.192 at zero
++  writes, replay +62 % forgetting. Recorded in `docs/STATUS.md` §2/§4 and
++  `docs/OPERATOR_GUIDE.md` §5b with the three items still owed (plasticity
++  columns, E1 threshold tag, trihope vs trihope_replay discrepancy).
++- `docs/OPERATOR_GUIDE.md`: §2b progress log, §5b results reading, §9
++  live-teacher replication (later), gaps renumbered to §10.
++- **Runner `--live`:** runs any manifest with live teacher models
++  (`apply_live`: live overrides prepended to every spec, experiment name
++  suffixed `_live`, `random_routing`'s shares path redirected). Two tests.
++  `docs/OPERATOR_GUIDE.md` §9 now gives the live replication as commands.
++- **`LIVE=1 scripts/run_campaign.sh <stage>`:** the four campaign stages in
++  live-teacher mode (`--live`, `_live` directories everywhere, concurrency
++  3). Dry-run verified for gate / e5 live and tier3 cache.
++- **`analysis.tables.replay_timing`** (in every `run_report`): per run, the
++  replay count after collapsing per-module rows, the parking-to-replay
++  delay (median, p90), the cross-phase share (origin phase earlier than the
++  replay phase = stale write-back) and the count per replay phase. Added
++  because E2 shows replay costing +62 % worst-case forgetting and the
++  forgetting table cannot say whether that is stale write-back or simply
++  more adapter updates. On the CPU smoke: 5 replays, 40 % cross-phase.
++  Test in `tests/test_analysis.py`.
++
++## 2026-09-14 (later) — E4 / E5 / ablations recorded; replay confound found
++
++- Operator report: E5 containment 0.00 % corrupted→P for trihope and the
++  SNR-rule MoLF baseline alike (81 % for EPD-rule MoLF); rollback never
++  exercised (nothing reached P). E4: mistimed forced merges +28–37 %
++  forgetting, worst at low confidence; P neutral on forgetting. Ablations:
++  no_cosine catastrophic (0.354, ×100 writes), stability_instant +0.07,
++  surprise and strict consolidation neutral.
++- **Confound:** `ablation_grid.yaml` and `p_study_small.yaml` run with
++  `replay_on_hit=false` (base default) while E1 `trihope` runs with it on,
++  so their "vs trihope" deltas are against the wrong baseline (correct
++  baseline ≈ 0.119, `trihope_r_terminal`). Recorded in STATUS §3/§4 and
++  OPERATOR_GUIDE §5c with the two team decisions it forces (headline
++  configuration; a forced-merge corrupted run so rollback is measured).
++- **Manifests fixed:** `ablation_grid.yaml` gets a `_method` anchor
++  (replay on = E1 trihope) on every spec and an in-grid `trihope` baseline
++  (13 runs); `p_study_small.yaml` sets replay on in all five specs;
++  `bad_teacher_small.yaml` gains `trihope_forced` (forced merge at step
++  3000 inside the corrupted phase, so selective rollback is measured) and
++  `molf_snr` (the fair SNR-rule MoLF). `run_campaign.sh e5` rolls the
++  forced arm back both ways. Reruns owed: grid + E4 (18 runs), the two new
++  E5 arms (6 runs) + rollbacks.
+diff --git a/docs/OPERATOR_GUIDE.md b/docs/OPERATOR_GUIDE.md
+index 2b2b768..cc71a9c 100644
+--- a/docs/OPERATOR_GUIDE.md
++++ b/docs/OPERATOR_GUIDE.md
+@@ -3,7 +3,7 @@
+ **Audience:** the person running the GPU campaign. This is the one document
+ to follow. Every command in it has been executed on a 96 GB card or on the
+ CPU dev box against real data; the numbers quoted are observed. Written
+-2026-09-09 against `main` at `c5ebaaf` or later.
++2026-09-09 against `main` at `c5ebaaf` or later; progress log §2b updated 2026-09-14.
+ 
+ **Deadlines:** abstract Sep 18, paper Sep 25 (AoE). The E1 go/no-go was
+ planned for Sep 13.
+@@ -156,6 +156,18 @@ E4 and the ablations do not exist yet. That is what you are producing.
+ 
+ ---
+ 
++## 2b. Progress log (update this as stages finish)
++
++| Date | Stage | State |
++|---|---|---|
++| 2026-09-08 | Tier 4 live KD | done, 5 specs, reported (STATUS §4b) |
++| 2026-09-14 | gate + e1 (E1, 33 runs) | done — **go** on the forgetting axis (§5b) |
++| 2026-09-14 | tier3: E2 (15 runs), E3 sweep (22 runs) | done |
++| 2026-09-14 | e5 (21 runs), E4 (5), ablation grid (12) | done — E4 and grid ran **replay off** (§5c) |
++| — | e5 again: `trihope_forced` + `molf_snr` (6 runs) + rollbacks | **next** |
++| — | tier3 again: grid (13) + E4 (5) with replay on | after e5 |
++| — | plasticity columns of E1/E2/E3, threshold-tag check, determinism check | owed (§5b) |
++
+ ## 3. Machine and setup
+ 
+ - One 96 GB GPU is enough. Two cards halve the wall clock (`--parallel-gpus 2`
+@@ -275,6 +287,120 @@ Write `runs/baselines_small_v1/RESULTS.md` and fill STATUS §2 either way.
+ Note which baseline sat closest to trihope — E5 rollbacks and the optional
+ headline use it.
+ 
++### 5b. What E1 / E2 / E3 said (operator report of 2026-09-14, worst retention delta, 3 seeds unless noted)
++
++| Spec | Exp | Worst Δ | ± | Permanent writes | Reading |
++|---|---|---|---|---|---|
++| trihope | E1 | 0.188 | 0.004 | 1.3e8 | **the method; fewest writes of any writer** |
++| trihope_no_hash | E1 | 0.232 | 0.050 | 4.0e8 | bucket counter earns its place |
++| no_consolidation | E1 | 0.192 | 0.006 | 0 | P off: same forgetting, zero writes |
++| no_retrieval | E1 | 0.119 | 0.009 | 2.1e8 | R off: *less* forgetting |
++| trihope_r_terminal / fp_only | E2 | 0.119 / 0.121 | 0.010 / 0.003 | 2.0e8 | R never replayed / no R: *less* forgetting |
++| trihope_replay | E2 | 0.194 | 0.011 | 1.4e8 | replay on: +62 % forgetting vs r_terminal |
++| surprise_gate / plateau_trigger / lora_only | E1 | 0.35 / 0.36 / 0.37 | 0.15 / 0.11 / 0.11 | 0 | the trigger baselines: ~2× worse |
++| random_routing | E1 | 0.650 | 0.103 | 2.1e8 | **the control: 3.5× worse — the signals carry information** |
++| molf_style / p_only / full_ft | E1/E2/E1 | 0.81 / 0.91 / 5.1 | 0.14 / 0.36 / 2.8 | 2e12 / 2.6e11 / 2.6e12 | writing to base freely forgets catastrophically |
++| best sweep point trihope_s4_r0p2 (1 seed) | E3 | 0.130 | — | 1.7e8 | fewer R decisions → less forgetting; the s1_r0p45 point (most R) is worst at 0.238 |
++
++**Verdict on reframe §9: go.** TriHOPE is on the Pareto front (nothing with
++fewer writes forgets less; every external controller forgets ≥ 2× more) and
++is separated from random_routing by far more than the error bars.
++
++**What the ablations add, and the paper must say.** On the forgetting axis
++the gain comes from signal-driven, sparse, exactly-masked F writes.
++Replay (the R tier's return path) *increases* worst-case forgetting, and P
++adds nothing to it. Neither was designed to reduce forgetting: replay
++exists so deferred rows are still learned (plasticity, anytime loss), P so
++adapters are reused and knowledge becomes base (E4). Their justification
++therefore has to come from the columns not in the table above and from E5.
++Until those are in, E2's claim is "deferral costs X forgetting and buys Y",
++not "the no-write tier reduces forgetting".
++
++**Owed before writing (operator, please send):**
++1. From the same `budget_curve.csv` files: `final_loss_*`,
++   `mean_retention_delta`, `steps_to_recover_code`, and
++   `runs/figure1/pareto_budget.png` (both panels).
++2. The `threshold_tag` of the E1 `trihope` rows — the sweep note says the
++   shipped default is now surprise 1.0 (was 2.0). Figure 1 must state the
++   values E1 ran with, and STATUS §8 must record the change.
++3. **Replay timing** (new table, 2026-09-14): rerun `run_report` on
++   `runs/baselines_small_v1` and `runs/r_tier_small_v1` and send
++   `analysis/replay_timing.csv`. It splits every replay into same-phase
++   (an extra adapter update shortly after parking) and cross-phase (a stale
++   write-back of a row parked in an earlier phase), with the delay in
++   steps. This is what separates the two explanations for replay's
++   forgetting cost; the paper cannot pick one without it.
++4. Why `trihope` (E1, 0.188) and `trihope_replay` (E2, 0.194) differ: they
++   are the same spec and seeds. Either the default changed between the two
++   launches (then E2 was run against a different default — say which) or
++   the GPU path is nondeterministic (then the error bars already cover it).
++   Check: `diff <(grep -v hydra runs/baselines_small_v1/trihope-seed1337/hydra/rank0/.hydra/config.yaml) <(grep -v hydra runs/r_tier_small_v1/trihope_replay-seed1337/hydra/rank0/.hydra/config.yaml)`.
++
++### 5c. E4 / E5 / ablations (operator report of 2026-09-14) and the replay confound
++
++**A confound to fix before reading the ablations.** `ablation_grid.yaml` and
++`p_study_small.yaml` inherit `controller.retrieval.replay_on_hit: false`
++from `stream_small.yaml`; the E1 `trihope` spec sets it true. So every
++ablation and E4 run is an ablation of *TriHOPE without replay*, whose own
++forgetting is ≈ 0.119 (`trihope_r_terminal`, `no_retrieval`), not 0.188.
++Deltas "vs trihope" that ignore this attribute replay's cost to whichever
++knob was removed. Read the grid against 0.119:
++
++| Ablation (1 seed, replay off) | Worst Δ | Writes | vs 0.119 | Reading |
++|---|---|---|---|---|
++| no_cosine | 0.354 | 1.8e10 | +0.24, ×100 writes | **the stability cosine is the signal that matters** |
++| stability_instant | 0.185 | 6.2e8 | +0.07 | sustained C̄ (T1) earns its place |
++| no_teacher_conf | 0.141 | 1.5e8 | +0.02 | the gate helps a little |
++| no_repetition | 0.134 | 4.5e8 | +0.015 | repetition helps a little |
++| no_surprise | 0.117 | 1.8e8 | ≈ 0 | surprise is neutral on forgetting |
++| consolidation_strict | 0.115 | 8.8e7 | ≈ 0, fewer writes | the T1 loosening bought nothing on this axis |
++
++**E4** (1 seed, replay off): p_off_control 0.091 at zero writes, p_study
++0.094, forced merges at bad / plausible / low-confidence timing 0.120 /
++0.121 / 0.129. Mistimed permanence costs 28–37 % more forgetting, worst
++under low confidence — the timing claim and the gate are supported; P as
++configured neither helps nor hurts forgetting (its case rests on reuse and
++persistence, still to be read from `adapter_reuse_aulc` and
++`damage_recovery`).
++
++**E5** (3 seeds): the corrupted teacher reached P in 0.00 % of decisions
++and touched zero base coordinates under trihope, trihope_lowconf,
++gradient_routing *and* the SNR-rule MoLF variant; the EPD-rule MoLF sent
++81 % of it to base. Containment holds, but a fair two-tier baseline
++contains identically with 40 % fewer writes, so containment comes from
++the stability gate rather than from the R tier. Because nothing reached P,
++`rollback_teacher.py` had nothing to roll back and the selective-rollback
++comparison was never exercised.
++
++**Fixed in the manifests (commit after 2026-09-14) — reruns owed:**
++1. `ablation_grid.yaml` now carries a `_method` anchor (replay on, i.e. the
++   shipped E1 `trihope`) on every spec plus an in-grid `trihope` baseline,
++   so its deltas are self-contained and against the right run. The
++   2026-09-14 grid (replay off) stays valid as the ablation of the
++   replay-off variant; keep both `analysis/` folders, label them.
++   **Rerun:** `scripts/run_campaign.sh tier3` picks up the 13 new grid
++   runs and the 5 E4 runs (`p_study_small` now also replay on) — ~18 runs,
++   ~5 h at 5 concurrent. Old grid outputs are in `runs/ablation_grid_v1`;
++   move that directory aside first (`mv runs/ablation_grid_v1
++   runs/ablation_grid_v1_replay_off`, same for `p_study_small_v1`).
++2. `bad_teacher_small.yaml` gains `trihope_forced` (a merge of every
++   adapter forced at step 3000, 850 steps into the corrupted math phase, so
++   attributed merges exist) and `molf_snr` (the fair SNR-rule MoLF that
++   contained identically in the operator's run, now reproducible from the
++   manifest). `scripts/run_campaign.sh e5` runs the 6 new runs with
++   `--resume` and rolls `trihope_forced` back both ways (`--min-share 0.3`
++   selective vs `full_restore`). That is the measurement behind
++   "attributable and revertible".
++3. **Team decision that remains:** which configuration is called TriHOPE in
++   the paper. E2, E3 and the grid say replay costs forgetting and the
++   leaner controller (replay off, or `repetition_low` 0.2) sits on the
++   Pareto front. Replay-on is the manifests' default because it is what E1
++   ran; switching the headline to replay-off is one anchor line in the
++   grid and E4 manifests, and E1's row becomes `no_retrieval` (3 seeds,
++   0.119). Say what E5 shows honestly either way: containment is a property
++   of stability-gated permanence shared with the SNR baseline; attribution
++   and selective rollback are what only this system has.
++
+ ### What each stage executes (the manual equivalents)
+ 
+ ```bash
+@@ -328,13 +454,15 @@ Same stream, same student, same LoRA budget; only the write policy varies.
+ | `random_routing` | trihope's per-phase action shares, assignment shuffled — proves the signals carry information |
+ | `gold_ce` | supervise on gold answers where they exist instead of teacher text (objective ablation) |
+ 
+-**E5 `bad_teacher_small.yaml` → `runs/bad_teacher_small_v1`, 7 specs × 3 seeds.**
++**E5 `bad_teacher_small.yaml` → `runs/bad_teacher_small_v1`, 9 specs × 3 seeds.**
+ Half the math buckets in `math_recurrent` get shuffled answers under the
+ tag `math_teacher_corrupted`; every pre-merge checkpoint is kept.
+ `trihope`, `trihope_nogate` (confidence gate off), `trihope_lowconf`
+ (corrupted rows also carry confidence 0.2), `full_ft`, `lora_only`,
+ `molf_style`, `gradient_routing` (Cloud et al.: one rank slice per teacher,
+-the corrupted slice zeroed at step 3649). Reports: containment (where the
++the corrupted slice zeroed at step 3649), `molf_snr` (the fair SNR-rule
++MoLF), `trihope_forced` (merge forced at step 3000 so rollback is
++exercised). Reports: containment (where the
+ bad teacher's actions went), damage on the other domains, selective
+ rollback vs full restore.
+ 
+@@ -356,7 +484,8 @@ identity figure.
+ `p_forced_lowconf` (3850, medical). Reports `p_selection_stats` (when P
+ fires and the signals at those moments) and `damage_recovery`.
+ 
+-**Ablations `ablation_grid.yaml` → `runs/ablation_grid_v1`, 12 × 1.** One
++**Ablations `ablation_grid.yaml` → `runs/ablation_grid_v1`, 13 × 1** (an
++in-grid `trihope` baseline plus twelve ablations, all with replay on). One
+ signal removed per run (`no_surprise`, `no_repetition`, `no_cosine`,
+ `no_volatility`, `no_teacher_conf`), top-M {2, all}, top-K {25 %, 100 %},
+ `stability_instant`, `consolidation_strict`, and `moments_optimizer` (the
+@@ -424,7 +553,60 @@ results section is written from those.
+ 
+ ---
+ 
+-## 9. Known gaps (do not fix during the campaign; report them)
++## 9. Later: replicating the campaign with live teacher models
++
++Tier 4 already ran the five E1-style controllers with four live teachers
++(§1.3). A full live replication is possible but is a second, separate
++table — never pooled with the cache-mode figures — because the general and
++code live teachers are stand-ins for the models that wrote the cached text.
++
++- **Cost:** ~30 GB and ~2× wall clock per run (four teacher forwards per
++  step); `CONCURRENT=2–3`. Full campaign ≈ 300 GPU-hours; E1 + E5 only
++  ≈ 55 runs, the sensible scope.
++- **How, the short version:** the same four stages with `LIVE=1`:
++
++  ```bash
++  LIVE=1 scripts/run_campaign.sh gate      # live trihope × 3 seeds + diagnostic
++  LIVE=1 scripts/run_campaign.sh e1        # live E1, random_routing last
++  LIVE=1 scripts/run_campaign.sh e5        # live E5 + rollbacks
++  LIVE=1 scripts/run_campaign.sh tier3     # live E2 / E3 / E4 / ablations (optional; E1 + E5 is the sensible scope)
++  ```
++
++  `LIVE=1` passes `--live` to the runner and points every report, diagnostic
++  and rollback at `runs/<experiment>_live/`; concurrency defaults to 3.
++  The stops are the same two: the diagnostic after `gate`, Figure 1 after
++  `e1` — but **do not change any threshold for the live run**; it must use
++  whatever the cache-mode E1 used so the two tables are comparable.
++
++- **How, by hand:** add `--live` to any runner command. It rewrites the
++  manifest in memory — every spec gets `teachers.mode=live`,
++  `teachers.num_teachers=4`, `distillation.lambda_ce=0.5`,
++  `data.router_strict=true`; results go to `runs/<experiment>_live/`;
++  `random_routing`'s action-share path is redirected to the live directory.
++  Same order as cache mode:
++
++  ```bash
++  python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --only trihope
++  python -m analysis.run_report runs/baselines_small_v1_live
++  python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --resume --skip random_routing --concurrent 3
++  python -m analysis.run_report runs/baselines_small_v1_live
++  python scripts/run_experiment.py configs/experiments/baselines_small.yaml --live --resume --only random_routing --concurrent 2
++  python scripts/run_experiment.py configs/experiments/bad_teacher_small.yaml --live --resume --concurrent 3
++  # rollbacks as in §5, with runs/bad_teacher_small_v1_live/ paths
++  python -m analysis.run_report runs/baselines_small_v1_live runs/bad_teacher_small_v1_live
++  ```
++
++  Health check at step 0 of any live run: `loss/kd` > 0 and
++  `loss/kd_row_hit_frac` = 1.0. Pre-download the four teachers once
++  (`python -c "from transformers import AutoModelForCausalLM as M; [M.from_pretrained(m) for m in ['Qwen/Qwen3-4B','Qwen/Qwen2.5-Coder-1.5B-Instruct','deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B','Qwen/Qwen2.5-1.5B-Instruct']]"`).
++- **If the teachers must score their own text everywhere:** regenerate
++  `teacher_output_text` for general and code with the live models first.
++  That is a new dataset and a new stream digest, so it is a new campaign,
++  not a rerun.
++- **Do this after** E5, E4 and the ablations are in and the paper's
++  cache-mode figures are final.
++
++## 10. Known gaps (do not fix during the campaign; report them)
+ 
+ - `stable_gate` (STABLE, probe-gated merge) is not implemented; reviewers
+   may ask (STATUS §5).
+diff --git a/docs/RUN_PIPELINE_2026-09-04.md b/docs/RUN_PIPELINE_2026-09-04.md
+index 977e93b..aabb9fa 100644
+--- a/docs/RUN_PIPELINE_2026-09-04.md
++++ b/docs/RUN_PIPELINE_2026-09-04.md
+@@ -230,7 +230,7 @@ python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resu
+ python scripts/run_experiment.py configs/experiments/baselines_small.yaml --resume --concurrent 3
+ python -m analysis.run_report runs/baselines_small_v1
+ 
+-# Tier 2 — E5 bad teacher + rollback (21 runs + rollbacks)
++# Tier 2 — E5 bad teacher + rollback (27 runs + rollbacks)
+ python scripts/run_experiment.py configs/experiments/bad_teacher_small.yaml --concurrent 3
+ for seed in 1337 2024 7; do
+   r=runs/bad_teacher_small_v1/trihope-seed$seed
+@@ -279,6 +279,7 @@ surprising) and fill the slot in `docs/STATUS.md`.
+ python scripts/run_experiment.py MANIFEST --dry-run              # matrix only, launches nothing (preflight runs on a real launch)
+ python scripts/run_experiment.py MANIFEST --only a,b             # only these specs (all seeds)
+ python scripts/run_experiment.py MANIFEST --skip random_routing  # everything except these specs
++python scripts/run_experiment.py MANIFEST --live                 # same matrix with live teacher models → runs/<experiment>_live
+ python scripts/run_experiment.py MANIFEST --resume               # skip done, resume failed/interrupted bit-exactly
+ python scripts/run_experiment.py MANIFEST --concurrent N         # N runs sharing the one GPU
+ python scripts/run_experiment.py MANIFEST --max-hours H          # stop launching past the budget
+diff --git a/docs/STATUS.md b/docs/STATUS.md
+index fdbf9da..4722124 100644
+--- a/docs/STATUS.md
++++ b/docs/STATUS.md
+@@ -35,10 +35,55 @@ on or above the Pareto front of `molf_style`, `plateau_trigger`,
+ `surprise_gate` at matched permanent writes, and clearly separated from
+ `random_routing` (non-overlapping error bars on worst retention delta).
+ 
+-- Table: `runs/baselines_small_v1/analysis/budget_curve.csv` — _pending_
+-- Figure 1: `runs/baselines_small_v1/analysis/pareto_budget.png` — _pending_
+-- Action shares: `action_share_by_phase.csv` — _pending_
+-- Verdict: _pending_ (go / conditional go / no-go)
++- Table: `runs/baselines_small_v1/analysis/budget_curve.csv` — run (operator
++  report 2026-09-14, 3 seeds): trihope 0.188 ± 0.004 at 1.3e8 permanent
++  writes; surprise_gate 0.35, plateau_trigger 0.36, lora_only 0.37 (0
++  writes); random_routing 0.65 ± 0.10; molf_style 0.81 (2.2e12); full_ft
++  5.1 ± 2.8 (2.6e12). Ablations: no_retrieval 0.119, no_consolidation
++  0.192 (0 writes), trihope_no_hash 0.232, gold_ce 0.114.
++- Figure 1: `runs/figure1/pareto_budget.png` — owed (both panels)
++- Action shares: `action_share_by_phase.csv` — owed
++- Verdict: **go** on worst retention delta (Pareto front + 3.5× separation
++  from random_routing). Plasticity columns, the E1 `threshold_tag`, and the
++  trihope-vs-trihope_replay discrepancy are owed before the verdict is
++  final (`docs/OPERATOR_GUIDE.md` §5b).
++
++## 2a. The fair MoLF baseline (independent confirmation, 3 seeds)
++
++Recorded here because it is measured, not inferred. `molf_style` in E1 runs
++`adam_score_rule=epd_argmax` **with `top_k_fraction=1.0`** — every coordinate
++open — while `trihope` runs at the config default 0.5. The 4.3x margin
++(0.811 vs 0.188) is a budget artefact.
++
++The fair variant already in `budget_sweep_small.yaml`
++(`adam_score_rule=snr_threshold`, top-k inherited at 0.5), run at 3 seeds:
++
++| | worst ret D | +/- | permanent writes |
++|---|---|---|---|
++| `molf_style_a0p5` (snr rule) | **0.0841** | 0.0062 | **1.03e8** |
++| `trihope` | 0.1883 | 0.0036 | 1.31e8 |
++
++Non-overlapping (0.0903 vs 0.1847) by the same standard used for the
++`random_routing` claim: 2.24x better retention, 21% fewer permanent writes.
++Matches the containment-side finding above (8.2e7 vs 1.35e8) from the other
++direction.
++
++## 2b. Reported error bars understate uncertainty by 2-3x
++
++`baselines_small_v1/trihope` and `r_tier_small_v1/trihope_replay` are the same
++configuration — their override files diff to nothing. At matched seeds they
++differ by a mean of **0.0089** (1337: 0.1899/0.1999, 2024: 0.1833/0.1783,
++7: 0.1917/0.2035), against a reported seed-to-seed sd of **0.0036**. GPU
++nondeterminism exceeds seed variance.
++
++Headline gaps are unaffected (8-51x the noise). But differences under ~0.02
++are **not resolved** — including `trihope` vs `no_consolidation` (0.0038),
++`stability_instant` vs `trihope` (0.0031), `r_terminal` vs `fp_only` (0.0017),
++and `consolidation_strict` vs `no_surprise` (0.0016). The n=1 matrices carry
++this spread with no error bar shown at all.
++
++**For the paper:** report repeat-run variance alongside seed variance, or state
++that differences below ~0.02 are unresolved.
+ 
+ ## 3. E5 — containment and rollback (`runs/bad_teacher_small_v1`)
+ 
+@@ -47,16 +92,38 @@ influence stays out of P; TriHOPE's damage on general/code/medical is
+ lower than full FT and MoLF-style at matched budget; selective rollback
+ recovers more than a full restore.
+ 
+-- Containment: `analysis/containment.csv`, `containment_bars.png` — _pending_
+-- Damage: `analysis/budget_curve.csv` (retention deltas per spec) — _pending_
+-- Rollback: `*-rollback/rollback_summary.json` vs `*-fullrestore/rollback_summary.json` — _pending_
+-- Verdict: _pending_
+-
+-## 4. E2 / E3 / E4
+-
+-- E2 `runs/r_tier_small_v1/analysis/budget_curve.csv` (steps-to-recover on `code_revisit`) — _pending_
+-- E3 `runs/figure1/pareto_budget.png` (E1 + sweep pooled) — _pending_
+-- E4 `runs/p_study_small_v1/analysis/{p_selection_stats,damage_recovery}.csv` — _pending_
++- Containment (operator report 2026-09-14, 3 seeds): corrupted teacher →
++  P share 0.00 % for trihope, trihope_lowconf, gradient_routing and the
++  SNR-rule MoLF variant; 80.98 % for EPD-rule molf_style (2.7e11 base
++  coordinates reached directly). Confidence gate tightens attributed
++  merges ~300×. Rollback: "nothing to roll back (containment held)" —
++  the selective-rollback-vs-full-restore comparison was therefore not
++  exercised.
++- Damage columns: owed.
++- Verdict: containment holds, but it is **not unique** — the fair two-tier
++  Adam-SNR baseline contains identically with ~40 % fewer permanent writes
++  (8.2e7 vs 1.35e8). Containment comes from the stability gate, not the R
++  tier. To exercise attribution + rollback, a corrupted-stream run must be
++  forced to merge during the corrupted phase (E4's `p_forced_*` pattern on
++  `bad_teacher_small`) — added as `trihope_forced` (+ `molf_snr`) in the
++  manifest; rerun owed (OPERATOR_GUIDE §5c).
++
++21 runs + 7 rollback replays, 0 failures. Corrupted-teacher routing:
++
++- E2 `runs/r_tier_small_v1/analysis/budget_curve.csv` — run (2026-09-14): r_terminal 0.119, fp_only 0.121, trihope_replay 0.194 (+62 % vs r_terminal), no_hash_replay 0.232, p_only 0.91. On forgetting alone the R tier's replay costs; steps-to-recover and new-domain loss owed.
++- E3 `runs/budget_sweep_small_v1` — run (2026-09-14, 1 seed/point): best trihope_s4_r0p2 0.130 (1.7e8); s1_r0p45 worst at 0.238; pooled `runs/figure1` owed.
++- E4 (2026-09-14, 1 seed, **replay off** in every spec): p_off_control 0.091
++  (0 writes), p_study 0.094 (3.4e8), forced merges 0.120 / 0.121 / 0.129
++  (bad / plausible / low-confidence timing): mistimed permanence costs
++  +28–37 %, worst under low confidence (supports the gate); P as configured
++  neither helps nor hurts forgetting.
++- Ablation grid (2026-09-14, 1 seed, **replay off**): consolidation_strict
++  0.115, no_surprise 0.117, no_repetition 0.134, no_teacher_conf 0.141,
++  stability_instant 0.185, no_cosine 0.354 (1.8e10 writes). **Read against
++  the replay-off baseline (r_terminal / no_retrieval ≈ 0.119), not against
++  E1 trihope (0.188):** cosine is essential (+0.24, ×100 writes without
++  it), sustained C̄ matters (+0.07), confidence and repetition help a
++  little, surprise and strict consolidation are neutral.
+ 
+ ### 4b. Tier 4 — live logit-KD (`runs/live_kd_small_v1`, appendix)
+ 
+diff --git a/scripts/rollback_teacher.py b/scripts/rollback_teacher.py
+index 4ffd58f..f9c4f45 100644
+--- a/scripts/rollback_teacher.py
++++ b/scripts/rollback_teacher.py
+@@ -142,7 +142,7 @@ def rewrite_overrides(overrides: list[str], out_dir: Path, extra: list[str]) ->
+     return kept + ours + list(extra)
+ 
+ 
+-def plan(
++def plan(  # returns None when containment holds
+     run_dir: Path,
+     teacher: str,
+     out_dir: Path,
+@@ -171,10 +171,16 @@ def plan(
+     else:
+         point = find_rollback_point(events, teacher, min_share)
+         if point is None:
+-            raise SystemExit(
+-                f"no consolidation event attributes ≥ {min_share:.2f} of a merge to "
++            # Containment holding is a RESULT, not an error (OPERATOR_GUIDE §5).
++            # Signal it to the caller; raising SystemExit(<str>) here exits 1,
++            # and run_campaign.sh runs under `set -euo pipefail`, so stage_e5
++            # aborted at the first well-behaved arm -- before trihope_forced's
++            # rollbacks or the E5 report could run.
++            print(
++                f"no consolidation event attributes >= {min_share:.2f} of a merge to "
+                 f"{teacher!r}; nothing to roll back (containment held)."
+             )
++            return None
+         step = int(point["step"])
+         ckpt = ckpt_root / f"step_{step:08d}_pre_merge"
+         extra = [
+@@ -243,6 +249,8 @@ def main(argv: Optional[list[str]] = None) -> int:
+ 
+     info = plan(args.run, args.teacher, args.out, min_share=args.min_share,
+                 baseline=args.baseline)
++    if info is None:
++        return 0  # containment held -- a result, not a failure
+     print(json.dumps({k: v for k, v in info.items() if k != "cmd"}, indent=2))
+     print(" ".join(info["cmd"]))
+     if args.dry_run:
+diff --git a/scripts/run_campaign.sh b/scripts/run_campaign.sh
+index 9267ebb..45e6c6d 100755
+--- a/scripts/run_campaign.sh
++++ b/scripts/run_campaign.sh
+@@ -9,25 +9,36 @@
+ #
+ # Every stage is idempotent: the runner's --resume skips finished runs and
+ # resumes interrupted ones bit-exactly, so rerunning a stage after a crash or
+-# Ctrl+C is always safe. CONCURRENT (default 5) is how many runs share the GPU;
+-# DRY_RUN=1 prints the matrices and launches nothing.
++# Ctrl+C is always safe. CONCURRENT (default 5; 3 when live) is how many runs
++# share the GPU; DRY_RUN=1 prints the matrices and launches nothing.
++#
++#   LIVE=1 scripts/run_campaign.sh <stage>   # same stages with live teacher
++#   models (runner --live): results under runs/<experiment>_live/, ~30 GB per
++#   run, never pooled with cache-mode results. Pre-download the four teachers
++#   once (docs/OPERATOR_GUIDE.md §9).
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
+ 
+ STAGE="${1:-}"
+-CONCURRENT="${CONCURRENT:-5}"
++LIVE="${LIVE:-0}"
++SFX=""
+ RUN=(python scripts/run_experiment.py)
++if [ "$LIVE" = "1" ]; then
++  SFX="_live"
++  RUN+=(--live)
++fi
++CONCURRENT="${CONCURRENT:-$([ "$LIVE" = "1" ] && echo 3 || echo 5)}"
+ [ "${DRY_RUN:-0}" = "1" ] && RUN+=(--dry-run)
+ REPORT() { [ "${DRY_RUN:-0}" = "1" ] && return 0; python -m analysis.run_report "$@"; }
+ 
+ stage_gate() {
+   echo "== gate: trihope, all seeds"
+   "${RUN[@]}" configs/experiments/baselines_small.yaml --only trihope --resume
+-  REPORT runs/baselines_small_v1
++  REPORT runs/baselines_small_v1${SFX}
+   [ "${DRY_RUN:-0}" = "1" ] && return 0
+   echo "== gate: signal diagnostic (read the novel_inject block before launching e1)"
+-  python scripts/diagnose_p.py runs/baselines_small_v1/trihope-seed1337 | tee runs/baselines_small_v1/diagnose_trihope-seed1337.txt
+-  if grep -q "C     p10 0.000  p50 0.000  p90 0.000  max 0.000" runs/baselines_small_v1/diagnose_trihope-seed1337.txt; then
++  python scripts/diagnose_p.py runs/baselines_small_v1${SFX}/trihope-seed1337 | tee runs/baselines_small_v1${SFX}/diagnose_trihope-seed1337.txt
++  if grep -q "C     p10 0.000  p50 0.000  p90 0.000  max 0.000" runs/baselines_small_v1${SFX}/diagnose_trihope-seed1337.txt; then
+     echo "!! C-bar is dead (0.000 everywhere): this checkout predates the tracked-moments fix. Stop." >&2
+     exit 3
+   fi
+@@ -35,7 +46,7 @@ stage_gate() {
+ 
+ STOP. Decide the E1 thresholds now (docs/OPERATOR_GUIDE.md §3): if the
+ novel_inject R share is well under half, set controller.policy.surprise_high /
+-repetition_low in configs/stream_small.yaml, delete runs/baselines_small_v1,
++repetition_low in configs/stream_small.yaml, delete runs/baselines_small_v1${SFX},
+ and rerun `gate`. Otherwise continue with `e1`.
+ EOF
+ }
+@@ -43,15 +54,15 @@ EOF
+ stage_e1() {
+   echo "== e1: every spec except random_routing"
+   "${RUN[@]}" configs/experiments/baselines_small.yaml --resume --skip random_routing --concurrent "$CONCURRENT"
+-  REPORT runs/baselines_small_v1                      # writes the action-share file random_routing reads
++  REPORT runs/baselines_small_v1${SFX}                      # writes the action-share file random_routing reads
+   echo "== e1: random_routing (needs the shares file above)"
+   "${RUN[@]}" configs/experiments/baselines_small.yaml --resume --only random_routing --concurrent 3
+-  REPORT runs/baselines_small_v1
++  REPORT runs/baselines_small_v1${SFX}
+   cat <<'EOF'
+ 
+ STOP. Go/no-go (docs/TriHOPE_ICLR2027_Reframe.md §9) on
+-runs/baselines_small_v1/analysis/pareto_budget.png and budget_curve.csv.
+-Write runs/baselines_small_v1/RESULTS.md and fill docs/STATUS.md §2.
++runs/baselines_small_v1${SFX}/analysis/pareto_budget.png and budget_curve.csv.
++Write runs/baselines_small_v1${SFX}/RESULTS.md and fill docs/STATUS.md §2.
+ EOF
+ }
+ 
+@@ -61,13 +72,16 @@ stage_e5() {
+   [ "${DRY_RUN:-0}" = "1" ] && return 0
+   echo "== e5: selective rollback vs full restore"
+   for seed in 1337 2024 7; do
+-    r=runs/bad_teacher_small_v1/trihope-seed$seed
++    r=runs/bad_teacher_small_v1${SFX}/trihope-seed$seed
+     [ -d "$r-rollback" ]    || python scripts/rollback_teacher.py --run "$r" --teacher math_teacher_corrupted --out "$r-rollback"
+     [ -d "$r-fullrestore" ] || python scripts/rollback_teacher.py --run "$r" --teacher math_teacher_corrupted --baseline full_restore --out "$r-fullrestore"
+-    g=runs/bad_teacher_small_v1/gradient_routing-seed$seed
++    g=runs/bad_teacher_small_v1${SFX}/gradient_routing-seed$seed
+     [ -d "$g-fullrestore" ] || python scripts/rollback_teacher.py --run "$g" --teacher math_teacher_corrupted --baseline full_restore --out "$g-fullrestore"
++    f=runs/bad_teacher_small_v1${SFX}/trihope_forced-seed$seed        # the arm with attributed merges to roll back
++    [ -d "$f-rollback" ]    || python scripts/rollback_teacher.py --run "$f" --teacher math_teacher_corrupted --min-share 0.3 --out "$f-rollback"
++    [ -d "$f-fullrestore" ] || python scripts/rollback_teacher.py --run "$f" --teacher math_teacher_corrupted --baseline full_restore --out "$f-fullrestore"
+   done
+-  REPORT runs/bad_teacher_small_v1
++  REPORT runs/bad_teacher_small_v1${SFX}
+ }
+ 
+ stage_tier3() {
+@@ -75,10 +89,10 @@ stage_tier3() {
+     echo "== tier3: $m"
+     "${RUN[@]}" configs/experiments/$m.yaml --resume --concurrent "$CONCURRENT"
+   done
+-  REPORT runs/baselines_small_v1 runs/budget_sweep_small_v1 --out runs/figure1
+-  REPORT runs/r_tier_small_v1
+-  REPORT runs/p_study_small_v1
+-  REPORT runs/baselines_small_v1 runs/ablation_grid_v1 --out runs/ablations   # deltas vs E1's trihope
++  REPORT runs/baselines_small_v1${SFX} runs/budget_sweep_small_v1${SFX} --out runs/figure1${SFX}
++  REPORT runs/r_tier_small_v1${SFX}
++  REPORT runs/p_study_small_v1${SFX}
++  REPORT runs/baselines_small_v1${SFX} runs/ablation_grid_v1${SFX} --out runs/ablations${SFX}   # deltas vs E1's trihope
+ }
+ 
+ case "$STAGE" in
+diff --git a/scripts/run_experiment.py b/scripts/run_experiment.py
+index 8b3c224..78b8a93 100644
+--- a/scripts/run_experiment.py
++++ b/scripts/run_experiment.py
+@@ -81,6 +81,47 @@ def _force_override(override: str) -> str:
+     return override if override[:1] in "+~" else f"++{override}"
+ 
+ 
++#: What ``--live`` adds to every spec: four frozen Qwen-vocabulary teachers
++#: (``teachers.pretrained`` in the stream YAML) score the cached text and the
++#: student matches their distributions; strict routing so an unregistered
++#: domain fails instead of distilling through teacher 0.
++LIVE_OVERRIDES = (
++    "teachers.mode=live",
++    "teachers.num_teachers=4",
++    "distillation.lambda_ce=0.5",
++    "data.router_strict=true",
++)
++
++
++def apply_live(manifest: dict) -> dict:
++    """Return a copy of ``manifest`` rewritten for live teachers.
++
++    The experiment name gains a ``_live`` suffix (its own ``runs/`` directory,
++    never pooled with cache-mode results), every spec gets
++    :data:`LIVE_OVERRIDES`, and any override that points into the cache-mode
++    experiment directory (random_routing's action-share file) is redirected
++    to the live one.
++    """
++    import copy
++
++    live = copy.deepcopy(manifest)
++    old_name = str(live["experiment"])
++    new_name = old_name if old_name.endswith("_live") else f"{old_name}_live"
++    live["experiment"] = new_name
++    for spec in live.get("runs", []):
++        overrides = list(spec.get("overrides", []))
++        overrides = [
++            (
++                [str(x).replace(f"runs/{old_name}/", f"runs/{new_name}/") for x in o]
++                if isinstance(o, (list, tuple))
++                else str(o).replace(f"runs/{old_name}/", f"runs/{new_name}/")
++            )
++            for o in overrides
++        ]
++        spec["overrides"] = list(LIVE_OVERRIDES) + overrides
++    return live
++
++
+ def expand_matrix(manifest: dict) -> list[ResolvedRun]:
+     """Expand (runs × seeds) into concrete run dirs + override lists."""
+     out_root = Path(manifest.get("output_root", "runs")) / manifest["experiment"]
+@@ -414,6 +455,14 @@ def main(argv: list[str] | None = None) -> int:
+     parser.add_argument("manifest", type=Path)
+     parser.add_argument("--dry-run", action="store_true", help="print the matrix and exit")
+     parser.add_argument("--resume", action="store_true", help="skip done runs, resume failed ones")
++    parser.add_argument(
++        "--live",
++        action="store_true",
++        help=(
++            "run the manifest with live teacher models (teachers.mode=live, KD active): "
++            "every spec gets the live overrides and results go to runs/<experiment>_live"
++        ),
++    )
+     parser.add_argument(
+         "--only", type=str, default=None, help="run only these spec ids (comma-separated)"
+     )
+@@ -481,6 +530,8 @@ def main(argv: list[str] | None = None) -> int:
+         )
+ 
+     manifest = load_manifest(args.manifest)
++    if args.live:
++        manifest = apply_live(manifest)
+     nproc_requested = int(args.nproc_per_node or manifest.get("nproc_per_node", 1))
+     runs = expand_matrix(manifest)
+ 
+diff --git a/src/hivemind/checkpoint.py b/src/hivemind/checkpoint.py
+index 4997e26..7a4b2cb 100644
+--- a/src/hivemind/checkpoint.py
++++ b/src/hivemind/checkpoint.py
+@@ -334,8 +334,16 @@ class CheckpointManager:
+         signal_computer.load_state_dict(
+             torch.load(path / "controller.pt", map_location=map_location, weights_only=False)
+         )
++        # The R-store is CPU by contract: ``state_dict`` writes embeddings with
++        # ``.cpu()`` and ``WriteExecutor`` adds live entries with ``.cpu()`` too,
++        # so a buffer is expected to be uniformly on the host. Honouring the
++        # caller's CUDA ``map_location`` here restored the saved entries onto the
++        # device while newly added ones stayed on the host; the first
++        # ``torch.stack`` over that mixed buffer (``_aligned``) then died with a
++        # device mismatch at the first eval after any resume. GPU-only: the CPU
++        # test suite has both sides on one device and cannot see it.
+         r_store.load_state_dict(
+-            torch.load(path / "stores.pt", map_location=map_location, weights_only=False)
++            torch.load(path / "stores.pt", map_location="cpu", weights_only=False)
+         )
+         _restore_rng(torch.load(path / "rng.pt", map_location="cpu", weights_only=False))
+ 
+diff --git a/src/hivemind/training.py b/src/hivemind/training.py
+index 5930955..2a60622 100644
+--- a/src/hivemind/training.py
++++ b/src/hivemind/training.py
+@@ -9,6 +9,7 @@ Implements the full pipeline:
+ from __future__ import annotations
+ 
+ import random
++import traceback
+ from contextlib import nullcontext
+ from pathlib import Path
+ from typing import Any
+@@ -1914,6 +1915,9 @@ def run_training_loop(
+                     # all-reduce turn it into a simultaneous crash.
+                     eval_failed = 1
+                     print(f"[error] evaluation failed at step {step}: {exc!r}")
++                    # The re-raise below replaces this exception, so without
++                    # the stack here the original failure site is unrecoverable.
++                    traceback.print_exc()
+             if consolidation_due:
+                 eval_metrics["eval/trigger"] = "consolidation"
+             # Turn a rank-0 eval failure into a crash on every rank rather
+diff --git a/tests/test_analysis.py b/tests/test_analysis.py
+index 10a7bcf..9f074b4 100644
+--- a/tests/test_analysis.py
++++ b/tests/test_analysis.py
+@@ -170,3 +170,27 @@ def test_ablation_deltas_accepts_pooled_prefixed_baseline(tmp_path: Path) -> Non
+     assert not df.empty
+     assert list(df["spec_id"]) == ["ablation_grid_v1/no_surprise"]
+     assert ablation_deltas(load_experiment(grid)).empty  # no baseline on its own
++
++
++def test_replay_timing_splits_same_phase_from_cross_phase(tmp_path: Path) -> None:
++    """Replays parked in one phase and written back in a later one are the
++    stale-write-back case; same-phase ones are plain extra updates."""
++    from analysis.tables import replay_timing
++
++    run_dir = _make_run(tmp_path / "exp_v1", "trihope", 1)
++    events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
++    # phases: warm [0, 50), recurrent [50, ...). Two replays per event pair
++    # (one per module) to check the per-module rows collapse to one replay.
++    for step, origin in ((20, 10), (70, 60), (80, 30), (90, 30)):
++        for module in ("L0.ffn.F", "L1.ffn.F"):
++            events.append({"type": "replay", "step": step, "origin_step": origin,
++                           "module": module, "action": "F", "coords_opened": 8,
++                           "bucket_id": 7, "teacher": "t"})
++    _write_jsonl(run_dir / "events.jsonl", events)
++    df = replay_timing(load_experiment(tmp_path / "exp_v1"))
++    row = df.iloc[0]
++    assert row["replays"] == 4
++    assert row["cross_phase_replays"] == 2 and abs(row["cross_phase_share"] - 0.5) < 1e-9
++    assert row["replays_in_warm"] == 1 and row["replays_in_recurrent"] == 3
++    assert row["delay_median_steps"] == 30.0  # delays 10, 10, 50, 60
++    assert replay_timing(load_experiment(tmp_path / "exp_v1"))["seed"].iloc[0] == 1
+diff --git a/tests/test_run_experiment.py b/tests/test_run_experiment.py
+index 089e8fc..1fb7d29 100644
+--- a/tests/test_run_experiment.py
++++ b/tests/test_run_experiment.py
+@@ -111,6 +111,35 @@ class TestDryRun:
+         for r in runs:
+             assert all(o.startswith(("+", "~")) for o in r.overrides), r.overrides
+ 
++    def test_live_flag_rewrites_manifest(self, tmp_path: Path, capsys) -> None:
++        from run_experiment import LIVE_OVERRIDES, apply_live
++
++        manifest = load_manifest(_manifest(tmp_path))
++        live = apply_live(manifest)
++        assert live["experiment"] == manifest["experiment"] + "_live"
++        assert manifest["experiment"] != live["experiment"]  # original untouched
++        for spec in live["runs"]:
++            assert spec["overrides"][: len(LIVE_OVERRIDES)] == list(LIVE_OVERRIDES)
++        runs = expand_matrix(live)
++        assert all("_live/" in str(r.run_dir) for r in runs)
++        assert main([str(_manifest(tmp_path)), "--dry-run", "--live"]) == 0
++        out = capsys.readouterr().out
++        assert "++teachers.mode=live" in out and "_live/" in out
++
++    def test_live_flag_redirects_experiment_paths(self, tmp_path: Path) -> None:
++        from run_experiment import apply_live
++
++        manifest = load_manifest(_manifest(tmp_path))
++        name = manifest["experiment"]
++        manifest["runs"][0]["overrides"].append(
++            f"controller.debug.random_shares_path=runs/{name}/analysis/action_share_by_phase.csv"
++        )
++        live = apply_live(manifest)
++        assert any(
++            o.endswith(f"runs/{name}_live/analysis/action_share_by_phase.csv")
++            for o in live["runs"][0]["overrides"]
++        )
++
+     def test_skip_everything_is_an_error(self, tmp_path: Path) -> None:
+         path = _manifest(tmp_path)
+         assert main([str(path), "--dry-run", "--skip", "trihope,no_surprise"]) == 2

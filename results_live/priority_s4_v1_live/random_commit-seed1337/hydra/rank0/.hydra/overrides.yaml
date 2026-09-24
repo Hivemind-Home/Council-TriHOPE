@@ -1,0 +1,15 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.policy.surprise_high=1.25
+- ++controller.policy.repetition_low=0.40
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.debug.policy_override=random_commit
+- ++controller.debug.random_shares_path=runs/baselines_small_v1_live/analysis/action_share_by_phase.csv
+- ++controller.debug.random_shares_spec_id=trihope
+- ++train.seed=1337
+- ++checkpoint.dir=runs/priority_s4_v1_live/random_commit-seed1337/checkpoints
+- ++logging.path=runs/priority_s4_v1_live/random_commit-seed1337/metrics.jsonl
+- ++logging.events_path=runs/priority_s4_v1_live/random_commit-seed1337/events.jsonl
+- ++run.dir=runs/priority_s4_v1_live/random_commit-seed1337

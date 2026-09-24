@@ -1,0 +1,13 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.policy.surprise_high=1.25
+- ++controller.policy.repetition_low=0.40
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.ablation.disable_signals=[cosine]
+- ++train.seed=7
+- ++checkpoint.dir=runs/priority_s2_v1_live/no_cosine-seed7/checkpoints
+- ++logging.path=runs/priority_s2_v1_live/no_cosine-seed7/metrics.jsonl
+- ++logging.events_path=runs/priority_s2_v1_live/no_cosine-seed7/events.jsonl
+- ++run.dir=runs/priority_s2_v1_live/no_cosine-seed7

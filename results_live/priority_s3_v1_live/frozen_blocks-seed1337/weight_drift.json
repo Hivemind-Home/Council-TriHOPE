@@ -1,0 +1,24 @@
+{
+ "run": "runs/priority_s3_v1_live/frozen_blocks-seed1337",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 0.0,
+  "changed_coords": 0,
+  "coords": 440401920,
+  "max_abs": 0.0,
+  "l2_delta": 0.0
+ },
+ "shared": {
+  "sq_norm_delta": 33447.65665709556,
+  "changed_coords": 269542758,
+  "coords": 311230464,
+  "max_abs": 0.104248046875,
+  "l2_delta": 182.88700516191838
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 0,
+  "sum_frob_BA": 0.0
+ },
+ "unmatched_keys": []
+}

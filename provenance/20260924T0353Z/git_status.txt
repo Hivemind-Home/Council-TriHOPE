@@ -1,0 +1,24 @@
+ M .gitignore
+MM analysis/run_report.py
+MM analysis/tables.py
+MM configs/experiments/ablation_grid.yaml
+MM configs/experiments/bad_teacher_small.yaml
+MM configs/experiments/p_study_small.yaml
+ M configs/stream_small.yaml
+MM docs/CHANGELOG_iclr.md
+MM docs/OPERATOR_GUIDE.md
+MM docs/RUN_PIPELINE_2026-09-04.md
+MM docs/STATUS.md
+ M scripts/rollback_teacher.py
+MM scripts/run_campaign.sh
+MM scripts/run_experiment.py
+ M src/hivemind/checkpoint.py
+ M src/hivemind/training.py
+MM tests/test_analysis.py
+MM tests/test_run_experiment.py
+?? configs/experiments/bad_teacher_small.yaml.pre_live.bak
+?? configs/stream_small.yaml.pre_live_stop1.bak
+?? configs/stream_small.yaml.pre_stop1.bak
+?? docs/CAMPAIGN_NOTES_2026-09-12.md
+?? provenance/
+?? runs_backup/

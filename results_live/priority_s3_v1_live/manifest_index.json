@@ -1,0 +1,91 @@
+{
+  "experiment": "priority_s3_v1_live",
+  "base_config": "stream_small",
+  "updated": 1790234143.2719023,
+  "runs": [
+    {
+      "run_id": "frozen_blocks-seed1337",
+      "spec_id": "frozen_blocks",
+      "seed": 1337,
+      "dir": "runs/priority_s3_v1_live/frozen_blocks-seed1337",
+      "state": "done",
+      "updated": 1790227567.958991,
+      "exit_code": 0
+    },
+    {
+      "run_id": "frozen_blocks-seed2024",
+      "spec_id": "frozen_blocks",
+      "seed": 2024,
+      "dir": "runs/priority_s3_v1_live/frozen_blocks-seed2024",
+      "state": "done",
+      "updated": 1790227568.0431802,
+      "exit_code": 0
+    },
+    {
+      "run_id": "frozen_blocks-seed7",
+      "spec_id": "frozen_blocks",
+      "seed": 7,
+      "dir": "runs/priority_s3_v1_live/frozen_blocks-seed7",
+      "state": "done",
+      "updated": 1790227786.0788496,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_sentinel-seed1337",
+      "spec_id": "trihope_sentinel",
+      "seed": 1337,
+      "dir": "runs/priority_s3_v1_live/trihope_sentinel-seed1337",
+      "state": "done",
+      "updated": 1790233075.2115219,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_sentinel-seed2024",
+      "spec_id": "trihope_sentinel",
+      "seed": 2024,
+      "dir": "runs/priority_s3_v1_live/trihope_sentinel-seed2024",
+      "state": "done",
+      "updated": 1790233121.0302212,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_sentinel-seed7",
+      "spec_id": "trihope_sentinel",
+      "seed": 7,
+      "dir": "runs/priority_s3_v1_live/trihope_sentinel-seed7",
+      "state": "done",
+      "updated": 1790234143.2706335,
+      "exit_code": 0
+    },
+    {
+      "run_id": "periodic_merge-seed1337",
+      "spec_id": "periodic_merge",
+      "seed": 1337,
+      "dir": "runs/priority_s3_v1_live/periodic_merge-seed1337",
+      "state": "running",
+      "updated": 1790233075.213538,
+      "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.enabled=false ++train.trainable=lora ++controller.consolidation.trigger=plateau ++controller.consolidation.plateau_window=250 ++controller.consolidation.plateau_tolerance=10.0 ++controller.consolidation.plateau_min_gap=0 ++controller.consolidation.plateau_require_peak=false ++train.seed=1337 ++checkpoint.dir=runs/priority_s3_v1_live/periodic_merge-seed1337/checkpoints ++logging.path=runs/priority_s3_v1_live/periodic_merge-seed1337/metrics.jsonl ++logging.events_path=runs/priority_s3_v1_live/periodic_merge-seed1337/events.jsonl ++run.dir=runs/priority_s3_v1_live/periodic_merge-seed1337 ++hydra.run.dir=runs/priority_s3_v1_live/periodic_merge-seed1337/hydra/rank${oc.env:RANK,0}",
+      "started": 1790233075.2135284
+    },
+    {
+      "run_id": "periodic_merge-seed2024",
+      "spec_id": "periodic_merge",
+      "seed": 2024,
+      "dir": "runs/priority_s3_v1_live/periodic_merge-seed2024",
+      "state": "running",
+      "updated": 1790233121.031686,
+      "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.enabled=false ++train.trainable=lora ++controller.consolidation.trigger=plateau ++controller.consolidation.plateau_window=250 ++controller.consolidation.plateau_tolerance=10.0 ++controller.consolidation.plateau_min_gap=0 ++controller.consolidation.plateau_require_peak=false ++train.seed=2024 ++checkpoint.dir=runs/priority_s3_v1_live/periodic_merge-seed2024/checkpoints ++logging.path=runs/priority_s3_v1_live/periodic_merge-seed2024/metrics.jsonl ++logging.events_path=runs/priority_s3_v1_live/periodic_merge-seed2024/events.jsonl ++run.dir=runs/priority_s3_v1_live/periodic_merge-seed2024 ++hydra.run.dir=runs/priority_s3_v1_live/periodic_merge-seed2024/hydra/rank${oc.env:RANK,0}",
+      "started": 1790233121.0309832
+    },
+    {
+      "run_id": "periodic_merge-seed7",
+      "spec_id": "periodic_merge",
+      "seed": 7,
+      "dir": "runs/priority_s3_v1_live/periodic_merge-seed7",
+      "state": "running",
+      "updated": 1790234143.2717443,
+      "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.enabled=false ++train.trainable=lora ++controller.consolidation.trigger=plateau ++controller.consolidation.plateau_window=250 ++controller.consolidation.plateau_tolerance=10.0 ++controller.consolidation.plateau_min_gap=0 ++controller.consolidation.plateau_require_peak=false ++train.seed=7 ++checkpoint.dir=runs/priority_s3_v1_live/periodic_merge-seed7/checkpoints ++logging.path=runs/priority_s3_v1_live/periodic_merge-seed7/metrics.jsonl ++logging.events_path=runs/priority_s3_v1_live/periodic_merge-seed7/events.jsonl ++run.dir=runs/priority_s3_v1_live/periodic_merge-seed7 ++hydra.run.dir=runs/priority_s3_v1_live/periodic_merge-seed7/hydra/rank${oc.env:RANK,0}",
+      "started": 1790234143.2717378
+    }
+  ]
+}
