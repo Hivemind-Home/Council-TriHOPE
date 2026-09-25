@@ -1,0 +1,5 @@
+{"run": "runs/yoked_2x2_v1_live/yoked_blind_lo-seed1337", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 11.99553286383707, "changed_coords": 72019801, "coords": 440401920, "max_abs": 0.00341796875, "l2_delta": 3.463456779553784}, "shared": {"sq_norm_delta": 32113.060679553513, "changed_coords": 272837638, "coords": 311230464, "max_abs": 0.095947265625, "l2_delta": 179.20117376723155}, "adapters": {"modules": 196, "nonzero_B": 82, "sum_frob_BA": 2.144409022293985}, "unmatched_keys": []}
+44409022293985
+ },
+ "unmatched_keys": []
+}
