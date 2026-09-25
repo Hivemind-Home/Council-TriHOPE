@@ -60,3 +60,50 @@ main-conference as a negative result, not a spotlight.
   `topm_all`, 3 of 4 `pgate`, and `periodic_merge` (the merge baseline that actually fires).
 - The design-faithful variant and the frozen-shared-param TriHOPE arm were never run (already
   listed as limitations).
+
+---
+
+## Addendum (2026-09-25): the acquisition check closes the rescue
+
+Codex's independent read raised the strongest available rescue: forgetting alone
+rewards a model that learns nothing, so `frozen_blocks` might look good only
+because it acquires little. Separating acquisition from retention is standard
+practice (RWalk, arXiv:1801.10112). Measured from `retention.own_phase_loss`
+(each phase's own domain; lower = learned more):
+
+| arm | n | own-phase loss | forgetting |
+|---|---:|---:|---:|
+| `lora_only` | 3 | **1.1974 ± 0.008** | 0.1828 |
+| `trihope` | 3 | 1.2490 ± 0.007 | 0.0805 |
+| `trihope_sentinel` | 3 | 1.2458 ± 0.003 | 0.0838 |
+| `random_commit` | 3 | 1.2523 ± 0.007 | 0.0841 |
+| `frozen_blocks` | 3 | 1.2577 ± 0.003 | 0.0841 |
+| `surprise_gate_s4` | 2 | 1.2603 ± 0.012 | 0.0743 |
+| `no_cosine` | 2 | 1.2791 ± 0.007 | 0.1649 |
+| `gold_ce` | 3 | 1.5141 ± 0.003 | 0.0596 |
+
+`trihope` 1.2490 ± 0.007 vs `random_commit` 1.2523 ± 0.007: indistinguishable on
+acquisition too. `frozen_blocks` at 1.2577 is within ~1 sd, so it is **not**
+buying retention by refusing to learn. The rescue fails on its own terms — as
+Codex framed it, "if frozen blocks and surprise-only also match acquisition, the
+hidden-mechanism rescue has little support." They match.
+
+What the two axes together do show is a real stability/plasticity trade-off:
+`lora_only` acquires most (1.1974) and forgets most (0.1828); `gold_ce` retains
+best (0.0596) and acquires least (1.5141). `trihope` sits mid-front — but so does
+`surprise_gate_s4`, a single threshold, at equal or better forgetting. The full
+controller's complexity is unjustified by either axis.
+
+## The one experiment that would still settle it
+
+Codex's replay-yoked 2×2, which neither of us has run: full controller vs
+cosine-blind routing, crossed with two externally imposed replay budgets, with
+replay examples, timing, token counts and KD weighting held identical inside each
+budget, and the cosine-blind arm preserving the full arm's per-step R/F/P quotas
+while randomising only cosine's allocation among comparable modules. That
+separates "cosine carries information" from "cosine throttles write volume" —
+the confound the current `no_cosine` arm cannot resolve, since removing the signal
+also removes the throttle.
+
+This needs a new policy branch plus 4 arms x 3 seeds = 12 runs (~14 h). It is the
+honest route to a positive claim, and it may still come back null.
