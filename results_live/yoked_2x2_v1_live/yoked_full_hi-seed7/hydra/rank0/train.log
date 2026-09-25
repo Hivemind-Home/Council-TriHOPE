@@ -193,3 +193,5 @@
 [2026-09-25 13:45:35,664][hivemind.data.hf_loader][INFO] - Domain medical: 20000 rows from Layer C hivemind-research/medical-layerC-200k (validation)
 [2026-09-25 13:45:35,664][hivemind.data.hf_loader][INFO] - HivemindHFDataset loaded: 20000 rows across domains=['medical'] split=validation
 [2026-09-25 14:01:42,901][hivemind.checkpoint][INFO] - checkpoint saved: runs/yoked_2x2_v1_live/yoked_full_hi-seed7/checkpoints/step_00001000
+[2026-09-25 14:17:32,657][hivemind.checkpoint][INFO] - checkpoint saved: runs/yoked_2x2_v1_live/yoked_full_hi-seed7/checkpoints/step_00002000
+[2026-09-25 14:32:26,657][hivemind.checkpoint][INFO] - checkpoint saved: runs/yoked_2x2_v1_live/yoked_full_hi-seed7/checkpoints/step_00003000
