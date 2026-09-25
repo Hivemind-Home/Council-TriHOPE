@@ -23,15 +23,26 @@ def load(root: Path):
             s = json.load(open(d / "run_summary.json"))
         except Exception:
             continue
-        hist = (s.get("retention") or {}).get("history") or {}
-        # worst_retention_delta is derived by the report; recompute from history
-        # so this works before analysis/ has been generated.
+        # retention.history is a LIST of per-phase records, each with a
+        # {domain: loss} map -- not a dict of series. Recomputed here so this
+        # works before analysis/ exists: per domain, the worst rise above the
+        # best loss seen so far, which is what worst_retention_delta means.
+        hist = (s.get("retention") or {}).get("history") or []
         wd = []
         for dom in DOM:
-            pts = hist.get(dom) or []
-            if len(pts) >= 2:
-                best = min(p for p in pts)
-                wd.append(pts[-1] - best)
+            best = None
+            worst = 0.0
+            seen = False
+            for rec in hist:
+                v = (rec.get("loss") or {}).get(dom)
+                if v is None:
+                    continue
+                seen = True
+                if best is None or v < best:
+                    best = v
+                worst = max(worst, v - best)
+            if seen:
+                wd.append(worst)
         acq = (s.get("retention") or {}).get("own_phase_loss") or {}
         led = s.get("ledger_totals") or {}
         out.setdefault(spec, []).append({
