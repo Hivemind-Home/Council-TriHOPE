@@ -126,11 +126,10 @@ hydra:
     - ++logging.path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/metrics.jsonl
     - ++logging.events_path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/events.jsonl
     - ++run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337
-    - ++checkpoint.resume_from=latest
   job:
     name: train
     chdir: null
-    override_dirname: ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/checkpoints,++checkpoint.resume_from=latest,++controller.policy.repetition_low=0.40,++controller.policy.surprise_high=1.25,++controller.retrieval.replay_batches=1,++controller.retrieval.replay_on_hit=true,++data.router_strict=true,++distillation.lambda_ce=0.5,++logging.events_path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/events.jsonl,++logging.path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/metrics.jsonl,++run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337,++teachers.mode=live,++teachers.num_teachers=4,++train.seed=1337
+    override_dirname: ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/checkpoints,++controller.policy.repetition_low=0.40,++controller.policy.surprise_high=1.25,++controller.retrieval.replay_batches=1,++controller.retrieval.replay_on_hit=true,++data.router_strict=true,++distillation.lambda_ce=0.5,++logging.events_path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/events.jsonl,++logging.path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/metrics.jsonl,++run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337,++teachers.mode=live,++teachers.num_teachers=4,++train.seed=1337
     id: ???
     num: ???
     config_name: stream_small

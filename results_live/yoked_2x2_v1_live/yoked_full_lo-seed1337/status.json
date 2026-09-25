@@ -1,6 +1,7 @@
 {
-  "state": "failed",
+  "state": "running",
   "run_id": "yoked_full_lo-seed1337",
-  "updated": 1790327933.1384823,
-  "exit_code": 1
+  "updated": 1790330960.2423167,
+  "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.retrieval.replay_on_hit=true ++controller.retrieval.replay_batches=1 ++train.seed=1337 ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/checkpoints ++logging.path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/metrics.jsonl ++logging.events_path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/events.jsonl ++run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337 ++hydra.run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/hydra/rank${oc.env:RANK,0}",
+  "started": 1790330960.242261
 }

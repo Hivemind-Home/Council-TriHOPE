@@ -11,4 +11,3 @@
 - ++logging.path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/metrics.jsonl
 - ++logging.events_path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/events.jsonl
 - ++run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337
-- ++checkpoint.resume_from=latest

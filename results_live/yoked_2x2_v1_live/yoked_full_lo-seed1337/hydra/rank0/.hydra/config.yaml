@@ -263,7 +263,7 @@ checkpoint:
   save_every: 1000
   keep_last: 1
   keep_tagged: 4
-  resume_from: latest
+  resume_from: null
 eval:
   enabled: true
   interval: 250
