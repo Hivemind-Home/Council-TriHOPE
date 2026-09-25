@@ -1,113 +1,25 @@
 {
   "experiment": "yoked_2x2_v1_live",
   "base_config": "stream_small",
-  "updated": 1790330913.5925505,
+  "updated": 1790343805.5235813,
   "runs": [
-    {
-      "run_id": "yoked_full_lo-seed1337",
-      "spec_id": "yoked_full_lo",
-      "seed": 1337,
-      "dir": "runs/yoked_2x2_v1_live/yoked_full_lo-seed1337",
-      "state": "failed",
-      "updated": 1790330859.165181,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_full_lo-seed2024",
-      "spec_id": "yoked_full_lo",
-      "seed": 2024,
-      "dir": "runs/yoked_2x2_v1_live/yoked_full_lo-seed2024",
-      "state": "failed",
-      "updated": 1790330865.113824,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_full_lo-seed7",
-      "spec_id": "yoked_full_lo",
-      "seed": 7,
-      "dir": "runs/yoked_2x2_v1_live/yoked_full_lo-seed7",
-      "state": "failed",
-      "updated": 1790330877.2993536,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_full_hi-seed1337",
-      "spec_id": "yoked_full_hi",
-      "seed": 1337,
-      "dir": "runs/yoked_2x2_v1_live/yoked_full_hi-seed1337",
-      "state": "failed",
-      "updated": 1790330876.6690347,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_full_hi-seed2024",
-      "spec_id": "yoked_full_hi",
-      "seed": 2024,
-      "dir": "runs/yoked_2x2_v1_live/yoked_full_hi-seed2024",
-      "state": "failed",
-      "updated": 1790330901.5315425,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_full_hi-seed7",
-      "spec_id": "yoked_full_hi",
-      "seed": 7,
-      "dir": "runs/yoked_2x2_v1_live/yoked_full_hi-seed7",
-      "state": "failed",
-      "updated": 1790330895.2026772,
-      "exit_code": 1
-    },
     {
       "run_id": "yoked_blind_lo-seed1337",
       "spec_id": "yoked_blind_lo",
       "seed": 1337,
       "dir": "runs/yoked_2x2_v1_live/yoked_blind_lo-seed1337",
-      "state": "failed",
-      "updated": 1790330913.235975,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_blind_lo-seed2024",
-      "spec_id": "yoked_blind_lo",
-      "seed": 2024,
-      "dir": "runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024",
-      "state": "failed",
-      "updated": 1790330913.586468,
-      "exit_code": 1
-    },
-    {
-      "run_id": "yoked_blind_lo-seed7",
-      "spec_id": "yoked_blind_lo",
-      "seed": 7,
-      "dir": "runs/yoked_2x2_v1_live/yoked_blind_lo-seed7",
-      "state": "running",
-      "updated": 1790330913.2362938,
-      "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.retrieval.replay_on_hit=true ++controller.retrieval.replay_batches=1 ++controller.debug.policy_override=quota_shuffle ++train.seed=7 ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed7/checkpoints ++logging.path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed7/metrics.jsonl ++logging.events_path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed7/events.jsonl ++run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed7 ++hydra.run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed7/hydra/rank${oc.env:RANK,0}",
-      "started": 1790330913.2362869
+      "state": "done",
+      "updated": 1790343782.46561,
+      "exit_code": 0
     },
     {
       "run_id": "yoked_blind_hi-seed1337",
       "spec_id": "yoked_blind_hi",
       "seed": 1337,
       "dir": "runs/yoked_2x2_v1_live/yoked_blind_hi-seed1337",
-      "state": "running",
-      "updated": 1790330913.5867367,
-      "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.retrieval.replay_on_hit=true ++controller.retrieval.replay_batches=3 ++controller.debug.policy_override=quota_shuffle ++train.seed=1337 ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_blind_hi-seed1337/checkpoints ++logging.path=runs/yoked_2x2_v1_live/yoked_blind_hi-seed1337/metrics.jsonl ++logging.events_path=runs/yoked_2x2_v1_live/yoked_blind_hi-seed1337/events.jsonl ++run.dir=runs/yoked_2x2_v1_live/yoked_blind_hi-seed1337 ++hydra.run.dir=runs/yoked_2x2_v1_live/yoked_blind_hi-seed1337/hydra/rank${oc.env:RANK,0}",
-      "started": 1790330913.5867302
-    },
-    {
-      "run_id": "yoked_blind_hi-seed2024",
-      "spec_id": "yoked_blind_hi",
-      "seed": 2024,
-      "dir": "runs/yoked_2x2_v1_live/yoked_blind_hi-seed2024",
-      "state": "pending"
-    },
-    {
-      "run_id": "yoked_blind_hi-seed7",
-      "spec_id": "yoked_blind_hi",
-      "seed": 7,
-      "dir": "runs/yoked_2x2_v1_live/yoked_blind_hi-seed7",
-      "state": "pending"
+      "state": "done",
+      "updated": 1790343805.5221946,
+      "exit_code": 0
     }
   ]
 }
