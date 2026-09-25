@@ -192,3 +192,4 @@
 [2026-09-25 12:05:24,886][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/datasets/hivemind-research/medical-layerC-200k/resolve/c308f5d089bbe559c07b83c7d51c14899226e2fe/dataset_infos.json "HTTP/1.1 404 Not Found"
 [2026-09-25 12:05:24,891][hivemind.data.hf_loader][INFO] - Domain medical: 20000 rows from Layer C hivemind-research/medical-layerC-200k (validation)
 [2026-09-25 12:05:24,891][hivemind.data.hf_loader][INFO] - HivemindHFDataset loaded: 20000 rows across domains=['medical'] split=validation
+[2026-09-25 12:42:40,662][hivemind.checkpoint][INFO] - checkpoint saved: runs/yoked_2x2_v1_live/yoked_blind_lo-seed1337/checkpoints/step_00001000
