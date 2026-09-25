@@ -1,0 +1,16 @@
+{
+ "run": "periodic_merge-seed1337",
+ "controller_decisions": 0,
+ "decisions_by_action_surface": {},
+ "replay_writes_by_surface": {},
+ "replay_writes_total": 0,
+ "merges": {
+  "nominal": 424,
+  "effective": 424,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 3334471680,
+  "effective": 3334471680
+ }
+}

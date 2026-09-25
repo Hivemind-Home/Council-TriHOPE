@@ -1,0 +1,22 @@
+{
+ "run": "pgate_c0p35-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33077,
+  "P_base": 312,
+  "R_base": 2611
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1764
+ },
+ "replay_writes_total": 1764,
+ "merges": {
+  "nominal": 239,
+  "effective": 47,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1830813696,
+  "effective": 342884352
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "run": "trihope_lowconf-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33414,
+  "P_base": 107,
+  "R_base": 2479
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1818
+ },
+ "replay_writes_total": 1818,
+ "merges": {
+  "nominal": 163,
+  "effective": 41,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1248854016,
+  "effective": 298844160
+ }
+}

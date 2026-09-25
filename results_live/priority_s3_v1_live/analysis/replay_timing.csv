@@ -1,0 +1,4 @@
+spec_id,seed,replays,delay_median_steps,delay_p90_steps,cross_phase_share,cross_phase_replays,replays_in_medical_recurrent,replays_in_mixed_tail,replays_in_general_warm,replays_in_math_recurrent,replays_in_code_recurrent,replays_in_code_revisit
+trihope_sentinel,1337,268,99.5,676.5,0.09701492537313433,26,112,76,41,26,7,6
+trihope_sentinel,2024,277,115.0,541.8000000000002,0.09386281588447654,26,119,72,51,22,7,6
+trihope_sentinel,7,261,85.0,520.0,0.08045977011494253,21,108,75,42,26,8,2

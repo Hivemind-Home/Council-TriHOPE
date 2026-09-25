@@ -1,0 +1,22 @@
+{
+ "run": "trihope_replay-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33440,
+  "P_base": 64,
+  "R_base": 2496
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1530
+ },
+ "replay_writes_total": 1530,
+ "merges": {
+  "nominal": 105,
+  "effective": 20,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 736100352,
+  "effective": 150994944
+ }
+}

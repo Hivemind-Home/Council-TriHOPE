@@ -1,0 +1,22 @@
+{
+ "run": "no_teacher_conf-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33056,
+  "P_base": 77,
+  "R_base": 2867
+ },
+ "replay_writes_by_surface": {
+  "adapter": 2070
+ },
+ "replay_writes_total": 2070,
+ "merges": {
+  "nominal": 126,
+  "effective": 23,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 962592768,
+  "effective": 173015040
+ }
+}

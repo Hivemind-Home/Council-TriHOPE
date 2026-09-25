@@ -1,0 +1,22 @@
+{
+ "run": "random_routing-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33532,
+  "P_base": 80,
+  "R_base": 2388
+ },
+ "replay_writes_by_surface": {
+  "adapter": 7920
+ },
+ "replay_writes_total": 7920,
+ "merges": {
+  "nominal": 156,
+  "effective": 41,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1182793728,
+  "effective": 286261248
+ }
+}

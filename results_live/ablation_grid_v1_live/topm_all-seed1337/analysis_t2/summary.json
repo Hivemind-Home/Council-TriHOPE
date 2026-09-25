@@ -1,0 +1,25 @@
+{
+ "run": "topm_all-seed1337",
+ "controller_decisions": 672000,
+ "decisions_by_action_surface": {
+  "F_adapter": 312309,
+  "F_base": 311041,
+  "P_adapter": 16,
+  "P_base": 2,
+  "R_adapter": 23675,
+  "R_base": 24957
+ },
+ "replay_writes_by_surface": {
+  "adapter": 30352
+ },
+ "replay_writes_total": 30352,
+ "merges": {
+  "nominal": 0,
+  "effective": 0,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 0,
+  "effective": 0
+ }
+}

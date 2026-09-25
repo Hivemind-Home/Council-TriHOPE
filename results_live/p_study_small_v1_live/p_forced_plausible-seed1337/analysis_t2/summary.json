@@ -1,0 +1,22 @@
+{
+ "run": "p_forced_plausible-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33548,
+  "P_base": 87,
+  "R_base": 2365
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1596
+ },
+ "replay_writes_total": 1596,
+ "merges": {
+  "nominal": 181,
+  "effective": 34,
+  "forced": 56
+ },
+ "merged_coords": {
+  "nominal": 1387266048,
+  "effective": 245366784
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "run": "no_volatility-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33474,
+  "P_base": 77,
+  "R_base": 2449
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1590
+ },
+ "replay_writes_total": 1590,
+ "merges": {
+  "nominal": 91,
+  "effective": 13,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 682622976,
+  "effective": 103809024
+ }
+}

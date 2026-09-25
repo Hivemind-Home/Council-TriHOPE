@@ -1,0 +1,15 @@
+phase,action,surface,count,coords_opened
+code_recurrent,F,adapter,40157,7154860032
+code_recurrent,P,base,43843,352705314816
+code_revisit,F,adapter,10864,1918337024
+code_revisit,P,base,14336,116546076672
+general_warm,F,adapter,11739,2090860544
+general_warm,P,base,16261,130261450752
+math_recurrent,F,adapter,36121,6425837568
+math_recurrent,P,base,47879,384602996736
+medical_recurrent,F,adapter,35538,6312001536
+medical_recurrent,P,base,37262,301948993536
+mixed_tail,F,adapter,17736,3164733440
+mixed_tail,P,base,15864,127804637184
+novel_inject,F,adapter,5051,896925696
+novel_inject,P,base,3349,27622637568

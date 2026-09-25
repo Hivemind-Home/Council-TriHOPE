@@ -1,0 +1,19 @@
+{
+ "run": "fp_only-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 35879,
+  "P_base": 121
+ },
+ "replay_writes_by_surface": {},
+ "replay_writes_total": 0,
+ "merges": {
+  "nominal": 211,
+  "effective": 0,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1601175552,
+  "effective": 0
+ }
+}

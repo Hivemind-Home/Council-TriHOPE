@@ -1,0 +1,15 @@
+run,spec_id,seed,teacher,phase,R_count,F_count,P_count,replay_count,coords_opened_F,coords_opened_P,consolidations_attributed,merged_coords_attributed
+pgate_c0p35-seed1337,pgate_c0p35,1337,general_teacher_hf,general_warm,142,2766,92,252,21921792,670040064,3.0,18874368.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,code_teacher_hf,code_recurrent,76,8865,59,42,3670016,440401920,2.017812831628621,13739508.090442324
+pgate_c0p35-seed1337,pgate_c0p35,1337,general_teacher_hf,novel_inject,657,243,0,0,0,0,0.0,0.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,math_teacher_hf,math_recurrent,225,8755,20,168,14417920,173015040,13.0,106954752.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,medical_teacher_hf,medical_recurrent,907,6807,86,738,63094784,780140544,8.594414086217366,60362834.06921676
+pgate_c0p35-seed1337,pgate_c0p35,1337,code_teacher_hf,code_revisit,46,2607,47,60,5210112,380633088,1.43680024796725,10586750.128630145
+pgate_c0p35-seed1337,pgate_c0p35,1337,medical_teacher_hf,mixed_tail,141,777,0,264,23117824,0,0.0,0.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,general_teacher_hf,mixed_tail,397,424,1,198,17252352,9437184,0.0,0.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,math_teacher_hf,mixed_tail,20,951,7,42,3653632,66060288,0.0,0.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,code_teacher_hf,mixed_tail,0,882,0,0,0,0,0.0,0.0
+pgate_c0p35-seed1337,pgate_c0p35,1337,general_teacher_hf,code_recurrent,0,0,0,0,0,0,8.982187168371379,64903691.90955768
+pgate_c0p35-seed1337,pgate_c0p35,1337,math_teacher_hf,medical_recurrent,0,0,0,0,0,0,1.4055859137826352,8843181.930783242
+pgate_c0p35-seed1337,pgate_c0p35,1337,medical_teacher_hf,code_revisit,0,0,0,0,0,0,8.352323382705675,57292546.47230882
+pgate_c0p35-seed1337,pgate_c0p35,1337,math_teacher_hf,code_revisit,0,0,0,0,0,0,0.21087636932707354,1326719.399061033

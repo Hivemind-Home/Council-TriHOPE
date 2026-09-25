@@ -1,0 +1,23 @@
+{
+ "run": "p_forced_lowconf-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33497,
+  "P_base": 77,
+  "R_adapter": 1,
+  "R_base": 2425
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1758
+ },
+ "replay_writes_total": 1758,
+ "merges": {
+  "nominal": 169,
+  "effective": 34,
+  "forced": 56
+ },
+ "merged_coords": {
+  "nominal": 1302331392,
+  "effective": 251658240
+ }
+}

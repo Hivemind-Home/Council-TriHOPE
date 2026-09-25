@@ -1,0 +1,8 @@
+phase,action,surface,count,coords_opened
+code_recurrent,P,base,9000,62710087680
+code_revisit,P,base,2700,18953011200
+general_warm,P,base,3000,22869442560
+math_recurrent,P,base,9000,66698870784
+medical_recurrent,P,base,7800,57346621440
+mixed_tail,P,base,3600,26593984512
+novel_inject,P,base,900,6923747328

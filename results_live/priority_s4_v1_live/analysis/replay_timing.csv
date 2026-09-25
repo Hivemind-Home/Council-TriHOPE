@@ -1,0 +1,4 @@
+spec_id,seed,replays,delay_median_steps,delay_p90_steps,cross_phase_share,cross_phase_replays,replays_in_medical_recurrent,replays_in_mixed_tail,replays_in_general_warm,replays_in_math_recurrent,replays_in_code_recurrent,replays_in_code_revisit
+random_commit,1337,258,90.0,537.4000000000004,0.08527131782945736,22,115,71,38,26,7,1
+random_commit,2024,277,100.0,522.8,0.08664259927797834,24,102,75,44,25,3,28
+random_commit,7,282,68.0,500.40000000000003,0.08156028368794327,23,119,80,41,26,8,8

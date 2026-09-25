@@ -1,0 +1,22 @@
+{
+ "run": "random_commit-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33644,
+  "P_base": 71,
+  "R_base": 2285
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1692
+ },
+ "replay_writes_total": 1692,
+ "merges": {
+  "nominal": 218,
+  "effective": 37,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1686110208,
+  "effective": 267386880
+ }
+}

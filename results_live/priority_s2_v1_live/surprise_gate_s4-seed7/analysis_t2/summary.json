@@ -1,0 +1,22 @@
+{
+ "run": "surprise_gate_s4-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 35198,
+  "R_adapter": 1,
+  "R_base": 801
+ },
+ "replay_writes_by_surface": {
+  "adapter": 810
+ },
+ "replay_writes_total": 810,
+ "merges": {
+  "nominal": 0,
+  "effective": 0,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 0,
+  "effective": 0
+ }
+}

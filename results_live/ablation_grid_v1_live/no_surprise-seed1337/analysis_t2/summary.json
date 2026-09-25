@@ -1,0 +1,24 @@
+{
+ "run": "no_surprise-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_adapter": 1,
+  "F_base": 27514,
+  "P_base": 57,
+  "R_adapter": 2,
+  "R_base": 8426
+ },
+ "replay_writes_by_surface": {
+  "adapter": 5886
+ },
+ "replay_writes_total": 5886,
+ "merges": {
+  "nominal": 60,
+  "effective": 19,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 452984832,
+  "effective": 138412032
+ }
+}

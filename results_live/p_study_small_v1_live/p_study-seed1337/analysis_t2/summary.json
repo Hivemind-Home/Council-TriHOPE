@@ -1,0 +1,22 @@
+{
+ "run": "p_study-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 32806,
+  "P_base": 695,
+  "R_base": 2499
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1902
+ },
+ "replay_writes_total": 1902,
+ "merges": {
+  "nominal": 53,
+  "effective": 14,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 386924544,
+  "effective": 106954752
+ }
+}

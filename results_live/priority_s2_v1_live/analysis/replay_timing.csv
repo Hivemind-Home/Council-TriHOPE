@@ -1,0 +1,5 @@
+spec_id,seed,replays,delay_median_steps,delay_p90_steps,cross_phase_share,cross_phase_replays,replays_in_mixed_tail,replays_in_medical_recurrent,replays_in_general_warm,replays_in_math_recurrent,replays_in_code_revisit,replays_in_code_recurrent
+no_cosine,2024,341,123.0,749.0,0.1436950146627566,49,134,122,42,26,10,7
+no_cosine,7,300,76.0,478.8000000000004,0.06666666666666667,20,92,132,43,16,9,8
+surprise_gate_s4,2024,134,100.5,1948.8000000000013,0.15671641791044777,21,74,36,6,10,2,6
+surprise_gate_s4,7,135,94.0,2978.600000000007,0.14074074074074075,19,86,23,10,10,2,4

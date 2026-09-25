@@ -1,0 +1,22 @@
+{
+ "run": "trihope_s4_r0p45-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 35071,
+  "P_base": 77,
+  "R_base": 852
+ },
+ "replay_writes_by_surface": {
+  "adapter": 834
+ },
+ "replay_writes_total": 834,
+ "merges": {
+  "nominal": 159,
+  "effective": 22,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1173356544,
+  "effective": 166723584
+ }
+}

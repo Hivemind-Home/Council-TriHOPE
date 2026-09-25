@@ -1,0 +1,22 @@
+{
+ "run": "trihope_nogate-seed2024",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33488,
+  "P_base": 53,
+  "R_base": 2459
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1686
+ },
+ "replay_writes_total": 1686,
+ "merges": {
+  "nominal": 111,
+  "effective": 16,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 849346560,
+  "effective": 119537664
+ }
+}

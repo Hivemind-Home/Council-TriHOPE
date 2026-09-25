@@ -1,0 +1,22 @@
+{
+ "run": "random_commit-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33529,
+  "P_base": 81,
+  "R_base": 2390
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1548
+ },
+ "replay_writes_total": 1548,
+ "merges": {
+  "nominal": 243,
+  "effective": 36,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1874853888,
+  "effective": 264241152
+ }
+}

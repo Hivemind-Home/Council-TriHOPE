@@ -1,0 +1,22 @@
+{
+ "run": "topk_25-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33373,
+  "P_base": 104,
+  "R_base": 2523
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1644
+ },
+ "replay_writes_total": 1644,
+ "merges": {
+  "nominal": 85,
+  "effective": 22,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 625999872,
+  "effective": 163577856
+ }
+}

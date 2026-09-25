@@ -1,0 +1,22 @@
+{
+ "run": "trihope_no_hash_replay-seed2024",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 34950,
+  "P_base": 185,
+  "R_base": 865
+ },
+ "replay_writes_by_surface": {
+  "adapter": 726
+ },
+ "replay_writes_total": 726,
+ "merges": {
+  "nominal": 111,
+  "effective": 11,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 830472192,
+  "effective": 88080384
+ }
+}
