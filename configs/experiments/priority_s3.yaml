@@ -1,0 +1,56 @@
+# ICLR-2027 final batch, part 1 of 3 (3 seeds). docs/FINAL_BATCH_RUNBOOK.md.
+#
+#   python scripts/run_experiment.py configs/experiments/priority_s3.yaml --live --resume --concurrent 3
+#
+# Every spec pins the live thresholds (surprise_high 1.25, repetition_low
+# 0.40; CAMPAIGN_NOTES §10) explicitly, so the resolved config matches the
+# 115 committed live runs whether or not the box-local stream_small.yaml
+# still carries that edit. scripts/check_config_drift.py verifies it.
+#
+# Order is priority: frozen_blocks decides the paper's framing (DP1),
+# trihope_sentinel detects code/box drift and grows the reference pool.
+experiment: priority_s3_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_pin: &pin
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+runs:
+  - id: frozen_blocks
+    # Only the unrouted (shared) parameters train: tied embedding/LM head +
+    # norms. Every routed block is withheld (always_r opens nothing), replay
+    # is off (a replay micro-step would step the shared params again), and
+    # the consolidation sweep is off (it would "merge" zero adapters and
+    # count ~1e9 permanent writes that change nothing). Routed weights must
+    # end bit-identical to the pretrained ones; R-store entries are written
+    # but have no weight effect.
+    overrides:
+      - *pin
+      - controller.debug.policy_override=always_r
+      - controller.retrieval.replay_on_hit=false
+      - controller.ablation.disable_stores=[P]
+  - id: trihope_sentinel
+    # Byte-identical to baselines_small/trihope (live). Drift sentinel for
+    # this batch; joins the reference pool only if its resolved config
+    # hash matches.
+    overrides:
+      - *pin
+      - controller.retrieval.replay_on_hit=true
+  - id: periodic_merge
+    # LoRA-only + merge every adapter into base and reset it every 250
+    # steps. The plateau trigger is the only merge path that runs with the
+    # controller off (force_consolidate_steps is gated on controller.enabled);
+    # tolerance 10.0 always passes, so it fires whenever the 250-step window
+    # is full, i.e. every 250 steps. The Online-LoRA plateau_trigger spec
+    # never fired on this stream; this is the merge-schedule baseline that does.
+    overrides:
+      - *pin
+      - controller.enabled=false
+      - train.trainable=lora
+      - controller.consolidation.trigger=plateau
+      - controller.consolidation.plateau_window=250
+      - controller.consolidation.plateau_tolerance=10.0
+      - controller.consolidation.plateau_min_gap=0
+      - controller.consolidation.plateau_require_peak=false
