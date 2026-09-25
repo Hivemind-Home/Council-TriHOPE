@@ -1,0 +1,29 @@
+# Generalisation test 2: does the DP4 null survive a larger student?
+# Qwen3-1.7B, same tokenizer/vocab family (151936) as the 0.6B, so teachers,
+# data and router are unchanged. concurrent 1 only: one 1.7B live run needs
+# roughly 50-60 GB against the card's 97.9 GB, so two would OOM.
+experiment: student17_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_common: &common
+  - model.pretrained_name=Qwen/Qwen3-1.7B
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+runs:
+  - id: trihope17
+    overrides: [*common]
+  - id: random_commit17
+    overrides:
+      - *common
+      - controller.debug.policy_override=random_commit
+      - controller.debug.random_shares_path=runs/baselines_small_v1_live/analysis/action_share_by_phase.csv
+      - controller.debug.random_shares_spec_id=trihope
+  - id: frozen_blocks17
+    overrides:
+      - *common
+      - controller.ablation.disable_stores=[P]
+      - controller.debug.policy_override=always_r
+      - controller.retrieval.replay_on_hit=false

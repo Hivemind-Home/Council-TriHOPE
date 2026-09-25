@@ -8,6 +8,8 @@ Determines where knowledge should be stored for each selected module:
 
 from __future__ import annotations
 
+import random
+
 import csv
 import warnings
 from dataclasses import dataclass, field
@@ -179,6 +181,14 @@ class RFPPolicy:
             and teacher_confidence < ab.confidence_threshold
         )
 
+        # ``quota_shuffle``: the policy's own per-step label multiset, reassigned
+        # to different modules. See :meth:`_quota_shuffled`.
+        shuffled: list[str] | None = (
+            self._quota_shuffled(selected, step or 0, phase)
+            if self.override == "quota_shuffle"
+            else None
+        )
+
         # Step 2: Apply R/F/P policy to each selected module
         actions: list[StoreAction] = []
         for rank, sig in enumerate(selected):
@@ -197,6 +207,20 @@ class RFPPolicy:
                     store = "P"
                 if low_confidence and store == "P":
                     store = "F"
+            elif self.override == "quota_shuffle":
+                # Allocation control at FIXED per-step quota: same number of
+                # R / F / P writes as the real policy chose this step, but a
+                # permuted assignment of which module gets which. Isolates
+                # "the signals pick the right module" from "the signals set
+                # how much is written" -- the confound `no_cosine` cannot
+                # resolve, since deleting the signal also deletes its
+                # throttling effect on write volume.
+                store = shuffled[rank]  # type: ignore[index]
+                if low_confidence:
+                    if ab.confidence_gate == "force_r" and "R" not in ab.disable_stores:
+                        store = "R"
+                    elif store == "P":
+                        store = "F"
             elif self.override is not None:
                 store = self.override.removeprefix("always_").upper()
             else:
@@ -338,6 +362,24 @@ class RFPPolicy:
                 teacher_slot=slot,
             ))
         return actions
+
+    def _quota_shuffled(
+        self, selected: list["ModuleSignals"], step: int, phase: str | None
+    ) -> list[str]:
+        """The policy's own labels for ``selected``, permuted among them.
+
+        The returned list is a permutation of ``[self._classify(sig) for sig in
+        selected]``, so the per-step counts of R, F and P are identical to what
+        the real controller chose -- only the module each label lands on
+        changes. Deterministic in ``(seed, step, phase)`` so a rerun of the same
+        spec reproduces the same permutation.
+        """
+        labels = [self._classify(sig) for sig in selected]
+        if len(labels) < 2:
+            return labels
+        rng = random.Random((self.seed, step, phase or "", "quota_shuffle").__hash__())
+        rng.shuffle(labels)
+        return labels
 
     def _random_commit_draw(self, step: int, phase: str | None, module_rank: int) -> bool:
         """Bernoulli commit draw for ``policy_override="random_commit"``.

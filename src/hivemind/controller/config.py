@@ -348,7 +348,7 @@ class DebugConfig:
     """
 
     force_consolidate_steps: list[int] = field(default_factory=list)
-    policy_override: str | None = None  # None | always_p | always_f | always_r | random_matched | random_commit
+    policy_override: str | None = None  # None | always_p | always_f | always_r | random_matched | random_commit | quota_shuffle
     # Selective rollback (task T5): a P action is demoted to F while the
     # batch's teacher is listed, and on resume every module whose pending
     # attribution is dominated (share ≥ block_min_share) by a listed teacher
@@ -369,11 +369,12 @@ class DebugConfig:
 
     def __post_init__(self) -> None:
         if self.policy_override not in (
-            None, "always_p", "always_f", "always_r", "random_matched", "random_commit"
+            None, "always_p", "always_f", "always_r", "random_matched", "random_commit",
+            "quota_shuffle"
         ):
             raise ValueError(
                 f"Unknown policy_override '{self.policy_override}'; "
-                "allowed: always_p | always_f | always_r | random_matched | random_commit"
+                "allowed: always_p | always_f | always_r | random_matched | random_commit | quota_shuffle"
             )
         if self.random_unit not in ("module", "step"):
             raise ValueError(

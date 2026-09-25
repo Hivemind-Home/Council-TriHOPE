@@ -1,0 +1,47 @@
+# Replay-yoked 2x2: does the controller's ALLOCATION carry information, or does
+# it only set write volume?
+#
+#   python scripts/run_experiment.py configs/experiments/yoked_2x2.yaml --live --resume --concurrent 3
+#
+# no_cosine cannot answer this: deleting the signal also deletes its throttle on
+# how much gets written, and write volume is what tracks forgetting (replay count
+# correlates +0.74 across the 13 grid arms; cross-phase staleness does not, -0.17).
+#
+# Factor A, routing:  full controller  vs  quota_shuffle. quota_shuffle keeps the
+#   policy's OWN per-step R/F/P label multiset and permutes which module receives
+#   which label, so the number of writes per step is identical and only the
+#   allocation is destroyed.
+# Factor B, replay budget: replay_batches 1 vs 3, imposed externally and held
+#   identical across the two routing arms.
+#
+# Reading: full wins at BOTH fixed budgets -> allocation carries information.
+#   Only budget moves the metric -> the signals set volume, not choice.
+#   Neither moves it -> shared-parameter learning dominates; neither story wins.
+experiment: yoked_2x2_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_common: &common
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+runs:
+  - id: yoked_full_lo
+    overrides:
+      - *common
+      - controller.retrieval.replay_batches=1
+  - id: yoked_full_hi
+    overrides:
+      - *common
+      - controller.retrieval.replay_batches=3
+  - id: yoked_blind_lo
+    overrides:
+      - *common
+      - controller.retrieval.replay_batches=1
+      - controller.debug.policy_override=quota_shuffle
+  - id: yoked_blind_hi
+    overrides:
+      - *common
+      - controller.retrieval.replay_batches=3
+      - controller.debug.policy_override=quota_shuffle

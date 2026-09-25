@@ -1,0 +1,34 @@
+# Generalisation test 1: does the DP4 null survive a different task order?
+# math before code, math_revisit instead of code_revisit; identical step budget
+# and recurrence settings. Same four arms that define the null in order 1.
+experiment: order2_v1
+base_config: stream_small_order2
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_common: &common
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+runs:
+  - id: trihope
+    overrides: [*common]
+  - id: random_commit
+    overrides:
+      - *common
+      - controller.debug.policy_override=random_commit
+      - controller.debug.random_shares_path=runs/baselines_small_v1_live/analysis/action_share_by_phase.csv
+      - controller.debug.random_shares_spec_id=trihope
+  - id: frozen_blocks
+    overrides:
+      - *common
+      - controller.ablation.disable_stores=[P]
+      - controller.debug.policy_override=always_r
+      - controller.retrieval.replay_on_hit=false
+  - id: surprise_gate_s4
+    overrides:
+      - *common
+      - controller.policy.mode=surprise_only
+      - controller.policy.surprise_high=4.0
+      - controller.consolidation.period=0
+      - controller.writer.flag_p_for_consolidation=false
