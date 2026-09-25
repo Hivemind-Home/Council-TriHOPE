@@ -44,3 +44,54 @@ S3 teacher-conflict robustness under controlled disagreement, and S4
 recovery/transfer including within-phase collapses hidden by checkpoint-only
 evaluation (stability gaps, arXiv:2205.13452). Both are recorded as future work,
 not run.
+
+---
+
+# Results (computed after the rules above were committed)
+
+## S1 — matched-acquisition efficiency: NULL, trending negative
+
+| arm | acq (own-phase loss) | forgetting | coords opened (M) | replay rows |
+|---|---:|---:|---:|---:|
+| `lora_only` | 1.1974 | 0.1828 | 60,555 | 0 |
+| `trihope` | 1.2490 | 0.0805 | **686** | 1672 |
+| `random_commit` | 1.2523 | 0.0841 | 678 | 1634 |
+| `frozen_blocks` | 1.2577 | 0.0841 | **0** | 0 |
+| `surprise_gate_s4` | 1.2603 | 0.0743 | **69.5** | 807 |
+| `no_cosine` | 1.2791 | 0.1649 | 19,141 | 1923 |
+| `molf_style` | 1.3657 | 0.3026 | 1,507,660 | 0 |
+| `full_ft` | 1.4841 | 0.8725 | 2,642,412 | 0 |
+
+TriHOPE is dramatically cheaper than `full_ft` (3852x fewer coords), `molf_style`
+(2198x) and `lora_only` (88x) — but those are not the relevant comparisons, since
+they also forget far more. Against the arms that match it:
+
+- `surprise_gate_s4` opens **10x fewer** coordinates (69.5M vs 686M), forgets
+  **less** (0.0743 vs 0.0805), and gives up only 0.0113 of acquisition.
+- `frozen_blocks` opens **zero** routed coordinates for acquisition within 0.0087.
+
+So the 686M coordinates our controller commits do not buy efficiency either.
+**Wall-clock is unusable here**: 63.0 min for `trihope` vs 88–89 min for the
+others reflects how many runs shared the GPU during each batch, not the method.
+
+## S2 — functional interference: REFUTES the value of routing
+
+Pre-registered rule: "*Refutes the value of routing if `frozen_blocks` forgetting
+matches or beats `trihope`.*" It matches — 0.0841 ± 0.0152 vs 0.0805 ± 0.0101.
+
+`frozen_blocks` has **0 of 440,401,920 routed coordinates changed** and still
+reproduces our full forgetting number. So forgetting in this setting travels
+through the shared parameters, not through the routed weights our tri-store
+protects. Theorem 1 guarantees those weights are immutable; that immutability is
+not functional invariance, and the channel it closes is not the channel that
+carries the damage.
+
+## The one genuinely positive mechanism finding
+
+`no_cosine` opens **19,141M coordinates against `trihope`'s 686M — 28x more** —
+and its forgetting doubles (0.1649 vs 0.0805). Our cosine term is therefore doing
+volume control, not allocation: it decides *how much* gets written, and write
+volume is what tracks forgetting (+0.74 across the grid). That is consistent with
+Codex's "plasticity throttle" hypothesis and inconsistent with the paper's
+selection story. It is a real, mechanistic, defensible claim — and it is a claim
+about a throttle, not about intelligent routing.
