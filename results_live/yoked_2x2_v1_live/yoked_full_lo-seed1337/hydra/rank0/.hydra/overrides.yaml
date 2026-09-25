@@ -1,0 +1,14 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.policy.surprise_high=1.25
+- ++controller.policy.repetition_low=0.40
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.retrieval.replay_batches=1
+- ++train.seed=1337
+- ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/checkpoints
+- ++logging.path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/metrics.jsonl
+- ++logging.events_path=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337/events.jsonl
+- ++run.dir=runs/yoked_2x2_v1_live/yoked_full_lo-seed1337
+- ++checkpoint.resume_from=latest

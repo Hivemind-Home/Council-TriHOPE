@@ -1,7 +1,6 @@
 {
-  "state": "running",
+  "state": "done",
   "run_id": "periodic_merge-seed7",
-  "updated": 1790318388.5485926,
-  "cmd": "/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.enabled=false ++train.trainable=lora ++controller.consolidation.trigger=plateau ++controller.consolidation.plateau_window=250 ++controller.consolidation.plateau_tolerance=10.0 ++controller.consolidation.plateau_min_gap=0 ++controller.consolidation.plateau_require_peak=false ++train.seed=7 ++checkpoint.dir=runs/priority_s3_v1_live/periodic_merge-seed7/checkpoints ++logging.path=runs/priority_s3_v1_live/periodic_merge-seed7/metrics.jsonl ++logging.events_path=runs/priority_s3_v1_live/periodic_merge-seed7/events.jsonl ++run.dir=runs/priority_s3_v1_live/periodic_merge-seed7 ++hydra.run.dir=runs/priority_s3_v1_live/periodic_merge-seed7/hydra/rank${oc.env:RANK,0}",
-  "started": 1790318388.548577
+  "updated": 1790327833.8963037,
+  "exit_code": 0
 }

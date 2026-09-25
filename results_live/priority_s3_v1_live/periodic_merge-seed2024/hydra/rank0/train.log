@@ -198,3 +198,4 @@
 [2026-09-25 07:55:44,483][hivemind.checkpoint][INFO] - checkpoint saved: runs/priority_s3_v1_live/periodic_merge-seed2024/checkpoints/step_00003000
 [2026-09-25 08:19:23,690][hivemind.checkpoint][INFO] - checkpoint saved: runs/priority_s3_v1_live/periodic_merge-seed2024/checkpoints/step_00004000
 [2026-09-25 08:44:39,857][hivemind.checkpoint][INFO] - checkpoint saved: runs/priority_s3_v1_live/periodic_merge-seed2024/checkpoints/step_00005000
+[2026-09-25 09:17:15,474][hivemind.checkpoint][INFO] - checkpoint saved: runs/priority_s3_v1_live/periodic_merge-seed2024/checkpoints/step_00005999

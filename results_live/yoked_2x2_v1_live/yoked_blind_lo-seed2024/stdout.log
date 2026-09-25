@@ -1,0 +1,86 @@
+
+=== launch 2026-09-25 09:19:39 ===
+/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.retrieval.replay_on_hit=true ++controller.retrieval.replay_batches=1 ++controller.debug.policy_override=quota_shuffle ++train.seed=2024 ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/checkpoints ++logging.path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/metrics.jsonl ++logging.events_path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/events.jsonl ++run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024 ++hydra.run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/hydra/rank${oc.env:RANK,0}
+
+=== launch 2026-09-25 09:19:39 ===
+/home/a6000/miniconda3/envs/trihope/bin/python /home/a6000/asif/Council-TriHOPE/train.py --config-name stream_small ++teachers.mode=live ++teachers.num_teachers=4 ++distillation.lambda_ce=0.5 ++data.router_strict=true ++controller.policy.surprise_high=1.25 ++controller.policy.repetition_low=0.40 ++controller.retrieval.replay_on_hit=true ++controller.retrieval.replay_batches=1 ++controller.debug.policy_override=quota_shuffle ++train.seed=2024 ++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/checkpoints ++logging.path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/metrics.jsonl ++logging.events_path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/events.jsonl ++run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024 ++hydra.run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/hydra/rank${oc.env:RANK,0}
+[2026-09-25 09:19:41,687][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:41,741][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca/config.json?%2FQwen%2FQwen3-0.6B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f5c3703b78ae2a478ae15b247e9f855e0ce2107b%22 "HTTP/1.1 200 OK"
+[2026-09-25 09:19:42,018][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:42,039][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:42,072][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca/config.json?%2FQwen%2FQwen3-0.6B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f5c3703b78ae2a478ae15b247e9f855e0ce2107b%22 "HTTP/1.1 200 OK"
+[2026-09-25 09:19:42,094][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca/config.json?%2FQwen%2FQwen3-0.6B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f5c3703b78ae2a478ae15b247e9f855e0ce2107b%22 "HTTP/1.1 200 OK"
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 25004.86it/s]
+[2026-09-25 09:19:42,375][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:42,430][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca/config.json?%2FQwen%2FQwen3-0.6B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22f5c3703b78ae2a478ae15b247e9f855e0ce2107b%22 "HTTP/1.1 200 OK"
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[2026-09-25 09:19:42,602][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 14395.28it/s]
+[2026-09-25 09:19:42,656][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca/generation_config.json?%2FQwen%2FQwen3-0.6B%2Fresolve%2Fmain%2Fgeneration_config.json=&etag=%2220a8a9156fc8c3f25295ca067f61fdf120d517c5%22 "HTTP/1.1 200 OK"
+[2026-09-25 09:19:42,975][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:43,029][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-0.6B/c1899de289a04d12100db370d81485cdf75e47ca/generation_config.json?%2FQwen%2FQwen3-0.6B%2Fresolve%2Fmain%2Fgeneration_config.json=&etag=%2220a8a9156fc8c3f25295ca067f61fdf120d517c5%22 "HTTP/1.1 200 OK"
+Student model: 606,142,464 params
+[2026-09-25 09:19:56,117][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-4B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:56,171][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-4B/1cfa9a7208912126459214e8b04321603b3df60c/config.json?%2FQwen%2FQwen3-4B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22e49eccdc32f36da9c09cfa0e737084f9e0105e5e%22 "HTTP/1.1 200 OK"
+[2026-09-25 09:19:56,459][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-4B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:56,513][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-4B/1cfa9a7208912126459214e8b04321603b3df60c/config.json?%2FQwen%2FQwen3-4B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22e49eccdc32f36da9c09cfa0e737084f9e0105e5e%22 "HTTP/1.1 200 OK"
+Error executing job with overrides: ['++teachers.mode=live', '++teachers.num_teachers=4', '++distillation.lambda_ce=0.5', '++data.router_strict=true', '++controller.policy.surprise_high=1.25', '++controller.policy.repetition_low=0.40', '++controller.retrieval.replay_on_hit=true', '++controller.retrieval.replay_batches=1', '++controller.debug.policy_override=quota_shuffle', '++train.seed=2024', '++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/checkpoints', '++logging.path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/metrics.jsonl', '++logging.events_path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/events.jsonl', '++run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024']
+Traceback (most recent call last):
+  File "/home/a6000/asif/Council-TriHOPE/train.py", line 42, in main
+    run_training_loop(cfg, device=device, dist=dist_ctx)
+  File "/home/a6000/asif/Council-TriHOPE/src/hivemind/training.py", line 411, in run_training_loop
+    teachers = create_hf_live_teachers(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/asif/Council-TriHOPE/src/hivemind/teacher_hf.py", line 140, in create_hf_live_teachers
+    model = HFTeacher(
+            ^^^^^^^^^^
+  File "/home/a6000/asif/Council-TriHOPE/src/hivemind/teacher_hf.py", line 109, in __init__
+    self.hf_model = AutoModelForCausalLM.from_pretrained(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 402, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4313, in from_pretrained
+    loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4393, in _load_pretrained_model
+    caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/modeling_utils.py", line 5064, in caching_allocator_warmup
+    _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 7.47 GiB. GPU 0 has a total capacity of 94.97 GiB of which 3.06 GiB is free. Process 8078 has 798.00 MiB memory in use. Process 103726 has 3.27 GiB memory in use. Process 103865 has 4.32 GiB memory in use. Process 105127 has 4.45 GiB memory in use. Process 122621 has 28.51 GiB memory in use. Process 122859 has 27.73 GiB memory in use. Process 123091 has 20.04 GiB memory in use. Including non-PyTorch memory, this process has 1.69 GiB memory in use. Process 123690 has 550.00 MiB memory in use. Process 123710 has 550.00 MiB memory in use. Of the allocated memory 1.13 GiB is allocated by PyTorch, and 21.86 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Student model: 606,142,464 params
+[2026-09-25 09:19:59,849][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-4B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:19:59,902][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-4B/1cfa9a7208912126459214e8b04321603b3df60c/config.json?%2FQwen%2FQwen3-4B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22e49eccdc32f36da9c09cfa0e737084f9e0105e5e%22 "HTTP/1.1 200 OK"
+[2026-09-25 09:20:00,211][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-4B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+[2026-09-25 09:20:00,266][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-4B/1cfa9a7208912126459214e8b04321603b3df60c/config.json?%2FQwen%2FQwen3-4B%2Fresolve%2Fmain%2Fconfig.json=&etag=%22e49eccdc32f36da9c09cfa0e737084f9e0105e5e%22 "HTTP/1.1 200 OK"
+Error executing job with overrides: ['++teachers.mode=live', '++teachers.num_teachers=4', '++distillation.lambda_ce=0.5', '++data.router_strict=true', '++controller.policy.surprise_high=1.25', '++controller.policy.repetition_low=0.40', '++controller.retrieval.replay_on_hit=true', '++controller.retrieval.replay_batches=1', '++controller.debug.policy_override=quota_shuffle', '++train.seed=2024', '++checkpoint.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/checkpoints', '++logging.path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/metrics.jsonl', '++logging.events_path=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024/events.jsonl', '++run.dir=runs/yoked_2x2_v1_live/yoked_blind_lo-seed2024']
+Traceback (most recent call last):
+  File "/home/a6000/asif/Council-TriHOPE/train.py", line 42, in main
+    run_training_loop(cfg, device=device, dist=dist_ctx)
+  File "/home/a6000/asif/Council-TriHOPE/src/hivemind/training.py", line 411, in run_training_loop
+    teachers = create_hf_live_teachers(
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/asif/Council-TriHOPE/src/hivemind/teacher_hf.py", line 140, in create_hf_live_teachers
+    model = HFTeacher(
+            ^^^^^^^^^^
+  File "/home/a6000/asif/Council-TriHOPE/src/hivemind/teacher_hf.py", line 109, in __init__
+    self.hf_model = AutoModelForCausalLM.from_pretrained(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 402, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4313, in from_pretrained
+    loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4393, in _load_pretrained_model
+    caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
+  File "/home/a6000/miniconda3/envs/trihope/lib/python3.12/site-packages/transformers/modeling_utils.py", line 5064, in caching_allocator_warmup
+    _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 7.47 GiB. GPU 0 has a total capacity of 94.97 GiB of which 3.60 GiB is free. Process 8078 has 798.00 MiB memory in use. Process 103726 has 3.27 GiB memory in use. Process 103865 has 4.32 GiB memory in use. Process 105127 has 4.45 GiB memory in use. Process 122621 has 28.51 GiB memory in use. Process 122859 has 27.73 GiB memory in use. Process 123091 has 20.04 GiB memory in use. Including non-PyTorch memory, this process has 1.69 GiB memory in use. Process 123872 has 550.00 MiB memory in use. Of the allocated memory 1.13 GiB is allocated by PyTorch, and 21.86 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
