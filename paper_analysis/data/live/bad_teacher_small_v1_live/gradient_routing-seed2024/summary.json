@@ -1,0 +1,268 @@
+{
+ "retention": {
+  "own_phase_loss": {
+   "general": 1.6819402243527064,
+   "code": 1.0705558717923722,
+   "math": 0.7170179618536403,
+   "medical": 1.49429797903919
+  },
+  "own_phase_em": {
+   "code": 0.09375,
+   "math": 0.03125,
+   "medical": 0.015625
+  },
+  "history": [
+   {
+    "phase": "general_warm",
+    "step": 499,
+    "loss": {
+     "general": 1.5668097304926514,
+     "code": 1.3583590529606728,
+     "math": 0.8970205086429103,
+     "medical": 2.22751875696822
+    },
+    "em": {
+     "code": 0.109375,
+     "math": 0.03125,
+     "medical": 0.03125
+    },
+    "retention_delta": {}
+   },
+   {
+    "phase": "code_recurrent",
+    "step": 1999,
+    "loss": {
+     "general": 1.7139439419038338,
+     "code": 1.1333540664282995,
+     "math": 0.9308531983291829,
+     "medical": 2.351444689976184
+    },
+    "em": {
+     "code": 0.140625,
+     "math": 0.015625,
+     "medical": 0.015625
+    },
+    "retention_delta": {
+     "general": 0.14713421141118244
+    }
+   },
+   {
+    "phase": "novel_inject",
+    "step": 2149,
+    "loss": {
+     "general": 1.6125565434576423,
+     "code": 1.2642871840823213,
+     "math": 0.975746177028289,
+     "medical": 2.2717503071201803
+    },
+    "em": {
+     "code": 0.140625,
+     "math": 0.03125,
+     "medical": 0.015625
+    },
+    "retention_delta": {
+     "code": 0.13093311765402182
+    }
+   },
+   {
+    "phase": "math_recurrent",
+    "step": 3649,
+    "loss": {
+     "general": 1.6335720486111112,
+     "code": 1.2875725350065452,
+     "math": 0.7554020561907799,
+     "medical": 2.221879466584667
+    },
+    "em": {
+     "code": 0.0625,
+     "math": 0.03125,
+     "medical": 0.03125
+    },
+    "retention_delta": {
+     "general": 0.02101550515346884,
+     "code": 0.15421846857824573
+    }
+   },
+   {
+    "phase": "medical_recurrent",
+    "step": 4949,
+    "loss": {
+     "general": 1.7690238119779715,
+     "code": 1.3262446602398061,
+     "math": 0.8052265153643302,
+     "medical": 1.5377676370260598
+    },
+    "em": {
+     "code": 0.125,
+     "math": 0.0625,
+     "medical": 0.0
+    },
+    "retention_delta": {
+     "general": 0.15646726852032922,
+     "code": 0.19289059381150664,
+     "math": 0.04982445917355027
+    }
+   },
+   {
+    "phase": "code_revisit",
+    "step": 5399,
+    "loss": {
+     "general": 1.7262747155461253,
+     "code": 1.1498249128753064,
+     "math": 0.7931014500584925,
+     "medical": 1.6413551376014754
+    },
+    "em": {
+     "code": 0.109375,
+     "math": 0.03125,
+     "medical": 0.0625
+    },
+    "retention_delta": {
+     "general": 0.113718172088483,
+     "math": 0.037699393867712594,
+     "medical": 0.10358750057541566
+    }
+   },
+   {
+    "phase": "mixed_tail",
+    "step": 5999,
+    "loss": {
+     "general": 1.6819402243527064,
+     "code": 1.0705558717923722,
+     "math": 0.7170179618536403,
+     "medical": 1.49429797903919
+    },
+    "em": {
+     "code": 0.09375,
+     "math": 0.03125,
+     "medical": 0.015625
+    },
+    "retention_delta": {}
+   }
+  ]
+ },
+ "permanent_writes": {
+  "p_action_coords": 0,
+  "merged_coords": 0,
+  "unmasked_base_coords_total": 0,
+  "total": 0
+ },
+ "ledger_totals": {
+  "r_count": 0,
+  "f_count": 336000,
+  "p_count": 0,
+  "consolidations": 0,
+  "p_coords_opened": 0,
+  "merged_coords": 0,
+  "replay_count": 0,
+  "steps": 6000,
+  "coords_opened": 15138816000,
+  "unmasked_base_coords": 0,
+  "teachers": {
+   "code_teacher_hf": {
+    "r_count": 0,
+    "f_count": 117264,
+    "p_count": 0,
+    "replay_count": 0,
+    "coords_F": 5283446784,
+    "coords_P": 0,
+    "merged_coords": 0
+   },
+   "general_teacher_hf": {
+    "r_count": 0,
+    "f_count": 44912,
+    "p_count": 0,
+    "replay_count": 0,
+    "coords_F": 2023555072,
+    "coords_P": 0,
+    "merged_coords": 0
+   },
+   "math_teacher_hf": {
+    "r_count": 0,
+    "f_count": 92344,
+    "p_count": 0,
+    "replay_count": 0,
+    "coords_F": 4160651264,
+    "coords_P": 0,
+    "merged_coords": 0
+   },
+   "medical_teacher_hf": {
+    "r_count": 0,
+    "f_count": 81480,
+    "p_count": 0,
+    "replay_count": 0,
+    "coords_F": 3671162880,
+    "coords_P": 0,
+    "merged_coords": 0
+   }
+  }
+ },
+ "active_fraction_mean": 0.00560081466395112,
+ "indexed_coords": 450494464,
+ "extra": {
+  "stream_digest": "d63cf860ab05234f",
+  "world_size": 1,
+  "retrieval": {
+   "replay_on_hit": false,
+   "replayed_total": 0,
+   "buffer_size": 0
+  },
+  "corrupt_teacher": {
+   "enabled": true,
+   "domain": "math",
+   "phase": "math_recurrent",
+   "fraction": 0.5,
+   "mode": "shuffle",
+   "confidence": null,
+   "tag": "math_teacher_corrupted",
+   "selection": "bucket+batch",
+   "corrupted_rows": 364,
+   "corrupted_rows_by_phase": {
+    "general_warm": 0,
+    "code_recurrent": 0,
+    "novel_inject": 0,
+    "math_recurrent": 1505,
+    "medical_recurrent": 0,
+    "code_revisit": 0,
+    "mixed_tail": 0
+   }
+  }
+ },
+ "interrupted": false,
+ "profile": {
+  "wall_clock_s": 2254.19155978295,
+  "steps": 2999,
+  "tokens": 1907774,
+  "tokens_per_sec": 846.3229274905519,
+  "section_totals_s": {
+   "data": 17.95474211196415,
+   "teacher": 65.48880403640214,
+   "forward": 150.3059617165709,
+   "backward": 145.17440419644117,
+   "signals": 657.4251562420977,
+   "policy_write": 188.85149266419467,
+   "optimizer": 239.7536904310109,
+   "consolidation": 0.010968628455884755
+  },
+  "controller_fraction": 0.37542843857344355,
+  "final_peak_mem_gb": 28.856648704,
+  "phase_peak_mem_gb": {
+   "math_recurrent": 28.133560832,
+   "medical_recurrent": 28.133561344,
+   "code_revisit": 28.856219648,
+   "mixed_tail": 28.856648704
+  }
+ },
+ "final_metrics": {
+  "loss/kd": 1.6881742477416992,
+  "loss/ce": 0.5621519088745117,
+  "loss/reg": 6.2047576904296875,
+  "loss/total": 2.0312976837158203,
+  "loss/kd_row_hit_frac": 1.0,
+  "loss/teacher_conf_mean": 0.8691999912261963,
+  "signals/surprise_mean": 1.0257485902735166,
+  "signals/repetition_mean": 0.39634609221757866,
+  "signals/stability_C_mean": 0.03641498014414018,
+  "signals/stability_adam_mean": 0.041489254334379756
+ }
+}

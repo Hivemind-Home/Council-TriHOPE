@@ -1,0 +1,6 @@
+- ++controller.retrieval.replay_on_hit=true
+- ++train.seed=2024
+- ++checkpoint.dir=runs/baselines_small_v1/trihope-seed2024/checkpoints
+- ++logging.path=runs/baselines_small_v1/trihope-seed2024/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/trihope-seed2024/events.jsonl
+- ++run.dir=runs/baselines_small_v1/trihope-seed2024

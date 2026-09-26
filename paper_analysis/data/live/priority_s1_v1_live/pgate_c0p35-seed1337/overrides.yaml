@@ -1,0 +1,14 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.policy.surprise_high=1.25
+- ++controller.policy.repetition_low=0.40
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.policy.stability_high_C=0.35
+- ++controller.consolidation.min_stability_C=0.25
+- ++train.seed=1337
+- ++checkpoint.dir=runs/priority_s1_v1_live/pgate_c0p35-seed1337/checkpoints
+- ++logging.path=runs/priority_s1_v1_live/pgate_c0p35-seed1337/metrics.jsonl
+- ++logging.events_path=runs/priority_s1_v1_live/pgate_c0p35-seed1337/events.jsonl
+- ++run.dir=runs/priority_s1_v1_live/pgate_c0p35-seed1337

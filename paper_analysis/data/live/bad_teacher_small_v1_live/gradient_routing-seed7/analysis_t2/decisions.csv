@@ -1,0 +1,8 @@
+phase,action,surface,count,coords_opened
+code_recurrent,F,adapter,84000,3784704000
+code_revisit,F,adapter,25200,1135411200
+general_warm,F,adapter,28000,1261568000
+math_recurrent,F,adapter,120300,5420236800
+medical_recurrent,F,adapter,72800,3280076800
+mixed_tail,F,adapter,33600,1513881600
+novel_inject,F,adapter,8400,378470400

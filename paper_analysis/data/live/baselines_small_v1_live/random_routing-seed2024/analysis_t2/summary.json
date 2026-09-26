@@ -1,0 +1,22 @@
+{
+ "run": "random_routing-seed2024",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33591,
+  "P_base": 69,
+  "R_base": 2340
+ },
+ "replay_writes_by_surface": {
+  "adapter": 7638
+ },
+ "replay_writes_total": 7638,
+ "merges": {
+  "nominal": 181,
+  "effective": 55,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1406140416,
+  "effective": 399507456
+ }
+}

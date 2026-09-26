@@ -1,0 +1,2 @@
+spec_id,seed,p_decisions,consolidations,forced_consolidations,first_p_step,first_merge_step,mean_S_at_P,mean_C_at_P,mean_V_at_P,mean_R_at_P
+pgate_c0p35,1337,312,239,0,36,250,0.383174641025641,0.5593168461538461,0.1576741217948718,0.5323845224358974

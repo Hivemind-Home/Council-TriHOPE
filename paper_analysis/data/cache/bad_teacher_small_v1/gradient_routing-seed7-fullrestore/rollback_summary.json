@@ -1,0 +1,49 @@
+{
+  "mode": "full_restore",
+  "phase": "math_recurrent",
+  "skip_range": [
+    2150,
+    3649
+  ],
+  "restore_step": 2149,
+  "teacher": "math_teacher_corrupted",
+  "checkpoint": "runs/bad_teacher_small_v1/gradient_routing-seed7/checkpoints/step_00002149_pre_phase_math_recurrent",
+  "original_run": "runs/bad_teacher_small_v1/gradient_routing-seed7",
+  "out": "runs/bad_teacher_small_v1/gradient_routing-seed7-fullrestore",
+  "original": {
+    "final_loss": {
+      "general": 1.4397329225143625,
+      "code": 0.9885552626738432,
+      "math": 0.5469924387979708,
+      "medical": 1.3565079758927414
+    },
+    "worst_retention_delta": 3.7723565757239217,
+    "permanent_writes": {
+      "p_action_coords": 0,
+      "merged_coords": 0,
+      "unmasked_base_coords_total": 0,
+      "total": 0
+    }
+  },
+  "rollback": {
+    "final_loss": {
+      "general": 1.4080347202530725,
+      "code": 0.9471812564988117,
+      "math": 0.5055025531359773,
+      "medical": 1.3069522583987916
+    },
+    "worst_retention_delta": 0.27673410199188586,
+    "permanent_writes": {
+      "p_action_coords": 0,
+      "merged_coords": 0,
+      "unmasked_base_coords_total": 0,
+      "total": 0
+    }
+  },
+  "final_loss_delta": {
+    "general": -0.03169820226128994,
+    "code": -0.04137400617503151,
+    "math": -0.04148988566199352,
+    "medical": -0.049555717493949825
+  }
+}

@@ -1,0 +1,23 @@
+{
+ "run": "stability_instant-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_adapter": 2,
+  "F_base": 33065,
+  "P_base": 384,
+  "R_base": 2549
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1866
+ },
+ "replay_writes_total": 1866,
+ "merges": {
+  "nominal": 88,
+  "effective": 21,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 679477248,
+  "effective": 166723584
+ }
+}

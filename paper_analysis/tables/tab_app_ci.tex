@@ -1,0 +1,21 @@
+% GENERATED
+\begin{tabular}{@{}l r r l l@{}}
+\toprule
+Arm & $n$ & $\Delta$\Mone & 95\% CI & $\Delta$Final (95\% CI) \\
+\midrule
+Controller, no bucket-id recurrence & 6 & +0.009 & [+0.002, +0.016] & +0.013 [+0.009, +0.018] \\
+Controller, no \defer tier (no replay) & 6 & +0.012 & [+0.004, +0.021] & +0.033 [+0.022, +0.044] \\
+Controller, never \commit/\consolidate & 3 & +0.019 & [-0.012, +0.051] & +0.005 [-0.012, +0.023] \\
+Surprise-only gate & 3 & +0.006 & [-0.005, +0.017] & +0.020 [+0.016, +0.023] \\
+Surprise-only gate, $\theta_S{=}4$ & 3 & -0.010 & [-0.016, -0.004] & +0.016 [-0.004, +0.037] \\
+Random \commit, controller's own \defer & 3 & +0.000 & [-0.008, +0.009] & +0.006 [-0.009, +0.022] \\
+Random relabel of all decisions & 3 & +0.081 & [-0.099, +0.260] & +0.041 [-0.040, +0.121] \\
+Always \commit & 3 & +0.176 & [+0.155, +0.197] & +0.011 [-0.020, +0.041] \\
+SNR commit rule, $\tau_{\mathrm{SNR}}{=}0.7$ & 3 & +0.006 & [-0.048, +0.060] & +0.045 [-0.092, +0.182] \\
+MoLF EPD rule & 4 & +0.200 & [+0.086, +0.313] & +0.115 [+0.058, +0.172] \\
+Full fine-tuning & 3 & +0.789 & [-1.743, +3.320] & +0.238 [-0.108, +0.584] \\
+Shared parameters only & 3 & +0.000 & [-0.027, +0.027] & +0.012 [+0.006, +0.018] \\
+LoRA only (plateau trigger never fired) & 3 & +0.099 & [+0.091, +0.108] & -0.049 [-0.066, -0.032] \\
+LoRA + merge every 250 steps & 3 & +0.123 & [+0.106, +0.139] & -0.031 [-0.041, -0.021] \\
+\bottomrule
+\end{tabular}

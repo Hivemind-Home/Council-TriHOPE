@@ -1,0 +1,6 @@
+spec_id,seed,replays,delay_median_steps,delay_p90_steps,cross_phase_share,cross_phase_replays,replays_in_medical_recurrent,replays_in_mixed_tail,replays_in_code_revisit,replays_in_math_recurrent,replays_in_code_recurrent,replays_in_general_warm
+p_forced_bad,1337,196,50.0,550.0,0.08163265306122448,16,78,46,34,28,7,3
+p_forced_lowconf,1337,262,30.0,338.5000000000001,0.05343511450381679,14,77,47,98,32,6,2
+p_forced_plausible,1337,216,40.0,497.5,0.06944444444444445,15,81,52,45,29,7,2
+p_off_control,1337,258,30.0,329.50000000000017,0.05813953488372093,15,76,51,87,34,8,2
+p_study,1337,306,20.0,295.0,0.049019607843137254,15,77,63,120,35,8,3

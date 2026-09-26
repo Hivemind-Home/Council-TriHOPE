@@ -1,0 +1,23 @@
+% GENERATED
+\begin{tabular}{@{}l r r r r r r r@{}}
+\toprule
+Arm & \multicolumn{4}{c}{Worst retention $\Delta$ (general / code / math / medical)} & \multicolumn{3}{c}{In-phase gain (code / math / medical)} \\
+\midrule
+Gated controller (reference pool) & 0.114 & 0.138 & 0.051 & 0.031 & 0.179 & 0.223 & 0.764 \\
+Controller, no bucket-id recurrence & 0.132 & 0.165 & 0.064 & 0.010 & 0.167 & 0.252 & 0.669 \\
+Controller, no \defer tier (no replay) & 0.154 & 0.169 & 0.073 & -0.012 & 0.158 & 0.232 & 0.672 \\
+Controller, never \commit/\consolidate & 0.147 & 0.204 & 0.045 & 0.016 & 0.122 & 0.175 & 0.747 \\
+Surprise-only gate & 0.115 & 0.150 & 0.045 & 0.049 & 0.255 & 0.208 & 0.773 \\
+Surprise-only gate, $\theta_S{=}4$ & 0.104 & 0.128 & 0.046 & 0.016 & 0.057 & 0.181 & 0.594 \\
+Random \commit, controller's own \defer & 0.090 & 0.166 & 0.051 & 0.031 & 0.171 & 0.194 & 0.760 \\
+Random relabel of all decisions & 0.211 & 0.332 & 0.101 & 0.014 & 0.218 & 0.116 & 0.738 \\
+Always \commit & 0.263 & 0.458 & 0.190 & 0.127 & 0.319 & 0.392 & 0.918 \\
+SNR commit rule, $\tau_{\mathrm{SNR}}{=}0.5$ & 0.168 & 0.212 & 0.085 & 0.019 & 0.075 & 0.201 & 0.526 \\
+SNR commit rule, $\tau_{\mathrm{SNR}}{=}0.7$ & 0.089 & 0.219 & 0.034 & 0.015 & 0.090 & 0.178 & 0.668 \\
+MoLF EPD rule & 0.264 & 0.569 & 0.205 & 0.095 & 0.576 & 0.515 & 1.198 \\
+Full fine-tuning & 0.790 & 1.307 & 0.864 & 0.528 & 0.642 & 0.747 & 1.025 \\
+Shared parameters only & 0.126 & 0.137 & 0.038 & 0.036 & 0.035 & 0.171 & 0.594 \\
+LoRA only (plateau trigger never fired) & 0.219 & 0.272 & 0.099 & 0.142 & 0.268 & 0.235 & 0.782 \\
+LoRA + merge every 250 steps & 0.222 & 0.349 & 0.148 & 0.107 & 0.294 & 0.269 & 0.872 \\
+\bottomrule
+\end{tabular}

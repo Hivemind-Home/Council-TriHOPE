@@ -1,0 +1,14 @@
+- ++data.corrupt_teacher.enabled=true
+- ++controller.consolidation.checkpoint_before_merge=true
+- ++checkpoint.keep_tagged=0
+- ++checkpoint.save_before_phases=[math_recurrent]
+- ++controller.policy.mode=teacher_partition
+- ++controller.consolidation.period=0
+- ++controller.ablation.use_teacher_confidence=false
+- ++controller.retrieval.replay_on_hit=false
+- ++controller.debug.ablate_teacher_slice={step:3649,teacher:math_teacher_corrupted}
+- ++train.seed=7
+- ++checkpoint.dir=runs/bad_teacher_small_v1/gradient_routing-seed7/checkpoints
+- ++logging.path=runs/bad_teacher_small_v1/gradient_routing-seed7/metrics.jsonl
+- ++logging.events_path=runs/bad_teacher_small_v1/gradient_routing-seed7/events.jsonl
+- ++run.dir=runs/bad_teacher_small_v1/gradient_routing-seed7

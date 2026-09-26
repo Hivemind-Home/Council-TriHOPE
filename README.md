@@ -2,6 +2,21 @@
 
 **Multi-Teacher Knowledge Distillation with Tri-Store (R/F/P) Memory Routing.**
 
+## Reproducing the ICLR 2027 submission
+
+- **Every number, table and figure in the paper:** `cd paper_analysis && make results figures`
+  (CPU, about a minute; `pip install numpy pandas scipy matplotlib pyyaml`). It reads the per-run
+  data in `paper_analysis/data/` and rebuilds `tables/numbers.tex` and all tables byte-identically
+  to the submitted PDF (generated copies are included in `paper_analysis/tables/`).
+  `paper_analysis/PREREG.md` is the pre-declared protocol with its dated addenda.
+- **Paper configuration:** `configs/stream_small.yaml` (surprise 1.25, recurrence 0.40, replay on,
+  CE weight 0.5); runs were launched with `--live` (live teachers). Arms are the overrides in
+  `configs/experiments/*.yaml`; each run's resolved configuration is in `results_live/`.
+- **Tests (CPU):** `pip install -e ".[dev]" && python -m pytest tests -q`, including the byte-level
+  write-isolation and ledger checks cited in the paper.
+- Paper terms map to code labels as: commit = P on a base block, defer = R, withhold = F on a base
+  block, replay = R-to-F write-back, consolidate = adapter merge.
+
 Hivemind explores a central research question: *can the internal states of adaptive optimizers serve as an interpretable window into LLM learning dynamics?* It formalizes three signal families — **surprise**, **stability**, and **repetition** — derived from Adam's moment estimates, and uses them to drive a knowledge-routing policy that decides, per module per step, *where* learned knowledge should be stored during multi-teacher distillation.
 
 The codebase is two interlocking blocks:

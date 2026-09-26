@@ -1,0 +1,9 @@
+- ++controller.debug.policy_override=random_matched
+- ++controller.debug.random_shares_path=runs/baselines_small_v1/analysis/action_share_by_phase.csv
+- ++controller.debug.random_shares_spec_id=trihope
+- ++controller.retrieval.replay_on_hit=true
+- ++train.seed=7
+- ++checkpoint.dir=runs/baselines_small_v1/random_routing-seed7/checkpoints
+- ++logging.path=runs/baselines_small_v1/random_routing-seed7/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/random_routing-seed7/events.jsonl
+- ++run.dir=runs/baselines_small_v1/random_routing-seed7

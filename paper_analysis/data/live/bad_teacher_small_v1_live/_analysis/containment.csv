@@ -1,0 +1,10 @@
+spec_id,teacher,actions_mean,actions_std,r_share_mean,r_share_std,f_share_mean,f_share_std,p_share_mean,p_share_std,coords_P_direct_mean,coords_P_direct_std,consolidations_attributed_mean,consolidations_attributed_std,merged_coords_attributed_mean,merged_coords_attributed_std
+full_ft,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+gradient_routing,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+lora_only,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+molf_snr,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+molf_style,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+trihope,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+trihope_forced,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+trihope_lowconf,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0
+trihope_nogate,math_teacher_corrupted,0.0,0.0,,,,,,,0.0,0.0,0.0,0.0,0.0,0.0

@@ -1,0 +1,8 @@
+- ++controller.enabled=false
+- ++model.lora.rank=0
+- ++train.trainable=all
+- ++train.seed=7
+- ++checkpoint.dir=runs/baselines_small_v1/full_ft-seed7/checkpoints
+- ++logging.path=runs/baselines_small_v1/full_ft-seed7/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/full_ft-seed7/events.jsonl
+- ++run.dir=runs/baselines_small_v1/full_ft-seed7

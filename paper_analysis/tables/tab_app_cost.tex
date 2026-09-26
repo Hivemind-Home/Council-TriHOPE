@@ -1,0 +1,23 @@
+% GENERATED
+\begin{tabular}{@{}l r r r r r r@{}}
+\toprule
+Arm & $\log_{10}$ commit & $\log_{10}$ merge & Eff.\ merges & $\log_{10}$ shared coord$\cdot$steps & Controller time & Wall-clock \\
+\midrule
+Gated controller (reference pool) & 8.7 & 9.0 & 24 / 132 & 12.0 & 44\% & 80 min \\
+Controller, no bucket-id recurrence & 9.1 & 9.0 & 18 / 122 & 12.0 & 45\% & 79 min \\
+Controller, no \defer tier (no replay) & 8.9 & 9.1 & 0 / 168 & 12.0 & 41\% & 65 min \\
+Controller, never \commit/\consolidate & 0 & 0 & -- & 12.0 & 38\% & 61 min \\
+Surprise-only gate & 0 & 0 & -- & 12.0 & 38\% & 62 min \\
+Surprise-only gate, $\theta_S{=}4$ & 0 & 0 & -- & 12.0 & 43\% & 81 min \\
+Random \commit, controller's own \defer & 8.7 & 9.2 & 31 / 216 & 12.0 & 45\% & 88 min \\
+Random relabel of all decisions & 8.7 & 9.1 & 48 / 175 & 12.1 & 44\% & 91 min \\
+Always \commit & 11.4 & 6.5 & 0.0 / 0.3 & 12.0 & 42\% & 81 min \\
+SNR commit rule, $\tau_{\mathrm{SNR}}{=}0.5$ & 9.3 & 0 & -- & 12.0 & 40\% & 61 min \\
+SNR commit rule, $\tau_{\mathrm{SNR}}{=}0.7$ & 8.7 & 0 & -- & 12.0 & 45\% & 77 min \\
+MoLF EPD rule & 12.2 & 0 & -- & 12.0 & 42\% & 72 min \\
+Full fine-tuning & 12.4$^{\ast}$ & 0 & -- & 12.0 & 0\% & 32 min \\
+Shared parameters only & 0 & 0 & -- & 12.0 & 40\% & 89 min \\
+LoRA only (plateau trigger never fired) & 0 & 0 & -- & 0 & 0\% & 44 min \\
+LoRA + merge every 250 steps & 0 & 10.0 & 424 / 1344 & 0 & 0\% & 156 min \\
+\bottomrule
+\end{tabular}

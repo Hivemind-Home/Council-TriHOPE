@@ -1,0 +1,8 @@
+- ++controller.consolidation.checkpoint_before_merge=true
+- ++controller.debug.force_consolidate_steps=[3850]
+- ++eval.on_consolidation=true
+- ++train.seed=1337
+- ++checkpoint.dir=runs/p_study_small_v1/p_forced_lowconf-seed1337/checkpoints
+- ++logging.path=runs/p_study_small_v1/p_forced_lowconf-seed1337/metrics.jsonl
+- ++logging.events_path=runs/p_study_small_v1/p_forced_lowconf-seed1337/events.jsonl
+- ++run.dir=runs/p_study_small_v1/p_forced_lowconf-seed1337

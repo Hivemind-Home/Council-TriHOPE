@@ -1,0 +1,6 @@
+- ++controller.ablation.top_m_override=999
+- ++train.seed=1337
+- ++checkpoint.dir=runs/ablation_grid_v1/topm_all-seed1337/checkpoints
+- ++logging.path=runs/ablation_grid_v1/topm_all-seed1337/metrics.jsonl
+- ++logging.events_path=runs/ablation_grid_v1/topm_all-seed1337/events.jsonl
+- ++run.dir=runs/ablation_grid_v1/topm_all-seed1337

@@ -1,0 +1,20 @@
+{
+ "run": "gold_ce-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33100,
+  "P_base": 82,
+  "R_base": 2818
+ },
+ "replay_writes_by_surface": {},
+ "replay_writes_total": 0,
+ "merges": {
+  "nominal": 154,
+  "effective": 0,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1148190720,
+  "effective": 0
+ }
+}

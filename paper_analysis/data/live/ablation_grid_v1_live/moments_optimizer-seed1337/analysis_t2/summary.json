@@ -1,0 +1,24 @@
+{
+ "run": "moments_optimizer-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_adapter": 41,
+  "F_base": 15276,
+  "P_adapter": 1,
+  "R_adapter": 207,
+  "R_base": 20475
+ },
+ "replay_writes_by_surface": {
+  "adapter": 14772
+ },
+ "replay_writes_total": 14772,
+ "merges": {
+  "nominal": 12,
+  "effective": 3,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 88080384,
+  "effective": 25165824
+ }
+}

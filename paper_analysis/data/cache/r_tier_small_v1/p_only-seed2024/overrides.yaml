@@ -1,0 +1,6 @@
+- ++controller.debug.policy_override=always_p
+- ++train.seed=2024
+- ++checkpoint.dir=runs/r_tier_small_v1/p_only-seed2024/checkpoints
+- ++logging.path=runs/r_tier_small_v1/p_only-seed2024/metrics.jsonl
+- ++logging.events_path=runs/r_tier_small_v1/p_only-seed2024/events.jsonl
+- ++run.dir=runs/r_tier_small_v1/p_only-seed2024

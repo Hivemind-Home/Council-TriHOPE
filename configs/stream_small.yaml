@@ -87,7 +87,7 @@ teachers:
 distillation:
   tau: 4.0
   lambda_kd: 1.0            # inert without logit caches; harmless to keep
-  lambda_ce: 1.0
+  lambda_ce: 0.5   # paper setting
   lambda_reg: 0.01
   use_teacher_confidence: true   # scales KD (inert without logit caches)
   ce_confidence_weighting: true  # scales CE — the only live route in cache mode
@@ -137,8 +137,8 @@ controller:
     buffer_size: 1000
   policy:
     top_m_modules: 6
-    surprise_high: 2.0
-    repetition_low: 0.3
+    surprise_high: 1.25   # paper setting (resolved configs in results_live/*/config.yaml)
+    repetition_low: 0.40   # paper setting
     repetition_medium: 0.5
     stability_high_C: 0.5
     stability_low_V: 0.3
@@ -174,7 +174,7 @@ controller:
     # ablation); the trihope specs flip it on. A bucket parked in R on
     # `hit_threshold` distinct earlier steps is replayed into the fast
     # store, inside the same step, once the controller routes it non-R.
-    replay_on_hit: false
+    replay_on_hit: true   # paper setting
     hit_threshold: 2
     replay_batches: 1
     replay_target: F

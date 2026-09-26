@@ -1,0 +1,20 @@
+{
+ "run": "molf_style_a0p7-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_adapter": 4,
+  "F_base": 35893,
+  "P_base": 103
+ },
+ "replay_writes_by_surface": {},
+ "replay_writes_total": 0,
+ "merges": {
+  "nominal": 0,
+  "effective": 0,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 0,
+  "effective": 0
+ }
+}

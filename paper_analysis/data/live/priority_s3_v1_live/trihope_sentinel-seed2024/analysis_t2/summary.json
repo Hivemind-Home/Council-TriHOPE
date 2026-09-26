@@ -1,0 +1,22 @@
+{
+ "run": "trihope_sentinel-seed2024",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33345,
+  "P_base": 70,
+  "R_base": 2585
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1662
+ },
+ "replay_writes_total": 1662,
+ "merges": {
+  "nominal": 113,
+  "effective": 17,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 871366656,
+  "effective": 135266304
+ }
+}

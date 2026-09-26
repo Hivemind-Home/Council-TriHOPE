@@ -1,0 +1,12 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.policy.surprise_high=4.0
+- ++controller.policy.repetition_low=0.2
+- ++train.seed=1337
+- ++checkpoint.dir=runs/budget_sweep_small_v1_live/trihope_s4_r0p2-seed1337/checkpoints
+- ++logging.path=runs/budget_sweep_small_v1_live/trihope_s4_r0p2-seed1337/metrics.jsonl
+- ++logging.events_path=runs/budget_sweep_small_v1_live/trihope_s4_r0p2-seed1337/events.jsonl
+- ++run.dir=runs/budget_sweep_small_v1_live/trihope_s4_r0p2-seed1337

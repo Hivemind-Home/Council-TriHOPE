@@ -1,0 +1,5 @@
+{"run": "runs/priority_s2_v1_live/molf_style_a0p7-seed7", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 6.0559101421386, "changed_coords": 75800186, "coords": 440401920, "max_abs": 0.0023193359375, "l2_delta": 2.460875889218837}, "shared": {"sq_norm_delta": 30917.14663602568, "changed_coords": 265243990, "coords": 311230464, "max_abs": 0.115478515625, "l2_delta": 175.8327234505161}, "adapters": {"modules": 196, "nonzero_B": 11, "sum_frob_BA": 0.07884158240631223}, "unmatched_keys": []}
+84158240631223
+ },
+ "unmatched_keys": []
+}

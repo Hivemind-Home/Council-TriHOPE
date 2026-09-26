@@ -1,0 +1,7 @@
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.ablation.disable_stores=[P]
+- ++train.seed=7
+- ++checkpoint.dir=runs/baselines_small_v1/no_consolidation-seed7/checkpoints
+- ++logging.path=runs/baselines_small_v1/no_consolidation-seed7/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/no_consolidation-seed7/events.jsonl
+- ++run.dir=runs/baselines_small_v1/no_consolidation-seed7

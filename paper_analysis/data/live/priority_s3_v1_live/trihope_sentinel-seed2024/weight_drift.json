@@ -1,0 +1,5 @@
+{"run": "runs/priority_s3_v1_live/trihope_sentinel-seed2024", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 7.396558731794361, "changed_coords": 65529328, "coords": 440401920, "max_abs": 0.003662109375, "l2_delta": 2.719661510518241}, "shared": {"sq_norm_delta": 31946.756089716946, "changed_coords": 271787661, "coords": 311230464, "max_abs": 0.10498046875, "l2_delta": 178.73655499006617}, "adapters": {"modules": 196, "nonzero_B": 83, "sum_frob_BA": 3.020045915618539}, "unmatched_keys": []}
+20045915618539
+ },
+ "unmatched_keys": []
+}

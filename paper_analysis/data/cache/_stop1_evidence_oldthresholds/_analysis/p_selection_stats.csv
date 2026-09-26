@@ -1,0 +1,4 @@
+spec_id,seed,p_decisions,consolidations,forced_consolidations,first_p_step,first_merge_step,mean_S_at_P,mean_C_at_P,mean_V_at_P,mean_R_at_P
+trihope,1337,0,2,0,,250,,,,
+trihope,2024,1,6,0,76.0,250,0.466506,0.664826,0.029458,0.529434
+trihope,7,1,7,0,161.0,250,0.568083,0.70989,0.027986,0.544423

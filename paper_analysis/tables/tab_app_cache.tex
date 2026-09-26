@@ -1,0 +1,17 @@
+% GENERATED
+\begin{tabular}{@{}l l l l l@{}}
+\toprule
+Arm & \Mone\ text-only & \Mone\ live KL & Final text-only & Final live KL \\
+\midrule
+Gated controller (reference pool) & 0.113\,{\scriptsize$\pm$0.007} & 0.084\,{\scriptsize$\pm$0.006} & 1.137\,{\scriptsize$\pm$0.009} & 1.246\,{\scriptsize$\pm$0.004} \\
+Controller, no \defer tier (no replay) & 0.071\,{\scriptsize$\pm$0.008} & 0.096\,{\scriptsize$\pm$0.008} & 1.136\,{\scriptsize$\pm$0.011} & 1.279\,{\scriptsize$\pm$0.011} \\
+Controller, never \commit/\consolidate & 0.110\,{\scriptsize$\pm$0.008} & 0.103\,{\scriptsize$\pm$0.014} & 1.141\,{\scriptsize$\pm$0.011} & 1.251\,{\scriptsize$\pm$0.008} \\
+Surprise-only gate & 0.144\,{\scriptsize$\pm$0.089} & 0.090\,{\scriptsize$\pm$0.006} & 1.127\,{\scriptsize$\pm$0.002} & 1.266\,{\scriptsize$\pm$0.001} \\
+Random relabel of all decisions & 0.301\,{\scriptsize$\pm$0.048} & 0.164\,{\scriptsize$\pm$0.072} & 1.160\,{\scriptsize$\pm$0.006} & 1.287\,{\scriptsize$\pm$0.033} \\
+LoRA only (plateau trigger never fired) & 0.184\,{\scriptsize$\pm$0.043} & 0.183\,{\scriptsize$\pm$0.004} & 0.993\,{\scriptsize$\pm$0.003} & 1.197\,{\scriptsize$\pm$0.008} \\
+MoLF EPD rule & 0.459\,{\scriptsize$\pm$0.119} & 0.283\,{\scriptsize$\pm$0.071} & 1.414\,{\scriptsize$\pm$0.016} & 1.361\,{\scriptsize$\pm$0.036} \\
+Always \commit & 0.511\,{\scriptsize$\pm$0.191} & 0.260\,{\scriptsize$\pm$0.010} & 1.197\,{\scriptsize$\pm$0.007} & 1.257\,{\scriptsize$\pm$0.013} \\
+Gated controller, noisy stream & 0.109\,{\scriptsize$\pm$0.005} & 0.084\,{\scriptsize$\pm$0.003} & 1.136\,{\scriptsize$\pm$0.007} & 1.245\,{\scriptsize$\pm$0.008} \\
+SNR commit rule, $\tau_{\mathrm{SNR}}{=}0.5$, noisy stream & 0.039\,{\scriptsize$\pm$0.004} & 0.129\,{\scriptsize$\pm$0.026} & 1.117\,{\scriptsize$\pm$0.007} & 1.283\,{\scriptsize$\pm$0.006} \\
+\bottomrule
+\end{tabular}

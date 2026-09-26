@@ -1,0 +1,23 @@
+{
+ "run": "trihope_replay-seed2024",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33585,
+  "P_base": 54,
+  "R_adapter": 1,
+  "R_base": 2360
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1638
+ },
+ "replay_writes_total": 1638,
+ "merges": {
+  "nominal": 110,
+  "effective": 18,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 799014912,
+  "effective": 141557760
+ }
+}

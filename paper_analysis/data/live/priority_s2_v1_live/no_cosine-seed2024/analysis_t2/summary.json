@@ -1,0 +1,22 @@
+{
+ "run": "no_cosine-seed2024",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 30250,
+  "P_base": 2832,
+  "R_base": 2918
+ },
+ "replay_writes_by_surface": {
+  "adapter": 2046
+ },
+ "replay_writes_total": 2046,
+ "merges": {
+  "nominal": 1002,
+  "effective": 175,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 7873757184,
+  "effective": 1233125376
+ }
+}

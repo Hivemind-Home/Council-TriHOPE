@@ -1,0 +1,5 @@
+{"run": "runs/priority_s2_v1_live/surprise_gate_s4-seed7", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 0.0, "changed_coords": 0, "coords": 440401920, "max_abs": 0.0, "l2_delta": 0.0}, "shared": {"sq_norm_delta": 32762.83474260611, "changed_coords": 269890993, "coords": 311230464, "max_abs": 0.096923828125, "l2_delta": 181.0050682787808}, "adapters": {"modules": 196, "nonzero_B": 90, "sum_frob_BA": 3.5640168921090662}, "unmatched_keys": []}
+40168921090662
+ },
+ "unmatched_keys": []
+}

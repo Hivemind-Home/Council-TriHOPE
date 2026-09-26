@@ -1,0 +1,22 @@
+{
+ "run": "p_forced_bad-seed1337",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33463,
+  "P_base": 60,
+  "R_base": 2477
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1656
+ },
+ "replay_writes_total": 1656,
+ "merges": {
+  "nominal": 154,
+  "effective": 25,
+  "forced": 56
+ },
+ "merged_coords": {
+  "nominal": 1179648000,
+  "effective": 185597952
+ }
+}

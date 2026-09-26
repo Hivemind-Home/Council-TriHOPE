@@ -1,0 +1,22 @@
+{
+ "run": "topm_2-seed1337",
+ "controller_decisions": 12000,
+ "decisions_by_action_surface": {
+  "F_base": 11117,
+  "P_base": 66,
+  "R_base": 817
+ },
+ "replay_writes_by_surface": {
+  "adapter": 418
+ },
+ "replay_writes_total": 418,
+ "merges": {
+  "nominal": 179,
+  "effective": 22,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1349517312,
+  "effective": 169869312
+ }
+}

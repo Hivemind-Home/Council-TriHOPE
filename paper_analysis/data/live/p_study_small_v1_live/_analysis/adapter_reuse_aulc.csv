@@ -1,0 +1,6 @@
+spec_id,phase,aulc_mean,aulc_std,final_loss_mean,final_loss_std
+p_forced_bad,math_recurrent,1.6183617356661204,,1.6002733707427979,
+p_forced_lowconf,math_recurrent,1.67236910397942,,1.5918608903884888,
+p_forced_plausible,math_recurrent,1.6512651024637996,,1.593144178390503,
+p_off_control,math_recurrent,1.6806104142923612,,1.6471062898635864,
+p_study,math_recurrent,1.5675892145247072,,1.5542508363723755,

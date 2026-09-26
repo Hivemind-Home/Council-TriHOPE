@@ -1,0 +1,7 @@
+- ++controller.policy.stability_source=instant
+- ++controller.consolidation.stability_mode=instant
+- ++train.seed=1337
+- ++checkpoint.dir=runs/ablation_grid_v1/stability_instant-seed1337/checkpoints
+- ++logging.path=runs/ablation_grid_v1/stability_instant-seed1337/metrics.jsonl
+- ++logging.events_path=runs/ablation_grid_v1/stability_instant-seed1337/events.jsonl
+- ++run.dir=runs/ablation_grid_v1/stability_instant-seed1337

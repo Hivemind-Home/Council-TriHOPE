@@ -1,0 +1,9 @@
+- ++controller.policy.mode=surprise_only
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.consolidation.period=0
+- ++controller.writer.flag_p_for_consolidation=false
+- ++train.seed=1337
+- ++checkpoint.dir=runs/baselines_small_v1/surprise_gate-seed1337/checkpoints
+- ++logging.path=runs/baselines_small_v1/surprise_gate-seed1337/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1/surprise_gate-seed1337/events.jsonl
+- ++run.dir=runs/baselines_small_v1/surprise_gate-seed1337

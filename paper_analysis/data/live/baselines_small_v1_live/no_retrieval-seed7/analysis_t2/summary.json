@@ -1,0 +1,19 @@
+{
+ "run": "no_retrieval-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 35857,
+  "P_base": 143
+ },
+ "replay_writes_by_surface": {},
+ "replay_writes_total": 0,
+ "merges": {
+  "nominal": 195,
+  "effective": 0,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1465909248,
+  "effective": 0
+ }
+}

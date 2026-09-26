@@ -1,0 +1,5 @@
+{"run": "runs/priority_s4_v1_live/random_commit-seed7", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 7.321569528974578, "changed_coords": 76829824, "coords": 440401920, "max_abs": 0.003143310546875, "l2_delta": 2.7058398934479806}, "shared": {"sq_norm_delta": 32417.243912008347, "changed_coords": 271401823, "coords": 311230464, "max_abs": 0.104736328125, "l2_delta": 180.0478933839781}, "adapters": {"modules": 196, "nonzero_B": 78, "sum_frob_BA": 2.5561385764740407}, "unmatched_keys": []}
+61385764740407
+ },
+ "unmatched_keys": []
+}

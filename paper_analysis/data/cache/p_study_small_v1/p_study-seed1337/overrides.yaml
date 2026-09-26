@@ -1,0 +1,11 @@
+- ++controller.retrieval.replay_on_hit=true
+- ++controller.consolidation.checkpoint_before_merge=true
+- ++controller.policy.repetition_medium=0.35
+- ++controller.policy.stability_high_C=0.35
+- ++controller.policy.stability_low_V=0.5
+- ++eval.on_consolidation=true
+- ++train.seed=1337
+- ++checkpoint.dir=runs/p_study_small_v1/p_study-seed1337/checkpoints
+- ++logging.path=runs/p_study_small_v1/p_study-seed1337/metrics.jsonl
+- ++logging.events_path=runs/p_study_small_v1/p_study-seed1337/events.jsonl
+- ++run.dir=runs/p_study_small_v1/p_study-seed1337

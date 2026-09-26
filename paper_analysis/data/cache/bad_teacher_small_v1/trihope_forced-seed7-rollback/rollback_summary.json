@@ -1,0 +1,50 @@
+{
+  "mode": "selective",
+  "restore_step": 3000,
+  "module": "L0.attn.F",
+  "attribution_share": {
+    "code_teacher_deepseek_r1": 0.42857142857142855,
+    "math_teacher_corrupted": 0.42857142857142855,
+    "math_teacher_deepseek_r1_distill_qwen_1p5b": 0.14285714285714285
+  },
+  "teacher": "math_teacher_corrupted",
+  "checkpoint": "runs/bad_teacher_small_v1/trihope_forced-seed7/checkpoints/step_00003000_pre_merge",
+  "original_run": "runs/bad_teacher_small_v1/trihope_forced-seed7",
+  "out": "runs/bad_teacher_small_v1/trihope_forced-seed7-rollback",
+  "original": {
+    "final_loss": {
+      "general": 1.5190307549285782,
+      "code": 1.0139663306432896,
+      "math": 0.5586448721334237,
+      "medical": 1.4928385377146363
+    },
+    "worst_retention_delta": 0.19026596797157458,
+    "permanent_writes": {
+      "p_action_coords": 6291456,
+      "merged_coords": 490733568,
+      "unmasked_base_coords_total": 0,
+      "total": 497025024
+    }
+  },
+  "rollback": {
+    "final_loss": {
+      "general": 1.5230318127015323,
+      "code": 1.0129717694813485,
+      "math": 0.5574933278510437,
+      "medical": 1.488865948933698
+    },
+    "worst_retention_delta": 0.19073087405535127,
+    "permanent_writes": {
+      "p_action_coords": 6291456,
+      "merged_coords": 37748736,
+      "unmasked_base_coords_total": 0,
+      "total": 44040192
+    }
+  },
+  "final_loss_delta": {
+    "general": 0.00400105777295412,
+    "code": -0.0009945611619410766,
+    "math": -0.0011515442823800681,
+    "medical": -0.003972588780938313
+  }
+}

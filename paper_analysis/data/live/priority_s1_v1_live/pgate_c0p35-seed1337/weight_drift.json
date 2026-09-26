@@ -1,0 +1,5 @@
+{"run": "runs/priority_s1_v1_live/pgate_c0p35-seed1337", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 17.901698240315454, "changed_coords": 73311470, "coords": 440401920, "max_abs": 0.005859375, "l2_delta": 4.231039853312121}, "shared": {"sq_norm_delta": 31564.97872915169, "changed_coords": 272359304, "coords": 311230464, "max_abs": 0.09619140625, "l2_delta": 177.66535601841935}, "adapters": {"modules": 196, "nonzero_B": 81, "sum_frob_BA": 2.8940875460393727}, "unmatched_keys": []}
+40875460393727
+ },
+ "unmatched_keys": []
+}

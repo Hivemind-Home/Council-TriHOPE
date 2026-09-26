@@ -1,0 +1,5 @@
+{"run": "runs/priority_s3_v1_live/periodic_merge-seed1337", "checkpoint": "step_00005999", "routed": {"sq_norm_delta": 460.8810863494873, "changed_coords": 416138213, "coords": 440401920, "max_abs": 0.030029296875, "l2_delta": 21.46814119455821}, "shared": {"sq_norm_delta": 0.0, "changed_coords": 0, "coords": 311230464, "max_abs": 0.0, "l2_delta": 0.0}, "adapters": {"modules": 196, "nonzero_B": 0, "sum_frob_BA": 0.0}, "unmatched_keys": []}
+_frob_BA": 0.0
+ },
+ "unmatched_keys": []
+}

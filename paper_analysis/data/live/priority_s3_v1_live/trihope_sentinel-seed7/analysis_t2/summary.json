@@ -1,0 +1,22 @@
+{
+ "run": "trihope_sentinel-seed7",
+ "controller_decisions": 36000,
+ "decisions_by_action_surface": {
+  "F_base": 33593,
+  "P_base": 101,
+  "R_base": 2306
+ },
+ "replay_writes_by_surface": {
+  "adapter": 1566
+ },
+ "replay_writes_total": 1566,
+ "merges": {
+  "nominal": 155,
+  "effective": 31,
+  "forced": 0
+ },
+ "merged_coords": {
+  "nominal": 1160773632,
+  "effective": 232783872
+ }
+}

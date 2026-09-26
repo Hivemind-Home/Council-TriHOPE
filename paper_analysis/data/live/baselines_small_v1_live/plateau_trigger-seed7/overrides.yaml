@@ -1,0 +1,16 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.enabled=false
+- ++train.trainable=lora
+- ++controller.consolidation.trigger=plateau
+- ++controller.consolidation.plateau_window=200
+- ++controller.consolidation.plateau_tolerance=0.01
+- ++controller.consolidation.plateau_min_gap=200
+- ++controller.consolidation.plateau_require_peak=true
+- ++train.seed=7
+- ++checkpoint.dir=runs/baselines_small_v1_live/plateau_trigger-seed7/checkpoints
+- ++logging.path=runs/baselines_small_v1_live/plateau_trigger-seed7/metrics.jsonl
+- ++logging.events_path=runs/baselines_small_v1_live/plateau_trigger-seed7/events.jsonl
+- ++run.dir=runs/baselines_small_v1_live/plateau_trigger-seed7

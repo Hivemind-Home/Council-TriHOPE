@@ -1,0 +1,7 @@
+spec_id,seed,p_decisions,consolidations,forced_consolidations,first_p_step,first_merge_step,mean_S_at_P,mean_C_at_P,mean_V_at_P,mean_R_at_P
+frozen_blocks,1337,0,0,0,,,,,,
+frozen_blocks,2024,0,0,0,,,,,,
+frozen_blocks,7,0,0,0,,,,,,
+trihope_sentinel,1337,76,108,0,36.0,250.0,0.5609339210526315,0.6487233421052633,0.17416459210526317,0.5383672894736842
+trihope_sentinel,2024,70,113,0,39.0,750.0,0.4998547857142856,0.6216774571428572,0.1733056,0.5449144714285714
+trihope_sentinel,7,101,155,0,34.0,250.0,0.4810579108910891,0.6946046534653465,0.171540198019802,0.5401656237623763

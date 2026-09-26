@@ -1,0 +1,2 @@
+spec_id,seed,replays,delay_median_steps,delay_p90_steps,cross_phase_share,cross_phase_replays,replays_in_medical_recurrent,replays_in_mixed_tail,replays_in_general_warm,replays_in_math_recurrent,replays_in_code_revisit,replays_in_code_recurrent
+pgate_c0p35,1337,294,89.0,413.49999999999994,0.061224489795918366,18,123,84,42,28,10,7
