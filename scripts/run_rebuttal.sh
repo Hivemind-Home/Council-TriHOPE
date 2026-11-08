@@ -19,7 +19,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-PY="${PY:-python}"
+PY="${PY:-$(command -v python || command -v python3)}"   # the repo's venv; set PY=... to be explicit
 CONCURRENT="${CONCURRENT:-3}"
 MANIFEST="${MANIFEST:-configs/experiments/rebuttal_v1.yaml}"
 EXP="$($PY - "$MANIFEST" <<'EOF'
@@ -68,7 +68,7 @@ for d in sorted(p for p in root.iterdir() if p.is_dir()):
         print(f"{d.name}: NO run_summary.json"); bad += 1; continue
     j = json.loads(s.read_text()); ex = j.get("extra", {})
     ok = (d / "commits.jsonl").exists() and (d / "eval_rows.jsonl").exists()
-    line = f"{d.name:<36} trainable={ex.get('trainable'):<7} commits.jsonl={ (d/'commits.jsonl').exists() } eval_rows={ (d/'eval_rows.jsonl').exists() } p_count={j['ledger_totals'].get('p_count')}"
+    line = f"{d.name:<36} trainable={str(ex.get('trainable')):<7} commits.jsonl={ (d/'commits.jsonl').exists() } eval_rows={ (d/'eval_rows.jsonl').exists() } p_count={j['ledger_totals'].get('p_count')}"
     if d.name.startswith("shared_frozen"):
         chk = ex.get("shared_frozen_check") or {}
         line += f" shared_unchanged={chk.get('unchanged')} ({chk.get('coords')} coords)"
