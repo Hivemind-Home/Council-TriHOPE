@@ -2,7 +2,7 @@
 
 > One manifest, one script. Read this page, then run `bash scripts/run_rebuttal.sh all`
 > on the GPU box. Nothing here needs a decision from you; if something fails, stop and
-> send the output.
+> send the output. What the code changes are and why: `docs/REBUTTAL_CHANGES.md`.
 
 Branch: **`rebuttal/iclr2027-controls`** (on top of `main` 1ed99a3, the commit the
 submitted paper was built from). Base config, stream, student, teachers, thresholds
