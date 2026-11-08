@@ -230,6 +230,57 @@ def _unpack_batch(raw: Any, device: torch.device) -> dict[str, Any]:
     return out
 
 
+def _param_digests(params: "list[nn.Parameter]") -> dict[str, str]:
+    """SHA-256 of each tensor's raw bytes, keyed by position. Storage-level, so a
+    tied embedding / LM head pair counts once (same data_ptr → same key)."""
+    import hashlib
+
+    out: dict[str, str] = {}
+    seen: set[int] = set()
+    for i, p in enumerate(params):
+        ptr = p.data_ptr()
+        if ptr in seen:
+            continue
+        seen.add(ptr)
+        t = p.detach().cpu().contiguous()
+        out[f"{i}:{tuple(t.shape)}"] = hashlib.sha256(
+            t.view(torch.uint8).numpy().tobytes()
+            if t.dtype != torch.bool
+            else t.numpy().tobytes()
+        ).hexdigest()
+    return out
+
+
+def _shared_frozen_check(
+    student: nn.Module, start: dict[str, str]
+) -> dict[str, Any]:
+    """Compare the shared tensors' digests with those taken before training.
+    Reported in run_summary.json for ``train.trainable=routed`` runs."""
+    end = _param_digests(student.get_param_groups().get("shared", []))
+    changed = sorted(k for k in start if end.get(k) != start[k])
+    coords = sum(
+        p.numel()
+        for p in _dedup_storage(student.get_param_groups().get("shared", []))
+    )
+    return {
+        "tensors": len(start),
+        "coords": int(coords),
+        "changed_tensors": changed,
+        "unchanged": not changed and set(end) == set(start),
+    }
+
+
+def _dedup_storage(params: "list[nn.Parameter]") -> "list[nn.Parameter]":
+    seen: set[int] = set()
+    out = []
+    for p in params:
+        if p.data_ptr() in seen:
+            continue
+        seen.add(p.data_ptr())
+        out.append(p)
+    return out
+
+
 def _sub_config(node: Any, key: str) -> dict[str, Any]:
     """Fetch a config sub-dict, tolerating missing keys and plain dicts."""
     val = node.get(key) if node is not None else None
@@ -496,8 +547,15 @@ def run_training_loop(
     else:
         router = TeacherRouter()
 
-    # Baseline trainability: "all" (default) or "lora" (freeze base+shared —
-    # the plain-LoRA baseline). Must run before the optimizer is built.
+    # Baseline trainability. Must run before the optimizer is built.
+    #   all    — every parameter trains (default).
+    #   lora   — freeze base + shared: the plain-LoRA baseline.
+    #   routed — freeze the SHARED parameters only (tied embedding / LM head,
+    #            norms); the routed base weights and the adapters stay under
+    #            the controller's exact write gate. This is the rebuttal's
+    #            shared-frozen regime: with nothing training outside the gate,
+    #            every change to the student is a logged routed write, so the
+    #            routed writes are the only channel forgetting can enter by.
     trainable = str(train_cfg.get("trainable", "all"))
     if trainable == "lora":
         groups = student.get_param_groups()
@@ -505,8 +563,22 @@ def run_training_loop(
             p.requires_grad = False
         for p in groups.get("shared", []):
             p.requires_grad = False
+    elif trainable == "routed":
+        groups = student.get_param_groups()
+        for p in groups.get("shared", []):
+            p.requires_grad = False
     elif trainable != "all":
-        raise ValueError(f"train.trainable must be 'all' or 'lora', got {trainable!r}")
+        raise ValueError(
+            f"train.trainable must be 'all', 'lora' or 'routed', got {trainable!r}"
+        )
+    # Shared-frozen at-scale check (the analogue of the 440M-coordinate routed
+    # check for frozen_blocks): digest every shared tensor now and again at
+    # the end of the run; run_summary reports whether any byte moved.
+    shared_digest_start: dict[str, str] | None = (
+        _param_digests(student.get_param_groups().get("shared", []))
+        if trainable == "routed"
+        else None
+    )
 
     # DDP wrap. AFTER the requires_grad mutation above (DDP freezes the
     # trainable set at construction) and BEFORE the optimizer, whose groups
@@ -718,6 +790,7 @@ def run_training_loop(
         exact_match_samples=int(em_raw.get("num_samples", 64)),
         exact_match_max_new_tokens=int(em_raw.get("max_new_tokens", 64)),
         exact_match_max_scan_rows=int(em_raw.get("max_scan_rows", 20000)),
+        row_losses=bool(eval_cfg_raw.get("row_losses", False)),
     )
     val_loaders: dict[str, Any] = {}
     if eval_config.enabled and data_source == "hf":
@@ -813,6 +886,31 @@ def run_training_loop(
         log_cfg.get("events_path", "logs/events.jsonl"), enabled=trace_enabled
     )
     ledger = ModuleLedger()
+    # Compact per-step commit schedule (rebuttal, 2026-11): one small record
+    # per trained step with the R/F/P counts, and for every step that commits,
+    # the committed blocks and their agreement C̄. The full events.jsonl is
+    # too large to keep with the results; this file is ~0.5 MB per run and
+    # is what scripts/commit_schedule.py reads to (a) show the commit-time
+    # distribution of every arm, (b) verify that a yoked control matched the
+    # controller's volume, (c) report how often a control's commits landed
+    # on the blocks the controller itself would have committed.
+    # flush_every=1: a record per step is tiny, and a buffered record that
+    # dies with an interrupted process would be lost for good if the last
+    # checkpoint lies after the last flush (resume re-runs only from the
+    # checkpoint). The decision trace keeps its buffer; this file must not.
+    commit_trace = EventTrace(
+        Path(log_cfg.get("events_path", "logs/events.jsonl")).parent / "commits.jsonl",
+        flush_every=1,
+        enabled=trace_enabled,
+    )
+    # Per-row eval losses (eval.row_losses): one record per (eval pass,
+    # domain) with every validation row's loss sum and token count, for a
+    # per-row bootstrap of the retention metric.
+    eval_rows_trace = EventTrace(
+        Path(log_cfg.get("events_path", "logs/events.jsonl")).parent / "eval_rows.jsonl",
+        flush_every=1,
+        enabled=trace_enabled and bool(eval_cfg_raw.get("row_losses", False)),
+    )
 
     # Profiling (memory + wall-clock; the paper reports both).
     prof_raw = cfg.get("profiling", None)
@@ -960,6 +1058,7 @@ def run_training_loop(
             },
             "policy_mode": ctrl_config.policy.mode,
             "policy_override": ctrl_config.debug.policy_override,
+            "trainable": trainable,
             "adam_score_high": ctrl_config.policy.adam_score_high,
             "thresholds": {
                 "surprise_high": ctrl_config.policy.surprise_high,
@@ -1457,6 +1556,27 @@ def run_training_loop(
                 }
             )
 
+        if commit_trace.enabled:
+            rec: dict[str, Any] = {
+                "step": step,
+                "phase": current_phase,
+                "r": write_metrics["r_count"],
+                "f": write_metrics["f_count"],
+                "p": write_metrics["p_count"],
+            }
+            committed = [a for a in actions if a.store == "P"]
+            if committed:
+                rec["modules_p"] = [str(a.module_id) for a in committed]
+                rec["C_bar_p"] = [round(a.stability_C_sustained, 4) for a in committed]
+                rec["C_p"] = [round(a.stability_C, 4) for a in committed]
+            # Yoked controls: what the controller itself would have committed.
+            controller_p = [
+                str(a.module_id) for a in actions if a.controller_store == "P"
+            ]
+            if controller_p:
+                rec["controller_p"] = controller_p
+            commit_trace.emit(rec)
+
         policy_section.__exit__(None, None, None)
 
         # Tier 1: prove the replicas still agree on WHICH coordinates open.
@@ -1855,6 +1975,22 @@ def run_training_loop(
                         forgetting=forgetting_tracker,
                         r_store=r_store,
                         probe_embeddings=h_t.detach() if h_t.numel() > 0 else None,
+                        row_sink=(
+                            (
+                                lambda domain, rows, _step=step, _phase=current_phase: eval_rows_trace.emit(
+                                    {
+                                        "step": _step,
+                                        "phase": _phase,
+                                        "domain": domain,
+                                        "loss_sum": [round(r[0], 5) for r in rows],
+                                        "tokens": [r[1] for r in rows],
+                                        "bucket": [r[2] for r in rows],
+                                    }
+                                )
+                            )
+                            if eval_rows_trace.enabled
+                            else None
+                        ),
                     )
 
                     # Gold exact-match probes only at phase boundaries (generation
@@ -2061,6 +2197,12 @@ def run_training_loop(
                     "replayed_total": int(r_store.replayed_total),
                     "buffer_size": int(r_store.size),
                 },
+                "trainable": trainable,
+                **(
+                    {"shared_frozen_check": _shared_frozen_check(student, shared_digest_start)}
+                    if shared_digest_start is not None
+                    else {}
+                ),
                 **(
                     {
                         "corrupt_teacher": {
@@ -2079,6 +2221,8 @@ def run_training_loop(
         )
 
     event_trace.close()
+    commit_trace.close()
+    eval_rows_trace.close()
     logger.close()
     if _interrupted["flag"]:
         print(

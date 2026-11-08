@@ -1,0 +1,102 @@
+# ICLR-2027 rebuttal batch (Nov 2026): the controls the reviewers asked for.
+#
+#   python scripts/run_experiment.py configs/experiments/rebuttal_v1.yaml --live --resume --concurrent 3
+#
+# Every arm is live-KD on stream_small with the paper's pinned thresholds, and
+# evaluates on 256 validation rows per domain (eval.max_batches 128 x batch 2)
+# instead of 32, with every row's loss logged (eval_rows.jsonl) for a per-row
+# bootstrap. The 32-row M1 of the paper is NOT comparable to a 256-row M1, so
+# the reference controller is re-run under the new eval (trihope_e256) and
+# every comparison in the rebuttal is within this batch.
+#
+# Reviewer BDmh / 1Ume, "the null may be a floor effect of the ungoverned
+# shared parameters": the shared_frozen_* arms set train.trainable=routed,
+# which freezes the tied embedding / LM head and the norms. Nothing then
+# trains outside the exact write gate, so every change to the student is a
+# logged routed write. run_summary.json carries shared_frozen_check (SHA-256
+# of every shared tensor before vs after) and scripts/weight_drift.py
+# --expect-shared-unchanged re-checks against the pretrained weights.
+#
+# Reviewer BDmh, "a positive control: deliberately bad selection at the same
+# volume": anti_commit keeps the controller's classification (same defers,
+# same replay, same confidence gate) and moves each step's k_t commits onto
+# the k_t non-deferred selected blocks with the LOWEST agreement C-bar.
+#
+# Reviewer 1Ume, "match commit timing and count per step, randomise only
+# module identity": yoked_random does the same re-seating with a uniform
+# draw. Both are LIVE-yoked — the commit count is matched step for step
+# within the arm's own trajectory, so no reference run or share file is
+# needed and the arms can run concurrently. commits.jsonl records the
+# per-step schedule; scripts/commit_schedule.py compares it with the
+# reference's and reports the commit-time distribution 1Ume asked for.
+#
+# Order is priority. If GPU time runs short, cut from the bottom.
+experiment: rebuttal_v1
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_pin: &pin
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+_eval: &eval
+  - eval.max_batches=128
+  - eval.row_losses=true
+runs:
+  - id: anti_commit
+    # Positive control, shared trainable (the paper's regime). If this
+    # forgets measurably more than the controller / yoked_random, the
+    # benchmark resolves selection and the paper's null is informative.
+    overrides:
+      - *pin
+      - *eval
+      - controller.debug.policy_override=anti_commit
+  - id: shared_frozen_trihope
+    # The controller with the shared floor removed. Paired with the two
+    # shared_frozen controls below, this is the experiment both reviewers
+    # asked for. Read acquisition (in-phase loss) alongside M1: with nothing
+    # training outside the gate, a near-zero M1 for every arm means the
+    # routed writes are too few to matter, not that selection works.
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+  - id: shared_frozen_yoked_random
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+      - controller.debug.policy_override=yoked_random
+  - id: trihope_e256
+    # Reference controller under the 256-row eval; the baseline every
+    # comparison here is read against. Also checks that the current code
+    # reproduces the paper's 32-row forgetting (the first 32 rows of each
+    # domain's loader are the paper's rows, in loader order, recoverable
+    # from eval_rows.jsonl).
+    overrides:
+      - *pin
+      - *eval
+  - id: yoked_random
+    # Timing-matched random control in the paper's regime (1Ume W1).
+    overrides:
+      - *pin
+      - *eval
+      - controller.debug.policy_override=yoked_random
+  - id: shared_frozen_anti_commit
+    # Positive control in the most sensitive regime.
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+      - controller.debug.policy_override=anti_commit
+  - id: shared_frozen_never_commit
+    # BDmh: "ideally also never-commit". P disabled; R defers and replays
+    # into adapters as in the controller; adapters still merge on the
+    # consolidation sweep (the no_consolidation arm of the paper, shared
+    # frozen).
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+      - controller.ablation.disable_stores=[P]

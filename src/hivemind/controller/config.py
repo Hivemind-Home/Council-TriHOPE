@@ -348,7 +348,20 @@ class DebugConfig:
     """
 
     force_consolidate_steps: list[int] = field(default_factory=list)
-    policy_override: str | None = None  # None | always_p | always_f | always_r | random_matched | random_commit | quota_shuffle
+    # None | always_p | always_f | always_r | random_matched | random_commit |
+    # quota_shuffle | yoked_random | anti_commit
+    #
+    # ``yoked_random`` / ``anti_commit`` (rebuttal controls, 2026-11): the
+    # policy classifies every selected block exactly as the controller does
+    # (same defers, same replay, same confidence gate), then the k_t COMMIT
+    # labels of THIS step are lifted off the controller's picks and placed
+    # on k_t other non-deferred selected blocks — drawn uniformly at random
+    # (``yoked_random``) or the k_t with the LOWEST sustained agreement C̄
+    # (``anti_commit``, the deliberately-bad positive control). Commit count
+    # and commit timing match the controller step for step in the arm's own
+    # trajectory; only WHICH blocks are committed changes. Unlike
+    # ``random_commit`` no reference run or share file is needed.
+    policy_override: str | None = None
     # Selective rollback (task T5): a P action is demoted to F while the
     # batch's teacher is listed, and on resume every module whose pending
     # attribution is dominated (share ≥ block_min_share) by a listed teacher
@@ -370,11 +383,12 @@ class DebugConfig:
     def __post_init__(self) -> None:
         if self.policy_override not in (
             None, "always_p", "always_f", "always_r", "random_matched", "random_commit",
-            "quota_shuffle"
+            "quota_shuffle", "yoked_random", "anti_commit",
         ):
             raise ValueError(
                 f"Unknown policy_override '{self.policy_override}'; "
-                "allowed: always_p | always_f | always_r | random_matched | random_commit | quota_shuffle"
+                "allowed: always_p | always_f | always_r | random_matched | random_commit | "
+                "quota_shuffle | yoked_random | anti_commit"
             )
         if self.random_unit not in ("module", "step"):
             raise ValueError(

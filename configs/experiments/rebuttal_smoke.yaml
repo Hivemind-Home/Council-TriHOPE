@@ -1,0 +1,50 @@
+# CPU smoke for every rebuttal arm on the 70-step stream_smoke stream
+# (tiny in-repo student, real math + medical Layer-C rows, cache teachers).
+#
+#   python scripts/run_experiment.py configs/experiments/rebuttal_smoke.yaml --resume
+#   python scripts/commit_schedule.py runs/rebuttal_smoke/*-seed1337 --reference runs/rebuttal_smoke/trihope-seed1337
+#
+# Checks, per arm: the run finishes, run_summary.json exists, commits.jsonl
+# and eval_rows.jsonl are written, shared_frozen_check.unchanged is true for
+# every shared_frozen_* arm, and the yoked arms commit as often as the
+# controller (within the arm's own trajectory the match is exact step for
+# step; across arms the trajectories differ, so the smoke only checks that
+# the commit counts are of the same order).
+experiment: rebuttal_smoke
+base_config: stream_smoke
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+_eval: &eval
+  - eval.row_losses=true
+runs:
+  - id: trihope
+    overrides:
+      - *eval
+  - id: yoked_random
+    overrides:
+      - *eval
+      - controller.debug.policy_override=yoked_random
+  - id: anti_commit
+    overrides:
+      - *eval
+      - controller.debug.policy_override=anti_commit
+  - id: shared_frozen_trihope
+    overrides:
+      - *eval
+      - train.trainable=routed
+  - id: shared_frozen_yoked_random
+    overrides:
+      - *eval
+      - train.trainable=routed
+      - controller.debug.policy_override=yoked_random
+  - id: shared_frozen_anti_commit
+    overrides:
+      - *eval
+      - train.trainable=routed
+      - controller.debug.policy_override=anti_commit
+  - id: shared_frozen_never_commit
+    overrides:
+      - *eval
+      - train.trainable=routed
+      - controller.ablation.disable_stores=[P]

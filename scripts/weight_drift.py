@@ -56,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("runs", nargs="+", type=Path)
     ap.add_argument("--model", default="Qwen/Qwen3-0.6B")
     ap.add_argument("--expect-routed-unchanged", action="store_true")
+    ap.add_argument(
+        "--expect-shared-unchanged", action="store_true",
+        help="train.trainable=routed arms: every shared coordinate (tied "
+             "embedding / LM head, norms) must be bit-identical to the pretrained model",
+    )
     args = ap.parse_args(argv)
 
     from transformers import AutoModelForCausalLM
@@ -128,6 +133,14 @@ def main(argv: list[str] | None = None) -> int:
             failed = True
         if args.expect_routed_unchanged and acc["routed"]["changed_coords"] != 0:
             print(f"{run}: FAIL — {acc['routed']['changed_coords']} routed coords changed")
+            failed = True
+        if args.expect_shared_unchanged and (
+            acc["shared"]["coords"] == 0 or acc["shared"]["changed_coords"] != 0
+        ):
+            print(
+                f"{run}: FAIL — {acc['shared']['changed_coords']} of "
+                f"{acc['shared']['coords']} shared coords changed"
+            )
             failed = True
     return 1 if failed else 0
 

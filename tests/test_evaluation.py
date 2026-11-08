@@ -105,3 +105,32 @@ def test_retrieval_hit_rate_reports_zero_for_empty_store(whitespace_tokenizer, h
     )
     assert out["eval/retrieval/buffer_size"] == 0
     assert out["eval/retrieval/hit_rate"] == 0.0
+
+
+def test_row_sink_receives_every_row(whitespace_tokenizer, hf_sample_rows):
+    """eval.row_losses: the sink sees one (loss_sum, tokens, bucket) per row,
+    and they add up to the aggregate the metrics report."""
+    student = _build_student(whitespace_tokenizer.vocab_size)
+    collator = DistillCollator(
+        tokenizer=whitespace_tokenizer, max_seq_len=48, logits_cache=TeacherLogitsCache(root=None)
+    )
+    code_rows = [r for r in hf_sample_rows if r["domain"] == "code"]
+    loaders = {"code": DataLoader(code_rows, batch_size=2, shuffle=False, collate_fn=collator)}
+    got: dict[str, list] = {}
+    config = EvaluationConfig(enabled=True, max_batches=4, row_losses=True)
+    out = run_evaluation(
+        student=student, val_loaders=loaders, device=torch.device("cpu"), config=config,
+        row_sink=lambda d, rows: got.__setitem__(d, rows),
+    )
+    rows = got["code"]
+    assert len(rows) == out["eval/code/samples"]
+    assert sum(r[1] for r in rows) == out["eval/code/tokens"]
+    assert abs(sum(r[0] for r in rows) / sum(r[1] for r in rows) - out["eval/code/loss"]) < 1e-5
+    # Off by default: a sink without config.row_losses is never called.
+    got.clear()
+    run_evaluation(
+        student=student, val_loaders=loaders, device=torch.device("cpu"),
+        config=EvaluationConfig(enabled=True, max_batches=4),
+        row_sink=lambda d, rows: got.__setitem__(d, rows),
+    )
+    assert not got

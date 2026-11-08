@@ -8,6 +8,7 @@ Determines where knowledge should be stored for each selected module:
 
 from __future__ import annotations
 
+import hashlib
 import random
 
 import csv
@@ -22,6 +23,13 @@ from .module_index import ModuleId
 from .signals import ModuleSignals
 
 _STORES = ("R", "F", "P")
+
+
+def _phase_salt(phase: str | None) -> int:
+    """Stable (process-independent) integer for a phase name. Python's
+    ``hash(str)`` is salted per process, so it cannot seed a draw that every
+    rank — and a resumed run — must reproduce."""
+    return int.from_bytes(hashlib.sha1((phase or "").encode("utf-8")).digest()[:4], "big")
 
 
 def load_random_shares(
@@ -91,6 +99,11 @@ class StoreAction:
     # Gradient-routing (``mode="teacher_partition"``): ``(teacher_index,
     # num_teachers)`` — the writer opens only that teacher's rank slice.
     teacher_slot: tuple[int, int] | None = None
+    # Yoked controls (``yoked_random`` / ``anti_commit``): the label the
+    # controller itself would have given this block this step, so the trace
+    # can report how often the control's commits land on the controller's
+    # own picks. ``None`` for every other policy.
+    controller_store: str | None = None
 
 
 class RFPPolicy:
@@ -189,10 +202,26 @@ class RFPPolicy:
             else None
         )
 
+        # ``yoked_random`` / ``anti_commit``: the controller's own labels for
+        # this step with its k_t commits moved onto other non-deferred
+        # blocks. See :meth:`_yoked_labels`.
+        yoked: tuple[list[str], list[str]] | None = (
+            self._yoked_labels(selected, low_confidence, teacher_name, step or 0, phase)
+            if self.override in ("yoked_random", "anti_commit")
+            else None
+        )
+
         # Step 2: Apply R/F/P policy to each selected module
         actions: list[StoreAction] = []
         for rank, sig in enumerate(selected):
-            if self.override == "random_matched":
+            controller_store: str | None = None
+            if yoked is not None:
+                # Confidence gate and blocked-teacher gate were already applied
+                # to the controller labels inside _yoked_labels, so k_t is the
+                # controller's FINAL commit count; nothing below may add a P.
+                controller_store = yoked[0][rank]
+                store = yoked[1][rank]
+            elif self.override == "random_matched":
                 store = self._random_store(step or 0, phase, rank)
             elif self.override == "random_commit":
                 # Commit-selection control: classify exactly as the policy
@@ -251,9 +280,94 @@ class RFPPolicy:
                 stability_adam=sig.stability_adam,
                 grad_norm=sig.grad_norm,
                 repetition_components=dict(sig.repetition_components or {}),
+                controller_store=controller_store,
             ))
 
         return actions
+
+    def _controller_label(
+        self, sig: ModuleSignals, low_confidence: bool, teacher_name: str | None
+    ) -> str:
+        """The label the full controller gives ``sig`` this step, including
+        the teacher-confidence gate and the blocked-teacher demotion — i.e.
+        exactly what the ``override is None`` path of :meth:`decide` emits."""
+        ab = self.ablation
+        store = self._classify(sig)
+        if low_confidence:
+            if ab.confidence_gate == "force_r" and "R" not in ab.disable_stores:
+                store = "R"
+            elif store == "P":
+                store = "F"
+        if (
+            store == "P"
+            and teacher_name is not None
+            and teacher_name in self.debug.block_p_for_teachers
+        ):
+            store = "F"
+        return store
+
+    def _yoked_labels(
+        self,
+        selected: list[ModuleSignals],
+        low_confidence: bool,
+        teacher_name: str | None,
+        step: int,
+        phase: str | None,
+    ) -> tuple[list[str], list[str]]:
+        """Controller labels with the step's commits re-seated on other blocks.
+
+        Returns ``(controller_labels, control_labels)``, both aligned with
+        ``selected`` (Top-M order). ``controller_labels`` is what the full
+        policy would emit this step. ``control_labels`` keeps every R
+        (deferral — so the replay it triggers is the controller's own) and
+        has exactly the same number of P labels, ``k_t``, but places them on
+        a different subset of the non-deferred selected blocks:
+
+        * ``yoked_random``: ``k_t`` blocks drawn uniformly without
+          replacement from the non-deferred selected blocks (the
+          controller's own picks are eligible, so the overlap with them is a
+          measured quantity, not a design choice).
+        * ``anti_commit``: the ``k_t`` non-deferred blocks with the LOWEST
+          agreement — the same C source the P rule reads
+          (``PolicyConfig.stability_source``) — ties broken by Top-M rank.
+          The controller commits the highest-agreement blocks, so this is
+          the mirror-image policy at identical volume and timing.
+
+        Every other non-deferred block gets F. Commit count and timing
+        therefore match the controller step for step within the arm's own
+        trajectory; no reference run is consulted. The random draw uses a
+        fresh ``torch.Generator`` seeded by ``(seed, step, phase)`` so every
+        rank draws the same subset and the global RNG is untouched (same
+        contract as ``_random_store``).
+        """
+        controller = [
+            self._controller_label(sig, low_confidence, teacher_name) for sig in selected
+        ]
+        k = sum(1 for s in controller if s == "P")
+        control = ["R" if s == "R" else "F" for s in controller]
+        if k == 0:
+            return controller, control
+        candidates = [i for i, s in enumerate(controller) if s != "R"]
+        # k ≤ len(candidates) always holds: every controller P is non-R.
+        if self.override == "anti_commit":
+            cfg = self.config
+            def agreement(i: int) -> float:
+                sig = selected[i]
+                return (
+                    sig.stability_C_sustained
+                    if cfg.stability_source == "sustained"
+                    else sig.stability_C
+                )
+            chosen = sorted(candidates, key=lambda i: (agreement(i), i))[:k]
+        else:
+            gen = torch.Generator().manual_seed(
+                (self.seed * 1_000_081 + int(step) * 15_485_863 + _phase_salt(phase)) % (2**63 - 1)
+            )
+            perm = torch.randperm(len(candidates), generator=gen).tolist()
+            chosen = [candidates[j] for j in perm[:k]]
+        for i in chosen:
+            control[i] = "P"
+        return controller, control
 
     def select_top_m(
         self, module_signals: dict[ModuleId, ModuleSignals]

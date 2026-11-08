@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -59,6 +59,11 @@ class EvaluationConfig:
     #: rows in 20 000, so scanning only the eval cap yields ~3 probes and
     #: quantizes the EM column to thirds.
     exact_match_max_scan_rows: int = 20000
+    #: Keep every validation row's (loss, tokens) per eval pass and hand them
+    #: to ``run_evaluation(row_sink=...)``. Enables a per-row bootstrap of the
+    #: retention metric after the fact (the paper's snapshot only logged
+    #: aggregates). Off by default; the rebuttal manifests turn it on.
+    row_losses: bool = False
 
 
 @dataclass
@@ -70,6 +75,8 @@ class DomainMetrics:
     loss_sum: float = 0.0
     samples: int = 0
     per_bucket: dict[str, tuple[float, int]] = field(default_factory=dict)
+    #: ``(loss_sum, tokens, bucket_id)`` per row, only when requested.
+    rows: list[tuple[float, int, str]] = field(default_factory=list)
 
     @property
     def mean_loss(self) -> float:
@@ -184,10 +191,12 @@ def _eval_one_domain(
     domain: str,
     device: torch.device,
     max_batches: int,
+    keep_rows: bool = False,
 ) -> DomainMetrics:
     student.eval()
     m = DomainMetrics(domain=domain)
     bucket_sums: dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
+    rows: list[tuple[float, int, str]] = []
 
     for step, raw in enumerate(dataloader):
         if step >= max_batches:
@@ -223,6 +232,10 @@ def _eval_one_domain(
 
         for b_idx in range(input_ids.shape[0]):
             bid = bucket_ids[b_idx] if b_idx < len(bucket_ids) else ""
+            if keep_rows:
+                rows.append(
+                    (float(sample_loss[b_idx].item()), int(sample_ntok[b_idx].item()), str(bid))
+                )
             if not bid:
                 continue
             entry = bucket_sums[bid]
@@ -232,6 +245,7 @@ def _eval_one_domain(
     m.per_bucket = {
         bid: (loss / max(1, ntok), ntok) for bid, (loss, ntok) in bucket_sums.items()
     }
+    m.rows = rows
     return m
 
 
@@ -271,18 +285,26 @@ def run_evaluation(
     forgetting: Optional[ForgettingTracker] = None,
     r_store: Optional[RetrievalStore] = None,
     probe_embeddings: Optional[torch.Tensor] = None,
+    row_sink: Optional[Callable[[str, list[tuple[float, int, str]]], None]] = None,
 ) -> dict[str, Any]:
     """Run one validation pass and return a flat metrics dict.
 
     Keys follow the pattern ``eval/<domain>/<metric>`` so they can be
-    dropped into the existing JSON / WandB logger unchanged.
+    dropped into the existing JSON / WandB logger unchanged. With
+    ``row_sink`` (and ``config.row_losses``) every row's ``(loss_sum,
+    tokens, bucket_id)`` is handed to the sink per domain, in loader order.
     """
     out: dict[str, Any] = {}
     per_domain: dict[str, DomainMetrics] = {}
+    keep_rows = row_sink is not None and config.row_losses
 
     for domain, loader in val_loaders.items():
-        dm = _eval_one_domain(student, loader, domain, device, config.max_batches)
+        dm = _eval_one_domain(
+            student, loader, domain, device, config.max_batches, keep_rows=keep_rows
+        )
         per_domain[domain] = dm
+        if keep_rows and row_sink is not None:
+            row_sink(domain, dm.rows)
         out[f"eval/{domain}/loss"] = dm.mean_loss
         out[f"eval/{domain}/ppl"] = dm.perplexity
         out[f"eval/{domain}/samples"] = dm.samples
