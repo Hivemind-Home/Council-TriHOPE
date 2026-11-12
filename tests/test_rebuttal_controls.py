@@ -206,6 +206,53 @@ class TestGatesStillApply:
         assert set(lab.values()) == {"R"}
 
 
+class TestScheduleMatched:
+    """schedule_random / schedule_anti: k_t comes from the reference run's
+    commits.jsonl, not from the arm's own controller, so volume is matched."""
+
+    @staticmethod
+    def _sched(tmp_path: Path, counts: dict[int, int]) -> DebugConfig:
+        f = tmp_path / "commits.jsonl"
+        f.write_text("".join(json.dumps({"step": s, "p": p, "r": 0, "f": 0}) + "\n"
+                             for s, p in counts.items()))
+        return DebugConfig(policy_override="schedule_random", commit_schedule_path=str(f))
+
+    @pytest.mark.parametrize("name", ["schedule_random", "schedule_anti"])
+    def test_commit_count_follows_reference_not_controller(self, tmp_path, name) -> None:
+        dbg = self._sched(tmp_path, {0: 0, 1: 1, 2: 3, 3: 9})
+        ctl = RFPPolicy(_CFG, override=name, debug=dbg, seed=4)
+        # The arm's own controller would commit 2 every step.
+        for step, want in [(0, 0), (1, 1), (2, 3), (3, 5), (4, 0)]:
+            lab = _labels(ctl.decide(_step_signals(), step=step, phase="code"))
+            assert sum(v == "P" for v in lab.values()) == want  # step 3 capped at 5 candidates
+            assert lab[2] == "R"  # its own deferral is kept
+
+    def test_anti_picks_lowest_agreement(self, tmp_path) -> None:
+        dbg = self._sched(tmp_path, {0: 3})
+        lab = _labels(RFPPolicy(_CFG, override="schedule_anti", debug=dbg).decide(
+            _step_signals(), step=0))
+        assert [i for i, s in sorted(lab.items()) if s == "P"] == [3, 4, 5]
+
+    @pytest.mark.parametrize("name", ["schedule_random", "schedule_anti"])
+    def test_gates_zero_the_reference_count(self, tmp_path, name) -> None:
+        dbg = self._sched(tmp_path, {0: 2})
+        ab = AblationConfig(use_teacher_confidence=True, confidence_threshold=0.5)
+        ctl = RFPPolicy(_CFG, ablation=ab, override=name, debug=dbg)
+        lab = _labels(ctl.decide(_step_signals(), teacher_confidence=0.1, step=0))
+        assert "P" not in lab.values()
+        no_p = AblationConfig(disable_stores=["P"])
+        ctl = RFPPolicy(_CFG, ablation=no_p, override=name, debug=dbg)
+        assert "P" not in _labels(ctl.decide(_step_signals(), step=0)).values()
+
+    def test_missing_or_empty_schedule_fails_loudly(self, tmp_path) -> None:
+        with pytest.raises(ValueError, match="commit_schedule_path"):
+            RFPPolicy(_CFG, override="schedule_random",
+                      debug=DebugConfig(policy_override="schedule_random"))
+        dbg = self._sched(tmp_path, {0: 0, 1: 0})
+        with pytest.raises(ValueError, match="no commits"):
+            RFPPolicy(_CFG, override="schedule_random", debug=dbg)
+
+
 # ---------------------------------------------------------------------------
 # Training-loop level: trainable=routed, commits.jsonl
 # ---------------------------------------------------------------------------

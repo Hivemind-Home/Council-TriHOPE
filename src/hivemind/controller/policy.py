@@ -9,6 +9,7 @@ Determines where knowledge should be stored for each selected module:
 from __future__ import annotations
 
 import hashlib
+import json
 import random
 
 import csv
@@ -30,6 +31,26 @@ def _phase_salt(phase: str | None) -> int:
     ``hash(str)`` is salted per process, so it cannot seed a draw that every
     rank — and a resumed run — must reproduce."""
     return int.from_bytes(hashlib.sha1((phase or "").encode("utf-8")).digest()[:4], "big")
+
+
+def load_commit_schedule(path: "str | Path | None") -> dict[int, int]:
+    """``{step: p}`` from a reference run's ``commits.jsonl`` (schedule_* controls).
+
+    Unlike the share file this has no fallback: a missing or commit-free
+    schedule would silently turn the arm into never_commit, a different arm.
+    """
+    p = Path(path) if path else None
+    if p is None or not p.exists():
+        raise ValueError(f"schedule_* override needs commit_schedule_path; {path!r} not found")
+    out: dict[int, int] = {}
+    with open(p, encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                rec = json.loads(line)
+                out[int(rec["step"])] = int(rec.get("p", 0))  # last record wins (resume)
+    if not any(out.values()):
+        raise ValueError(f"commit schedule {p} has no commits")
+    return out
 
 
 def load_random_shares(
@@ -132,6 +153,11 @@ class RFPPolicy:
             self._random_shares = load_random_shares(
                 self.debug.random_shares_path, self.debug.random_shares_spec_id
             )
+        # schedule_*: {step: reference commit count}. Read once; every rank
+        # reads the same file, so the schedule is rank-consistent.
+        self._schedule: dict[int, int] = {}
+        if override in ("schedule_random", "schedule_anti"):
+            self._schedule = load_commit_schedule(self.debug.commit_schedule_path)
         if override == "random_commit" and not self._random_shares:
             # random_matched degrades to uniform draws, but random_commit would
             # silently never commit -- a different arm. Fail at startup instead.
@@ -207,7 +233,7 @@ class RFPPolicy:
         # blocks. See :meth:`_yoked_labels`.
         yoked: tuple[list[str], list[str]] | None = (
             self._yoked_labels(selected, low_confidence, teacher_name, step or 0, phase)
-            if self.override in ("yoked_random", "anti_commit")
+            if self.override in ("yoked_random", "anti_commit", "schedule_random", "schedule_anti")
             else None
         )
 
@@ -343,13 +369,25 @@ class RFPPolicy:
         controller = [
             self._controller_label(sig, low_confidence, teacher_name) for sig in selected
         ]
-        k = sum(1 for s in controller if s == "P")
         control = ["R" if s == "R" else "F" for s in controller]
+        candidates = [i for i, s in enumerate(controller) if s != "R"]
+        if self.override in ("schedule_random", "schedule_anti"):
+            # The reference run's k_t; capped, since this arm may defer more
+            # blocks than the reference did on this step.
+            k = min(self._schedule.get(int(step), 0), len(candidates))
+            # Same gates the controller's own P labels pass through.
+            if (
+                "P" in self.ablation.disable_stores
+                or low_confidence
+                or (teacher_name is not None and teacher_name in self.debug.block_p_for_teachers)
+            ):
+                k = 0
+        else:
+            # k ≤ len(candidates) always holds: every controller P is non-R.
+            k = sum(1 for s in controller if s == "P")
         if k == 0:
             return controller, control
-        candidates = [i for i, s in enumerate(controller) if s != "R"]
-        # k ≤ len(candidates) always holds: every controller P is non-R.
-        if self.override == "anti_commit":
+        if self.override in ("anti_commit", "schedule_anti"):
             cfg = self.config
             def agreement(i: int) -> float:
                 sig = selected[i]
