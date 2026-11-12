@@ -38,7 +38,7 @@ that drop.
 | 1 | `anti_commit` | shared trainable | commit the k_t lowest-C̄ blocks | forgets more than controller/random -> benchmark resolves selection |
 | 2 | `shared_frozen_trihope` | shared frozen | - | controller with the floor removed |
 | 3 | `shared_frozen_yoked_random` | shared frozen | random k_t blocks | the comparison both reviewers asked for (vs 2) |
-| 4 | `trihope_e256` | shared trainable | - | reference under the 256-row eval; must reproduce the paper's 0.084 on its first 32 rows |
+| 4 | `trihope_e256` | shared trainable | - | reference under the 256-row eval; must reproduce the paper's 0.0805 (paper E1 trihope; 0.084 is `random_commit`) on its first 32 rows |
 | 5 | `yoked_random` | shared trainable | random k_t blocks | 1Ume's timing-matched control in the paper's regime |
 | 6 | `shared_frozen_anti_commit` | shared frozen | lowest-C̄ k_t blocks | positive control in the most sensitive regime |
 | 7 | `shared_frozen_never_commit` | shared frozen | P disabled | floor of the frozen regime |
@@ -148,6 +148,6 @@ differences, 3 seeds, reported with the seed-level interval the paper already us
 | frozen: controller forgets less than yoked-random | selection matters once the floor is removed | the headline flips; the floor-masking becomes the main finding |
 | frozen: controller forgets more than yoked-random | the gate selects harmfully | still publishable as an audit result; tone changes |
 | frozen: every arm ~ 0 forgetting | nothing routed is enough to forget with | report acquisition loss alongside; the frozen regime is a floor at the other end |
-| `trihope_e256` 32-row M1 != 0.084 +- sigma_GPU | code/box drift | report it with the GPU-nondeterminism sigma from the paper (0.005) |
+| `trihope_e256` 32-row M1 != 0.0805 +- sigma_GPU (E1 trihope; 0.084 is `random_commit`) | code/box drift | report it with the GPU-nondeterminism sigma from the paper (0.005) |
 
 Pre-state these readings in the rebuttal **before** the numbers arrive.
