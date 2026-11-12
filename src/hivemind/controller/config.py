@@ -361,7 +361,16 @@ class DebugConfig:
     # and commit timing match the controller step for step in the arm's own
     # trajectory; only WHICH blocks are committed changes. Unlike
     # ``random_commit`` no reference run or share file is needed.
+    #
+    # ``schedule_random`` / ``schedule_anti`` (volume-matched rebuttal
+    # controls): as above, but k_t is read from a REFERENCE controller run's
+    # commits.jsonl (``commit_schedule_path``, its per-step ``p``) instead of
+    # the arm's own controller labels, so total commit volume and per-step
+    # timing equal the reference run's exactly (capped at the step's
+    # non-deferred blocks; the shortfall shows up in commit_schedule.py's
+    # ratio). Removes the volume difference the live-yoked arms drift into.
     policy_override: str | None = None
+    commit_schedule_path: str | None = None
     # Selective rollback (task T5): a P action is demoted to F while the
     # batch's teacher is listed, and on resume every module whose pending
     # attribution is dominated (share ≥ block_min_share) by a listed teacher
@@ -383,12 +392,12 @@ class DebugConfig:
     def __post_init__(self) -> None:
         if self.policy_override not in (
             None, "always_p", "always_f", "always_r", "random_matched", "random_commit",
-            "quota_shuffle", "yoked_random", "anti_commit",
+            "quota_shuffle", "yoked_random", "anti_commit", "schedule_random", "schedule_anti",
         ):
             raise ValueError(
                 f"Unknown policy_override '{self.policy_override}'; "
                 "allowed: always_p | always_f | always_r | random_matched | random_commit | "
-                "quota_shuffle | yoked_random | anti_commit"
+                "quota_shuffle | yoked_random | anti_commit | schedule_random | schedule_anti"
             )
         if self.random_unit not in ("module", "step"):
             raise ValueError(

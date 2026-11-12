@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_v1_live/anti_commit-seed2024",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 18.552725752073457,
+  "changed_coords": 79397670,
+  "coords": 440401920,
+  "max_abs": 0.0057373046875,
+  "l2_delta": 4.307287516764287
+ },
+ "shared": {
+  "sq_norm_delta": 32046.04414176169,
+  "changed_coords": 272136135,
+  "coords": 311230464,
+  "max_abs": 0.110107421875,
+  "l2_delta": 179.01408922697033
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 67,
+  "sum_frob_BA": 2.8548340778797865
+ },
+ "unmatched_keys": []
+}

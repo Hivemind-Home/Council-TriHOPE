@@ -182,7 +182,7 @@ order (the runner is in manifest order, so if time runs out the last arms drop):
 | 1 | `anti_commit` | all | `anti_commit` | positive control in the paper's regime |
 | 2 | `shared_frozen_trihope` | routed | - | controller, floor removed |
 | 3 | `shared_frozen_yoked_random` | routed | `yoked_random` | the comparison both reviewers asked for |
-| 4 | `trihope_e256` | all | - | reference under the 256-row eval; its first-32-row M1 must reproduce 0.084 +- 0.005 |
+| 4 | `trihope_e256` | all | - | reference under the 256-row eval; its first-32-row M1 must reproduce 0.0805 (paper E1 trihope; 0.084 is `random_commit`) +- 0.005 |
 | 5 | `yoked_random` | all | `yoked_random` | 1Ume's timing-matched control, paper's regime |
 | 6 | `shared_frozen_anti_commit` | routed | `anti_commit` | positive control, frozen regime |
 | 7 | `shared_frozen_never_commit` | routed | `disable_stores=[P]` | floor of the frozen regime |
@@ -340,7 +340,7 @@ Not verified, by construction of the box here (no GPU):
   stage is the check).
 - Throughput with the 256-row eval and three concurrent runs (the 12-16 h estimate is
   from the September campaign's per-run times plus the eval).
-- The `trihope_e256` first-32-row M1 against 0.084 (GPU nondeterminism sigma from the
+- The `trihope_e256` first-32-row M1 against 0.0805, E1 trihope (GPU nondeterminism sigma from the
   paper: 0.005).
 
 Not on this branch (paper side, `/root/trihope-paper`): the MoFO Random-BCD concession
@@ -349,3 +349,18 @@ certify, the ppjp policy-level answer, presentation fixes, and the per-row boots
 script. Optional extras discussed and deferred: a MoLF-matched random arm, restoring the
 `merge_delta` logging / `test_checksum_invariants.py` that REVISION_NOTES.md mentions
 but no tree contains, and localising the 2-coordinate ledger discrepancy.
+
+## Follow-up: volume-matched controls (`schedule_random | schedule_anti`), 2026-11-11
+
+The v1 live-yoked arms match the controller's per-step count on their *own* trajectory, which then
+drifts (total commits 85 controller vs 119 random vs 246 anti; 509 / 701 / 2003 frozen), so v1 cannot
+separate selection from volume. `controller.debug.policy_override=schedule_random|schedule_anti` with
+`controller.debug.commit_schedule_path=<reference run>/commits.jsonl` commits exactly the reference
+run's per-step P count `k_t` (capped at the step's non-deferred blocks; the confidence gate,
+`block_p_for_teachers` and a disabled P store still zero it): random blocks, or the `k_t`
+lowest-C-bar blocks. A missing or empty schedule fails at startup
+(`load_commit_schedule`, `src/hivemind/controller/policy.py`). Tests: `TestScheduleMatched` in
+`tests/test_rebuttal_controls.py`. Manifest: `configs/experiments/rebuttal_volume.yaml`.
+`commit_schedule.py` skips the live-yoking invariant for these arms (its `vs ref` ratio is their check).
+
+Results and what they mean for the claims: `docs/REBUTTAL_RESULTS_2026-11-11.md`.

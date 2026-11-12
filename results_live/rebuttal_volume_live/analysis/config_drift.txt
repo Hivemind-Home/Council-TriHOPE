@@ -1,0 +1,66 @@
+runs/rebuttal_volume_live/schedule_anti-seed1337 vs results_live/baselines_small_v1_live/trihope-seed1337: ok (4 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_anti'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+runs/rebuttal_volume_live/schedule_anti-seed2024 vs results_live/baselines_small_v1_live/trihope-seed2024: ok (4 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_anti'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+runs/rebuttal_volume_live/schedule_anti-seed7 vs results_live/baselines_small_v1_live/trihope-seed7: ok (4 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_anti'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+runs/rebuttal_volume_live/schedule_random-seed1337 vs results_live/baselines_small_v1_live/trihope-seed1337: ok (4 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_random'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+runs/rebuttal_volume_live/schedule_random-seed2024 vs results_live/baselines_small_v1_live/trihope-seed2024: ok (4 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_random'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+runs/rebuttal_volume_live/schedule_random-seed7 vs results_live/baselines_small_v1_live/trihope-seed7: ok (4 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_random'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+runs/rebuttal_volume_live/shared_frozen_schedule_anti-seed1337 vs results_live/baselines_small_v1_live/trihope-seed1337: ok (5 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_anti'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+  [allowed] train.trainable: ref='all' new='routed'
+runs/rebuttal_volume_live/shared_frozen_schedule_anti-seed2024 vs results_live/baselines_small_v1_live/trihope-seed2024: ok (5 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_anti'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+  [allowed] train.trainable: ref='all' new='routed'
+runs/rebuttal_volume_live/shared_frozen_schedule_anti-seed7 vs results_live/baselines_small_v1_live/trihope-seed7: ok (5 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_anti'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+  [allowed] train.trainable: ref='all' new='routed'
+runs/rebuttal_volume_live/shared_frozen_schedule_random-seed1337 vs results_live/baselines_small_v1_live/trihope-seed1337: ok (5 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_random'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+  [allowed] train.trainable: ref='all' new='routed'
+runs/rebuttal_volume_live/shared_frozen_schedule_random-seed2024 vs results_live/baselines_small_v1_live/trihope-seed2024: ok (5 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_random'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+  [allowed] train.trainable: ref='all' new='routed'
+runs/rebuttal_volume_live/shared_frozen_schedule_random-seed7 vs results_live/baselines_small_v1_live/trihope-seed7: ok (5 allowed diffs)
+  [allowed] controller.debug.commit_schedule_path: ref='<absent>' new='runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl'
+  [allowed] controller.debug.policy_override: ref=None new='schedule_random'
+  [allowed] eval.max_batches: ref=16 new=128
+  [allowed] eval.row_losses: ref='<absent>' new=True
+  [allowed] train.trainable: ref='all' new='routed'

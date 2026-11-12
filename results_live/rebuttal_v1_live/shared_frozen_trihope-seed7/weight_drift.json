@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_v1_live/shared_frozen_trihope-seed7",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 29.94387153687785,
+  "changed_coords": 82002004,
+  "coords": 440401920,
+  "max_abs": 0.0133056640625,
+  "l2_delta": 5.472099371984928
+ },
+ "shared": {
+  "sq_norm_delta": 0.0,
+  "changed_coords": 0,
+  "coords": 311230464,
+  "max_abs": 0.0,
+  "l2_delta": 0.0
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 75,
+  "sum_frob_BA": 3.6756383101455867
+ },
+ "unmatched_keys": []
+}

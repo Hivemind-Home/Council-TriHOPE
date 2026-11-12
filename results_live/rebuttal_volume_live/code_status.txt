@@ -1,0 +1,8 @@
+ M src/hivemind/controller/config.py
+ M src/hivemind/controller/policy.py
+ M tests/test_rebuttal_controls.py
+?? configs/experiments/bad_teacher_small.yaml.pre_live.bak
+?? configs/experiments/rebuttal_volume.yaml
+?? configs/experiments/rebuttal_volume_smoke.yaml
+?? configs/stream_small.yaml.pre_live_stop1.bak
+?? configs/stream_small.yaml.pre_stop1.bak

@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_volume_live/shared_frozen_schedule_anti-seed7",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 31.26449368005342,
+  "changed_coords": 106990243,
+  "coords": 440401920,
+  "max_abs": 0.0084381103515625,
+  "l2_delta": 5.591466147626526
+ },
+ "shared": {
+  "sq_norm_delta": 0.0,
+  "changed_coords": 0,
+  "coords": 311230464,
+  "max_abs": 0.0,
+  "l2_delta": 0.0
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 74,
+  "sum_frob_BA": 3.4523626719601452
+ },
+ "unmatched_keys": []
+}

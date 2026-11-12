@@ -173,7 +173,12 @@ def main(argv: list[str] | None = None) -> int:
             f"{fmt(t['early_frac']):>7}{'':>7}{fmt(t.get('controller_commits')):>6}"
             f"{fmt(t.get('overlap_frac')):>6}{fmt(total_ratio):>8}"
         )
-        if "controller_commits" in t and t["controller_commits"] != t["commits"]:
+        # schedule_* arms commit the reference's count, not their own controller's, so the
+        # live-yoking invariant does not apply to them; the "vs ref" ratio is their check.
+        # status.json drops the command once a run is done, so read the hydra overrides.
+        ov = run / "hydra" / "rank0" / ".hydra" / "overrides.yaml"
+        scheduled = ov.exists() and "policy_override=schedule_" in ov.read_text()
+        if not scheduled and "controller_commits" in t and t["controller_commits"] != t["commits"]:
             # Live-yoking invariant: the arm commits exactly as often as the
             # controller would have on the same trajectory.
             print(f"   FAIL: yoked arm committed {t['commits']} but the controller would have "

@@ -1,0 +1,6 @@
+commit_schedule_frozen_seed1337.json: reference 0.634 | shared_frozen_schedule_anti-seed1337 0.425 | shared_frozen_schedule_random-seed1337 0.547
+commit_schedule_frozen_seed2024.json: reference 0.636 | shared_frozen_schedule_anti-seed2024 0.434 | shared_frozen_schedule_random-seed2024 0.505
+commit_schedule_frozen_seed7.json: reference 0.645 | shared_frozen_schedule_anti-seed7 0.467 | shared_frozen_schedule_random-seed7 0.547
+commit_schedule_trainable_seed1337.json: reference 0.644 | schedule_anti-seed1337 0.465 | schedule_random-seed1337 0.588
+commit_schedule_trainable_seed2024.json: reference 0.599 | schedule_anti-seed2024 0.414 | schedule_random-seed2024 0.478
+commit_schedule_trainable_seed7.json: reference 0.606 | schedule_anti-seed7 0.416 | schedule_random-seed7 0.495

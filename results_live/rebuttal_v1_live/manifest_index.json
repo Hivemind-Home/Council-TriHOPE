@@ -1,0 +1,196 @@
+{
+  "experiment": "rebuttal_v1_live",
+  "base_config": "stream_small",
+  "updated": 1794381808.3118882,
+  "runs": [
+    {
+      "run_id": "anti_commit-seed1337",
+      "spec_id": "anti_commit",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/anti_commit-seed1337",
+      "state": "done",
+      "updated": 1794343825.8885522,
+      "exit_code": 0
+    },
+    {
+      "run_id": "anti_commit-seed2024",
+      "spec_id": "anti_commit",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/anti_commit-seed2024",
+      "state": "done",
+      "updated": 1794343643.8629656,
+      "exit_code": 0
+    },
+    {
+      "run_id": "anti_commit-seed7",
+      "spec_id": "anti_commit",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/anti_commit-seed7",
+      "state": "done",
+      "updated": 1794343638.3514335,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_trihope-seed1337",
+      "spec_id": "shared_frozen_trihope",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_trihope-seed1337",
+      "state": "done",
+      "updated": 1794349337.080041,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_trihope-seed2024",
+      "spec_id": "shared_frozen_trihope",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_trihope-seed2024",
+      "state": "done",
+      "updated": 1794349345.0710568,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_trihope-seed7",
+      "spec_id": "shared_frozen_trihope",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_trihope-seed7",
+      "state": "done",
+      "updated": 1794349901.3841894,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_yoked_random-seed1337",
+      "spec_id": "shared_frozen_yoked_random",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_yoked_random-seed1337",
+      "state": "done",
+      "updated": 1794355014.9279943,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_yoked_random-seed2024",
+      "spec_id": "shared_frozen_yoked_random",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_yoked_random-seed2024",
+      "state": "done",
+      "updated": 1794355034.3431706,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_yoked_random-seed7",
+      "spec_id": "shared_frozen_yoked_random",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_yoked_random-seed7",
+      "state": "done",
+      "updated": 1794356116.5495253,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_e256-seed1337",
+      "spec_id": "trihope_e256",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/trihope_e256-seed1337",
+      "state": "done",
+      "updated": 1794360798.3912215,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_e256-seed2024",
+      "spec_id": "trihope_e256",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/trihope_e256-seed2024",
+      "state": "done",
+      "updated": 1794360964.4955876,
+      "exit_code": 0
+    },
+    {
+      "run_id": "trihope_e256-seed7",
+      "spec_id": "trihope_e256",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/trihope_e256-seed7",
+      "state": "done",
+      "updated": 1794362162.4186032,
+      "exit_code": 0
+    },
+    {
+      "run_id": "yoked_random-seed1337",
+      "spec_id": "yoked_random",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/yoked_random-seed1337",
+      "state": "done",
+      "updated": 1794366663.6361048,
+      "exit_code": 0
+    },
+    {
+      "run_id": "yoked_random-seed2024",
+      "spec_id": "yoked_random",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/yoked_random-seed2024",
+      "state": "done",
+      "updated": 1794367034.5891838,
+      "exit_code": 0
+    },
+    {
+      "run_id": "yoked_random-seed7",
+      "spec_id": "yoked_random",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/yoked_random-seed7",
+      "state": "done",
+      "updated": 1794372160.8950024,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_anti_commit-seed1337",
+      "spec_id": "shared_frozen_anti_commit",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_anti_commit-seed1337",
+      "state": "done",
+      "updated": 1794374744.2761836,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_anti_commit-seed2024",
+      "spec_id": "shared_frozen_anti_commit",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_anti_commit-seed2024",
+      "state": "done",
+      "updated": 1794374742.628844,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_anti_commit-seed7",
+      "spec_id": "shared_frozen_anti_commit",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_anti_commit-seed7",
+      "state": "done",
+      "updated": 1794377455.2180185,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_never_commit-seed1337",
+      "spec_id": "shared_frozen_never_commit",
+      "seed": 1337,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_never_commit-seed1337",
+      "state": "done",
+      "updated": 1794380456.5489879,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_never_commit-seed2024",
+      "spec_id": "shared_frozen_never_commit",
+      "seed": 2024,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_never_commit-seed2024",
+      "state": "done",
+      "updated": 1794380357.0375493,
+      "exit_code": 0
+    },
+    {
+      "run_id": "shared_frozen_never_commit-seed7",
+      "spec_id": "shared_frozen_never_commit",
+      "seed": 7,
+      "dir": "runs/rebuttal_v1_live/shared_frozen_never_commit-seed7",
+      "state": "done",
+      "updated": 1794381808.3097923,
+      "exit_code": 0
+    }
+  ]
+}

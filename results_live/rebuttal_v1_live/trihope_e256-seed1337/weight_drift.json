@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_v1_live/trihope_e256-seed1337",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 5.874686621811634,
+  "changed_coords": 50499910,
+  "coords": 440401920,
+  "max_abs": 0.0024566650390625,
+  "l2_delta": 2.423775282861766
+ },
+ "shared": {
+  "sq_norm_delta": 32019.80980889096,
+  "changed_coords": 272147007,
+  "coords": 311230464,
+  "max_abs": 0.10791015625,
+  "l2_delta": 178.9407997324561
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 74,
+  "sum_frob_BA": 3.282611298840493
+ },
+ "unmatched_keys": []
+}
