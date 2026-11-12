@@ -1,0 +1,17 @@
+- ++teachers.mode=live
+- ++teachers.num_teachers=4
+- ++distillation.lambda_ce=0.5
+- ++data.router_strict=true
+- ++controller.policy.surprise_high=1.25
+- ++controller.policy.repetition_low=0.40
+- ++controller.retrieval.replay_on_hit=true
+- ++eval.max_batches=128
+- ++eval.row_losses=true
+- ++train.trainable=routed
+- ++controller.ablation.disable_stores=[P]
+- ++train.seed=1337
+- ++checkpoint.dir=runs/rebuttal_v1_live/shared_frozen_never_commit-seed1337/checkpoints
+- ++logging.path=runs/rebuttal_v1_live/shared_frozen_never_commit-seed1337/metrics.jsonl
+- ++logging.events_path=runs/rebuttal_v1_live/shared_frozen_never_commit-seed1337/events.jsonl
+- ++run.dir=runs/rebuttal_v1_live/shared_frozen_never_commit-seed1337
+- ++checkpoint.resume_from=latest

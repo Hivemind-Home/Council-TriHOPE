@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_v1_live/yoked_random-seed1337",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 11.136869538153405,
+  "changed_coords": 84158859,
+  "coords": 440401920,
+  "max_abs": 0.00433349609375,
+  "l2_delta": 3.3371948606806594
+ },
+ "shared": {
+  "sq_norm_delta": 31855.21413482356,
+  "changed_coords": 273050006,
+  "coords": 311230464,
+  "max_abs": 0.096435546875,
+  "l2_delta": 178.4802906060598
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 91,
+  "sum_frob_BA": 3.1197887510061264
+ },
+ "unmatched_keys": []
+}

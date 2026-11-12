@@ -1,0 +1,132 @@
+
+== results_live/rebuttal_volume_live/schedule_anti-seed1337
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       15        9     147   1.00   0.54    43  0.07    1.00  [9, 5, 1, 0, 0, 0, 0, 0, 0, 0]
+code_recurrent         1500       13        6      89   0.92   0.52    81  0.54    1.00  [11, 1, 0, 0, 0, 0, 0, 1, 0, 0]
+novel_inject            150        0        0     622      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+math_recurrent         1500       11       11     227   0.09   0.24   793  0.00    1.00  [1, 0, 1, 0, 3, 1, 4, 0, 1, 0]
+medical_recurrent      1300        7        6     864   1.00   0.60    20  0.00    1.00  [7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+code_revisit            450       10        6      36   1.00   0.44   255  0.10    1.00  [8, 2, 0, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600        0        0     555      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+TOTAL                  6000       56       38    2540   0.80         1192  0.16    1.00
+
+== results_live/rebuttal_volume_live/schedule_random-seed1337
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       15        9     151   1.00   0.58    63  0.27    1.00  [9, 5, 1, 0, 0, 0, 0, 0, 0, 0]
+code_recurrent         1500       13        6      83   0.92   0.66   446  0.69    1.00  [11, 1, 0, 0, 0, 0, 0, 1, 0, 0]
+novel_inject            150        0        0     593      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+math_recurrent         1500       11       11     271   0.09   0.41   600  0.27    1.00  [1, 0, 1, 0, 3, 1, 4, 0, 1, 0]
+medical_recurrent      1300        7        6     888   1.00   0.73    38  0.29    1.00  [7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+code_revisit            450       10        6      28   1.00   0.61   978  0.70    1.00  [8, 2, 0, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600        0        0     614      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+TOTAL                  6000       56       38    2628   0.80         2125  0.45    1.00
+
+== results_live/rebuttal_volume_live/shared_frozen_schedule_anti-seed1337
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       88       40     119   0.68   0.46   371  0.35    1.00  [14, 13, 19, 14, 23, 0, 5, 0, 0, 0]
+code_recurrent         1500       98       58      21   1.00   0.40  1390  0.07    1.00  [92, 6, 0, 0, 0, 0, 0, 0, 0, 0]
+novel_inject            150       13       13     187   1.00   0.83     7  0.00    1.00  [0, 0, 0, 4, 9, 0, 0, 0, 0, 0]
+math_recurrent         1500       83       52     104   1.00   0.42  2149  0.07    1.00  [75, 8, 0, 0, 0, 0, 0, 0, 0, 0]
+medical_recurrent      1300       74       42     500   0.70   0.43  1307  0.01    1.00  [47, 12, 13, 0, 0, 0, 0, 0, 0, 2]
+code_revisit            450       96       49       6   0.93   0.39   793  0.32    1.00  [60, 22, 5, 0, 5, 4, 0, 0, 0, 0]
+mixed_tail              600       25       19     382   0.00   0.31    76  0.00    1.00  [0, 0, 0, 0, 0, 0, 0, 16, 5, 4]
+TOTAL                  6000      477      273    1319   0.83         6093  0.16    1.00
+
+== results_live/rebuttal_volume_live/shared_frozen_schedule_random-seed1337
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       88       40     132   0.68   0.46   256  0.33    1.00  [14, 13, 19, 14, 23, 0, 5, 0, 0, 0]
+code_recurrent         1500       98       58      23   1.00   0.59  1318  0.40    1.00  [92, 6, 0, 0, 0, 0, 0, 0, 0, 0]
+novel_inject            150       13       13     148   1.00   0.90    93  0.23    1.00  [0, 0, 0, 4, 9, 0, 0, 0, 0, 0]
+math_recurrent         1500       83       52      55   1.00   0.55  1177  0.35    1.00  [75, 8, 0, 0, 0, 0, 0, 0, 0, 0]
+medical_recurrent      1300       74       42     597   0.70   0.57   151  0.31    1.00  [47, 12, 13, 0, 0, 0, 0, 0, 0, 2]
+code_revisit            450       96       49       0   0.93   0.53   841  0.53    1.00  [60, 22, 5, 0, 5, 4, 0, 0, 0, 0]
+mixed_tail              600       25       19     358   0.00   0.46    92  0.20    1.00  [0, 0, 0, 0, 0, 0, 0, 16, 5, 4]
+TOTAL                  6000      477      273    1313   0.83         3928  0.38    1.00
+
+== results_live/rebuttal_volume_live/schedule_anti-seed2024
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       38       15     160   0.92   0.31    69  0.11    1.00  [11, 3, 13, 8, 0, 0, 0, 0, 2, 1]
+code_recurrent         1500       20       14      70   0.95   0.52   253  0.70    1.00  [19, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+novel_inject            150        0        0     625      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+math_recurrent         1500        2        2     187   1.00   0.15   415  0.00    1.00  [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+medical_recurrent      1300        6        5     968   1.00   0.58     6  0.00    1.00  [6, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+code_revisit            450       23       11      31   0.96   0.48   119  0.00    1.00  [17, 5, 0, 0, 0, 1, 0, 0, 0, 0]
+mixed_tail              600        0        0     565      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+TOTAL                  6000       89       47    2606   0.94          862  0.20    1.00
+
+== results_live/rebuttal_volume_live/schedule_random-seed2024
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       38       15     168   0.92   0.40    47  0.24    1.00  [11, 3, 13, 8, 0, 0, 0, 0, 2, 1]
+code_recurrent         1500       20       14      68   0.95   0.51   265  0.55    1.00  [19, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+novel_inject            150        0        0     554      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+math_recurrent         1500        2        2     192   1.00   0.36   411  0.00    1.00  [1, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+medical_recurrent      1300        6        5     986   1.00   0.64     9  0.00    1.00  [6, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+code_revisit            450       23       11      27   0.96   0.54   738  0.04    1.00  [17, 5, 0, 0, 0, 1, 0, 0, 0, 0]
+mixed_tail              600        0        0     554      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+TOTAL                  6000       89       47    2549   0.94         1470  0.24    1.00
+
+== results_live/rebuttal_volume_live/shared_frozen_schedule_anti-seed2024
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       66       26     114   0.67   0.49   445  0.36    1.00  [16, 17, 11, 0, 0, 1, 18, 3, 0, 0]
+code_recurrent         1500      100       49      42   1.00   0.50  2454  0.46    1.00  [99, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+novel_inject            150       16       16     260   1.00   0.77    12  0.00    1.00  [0, 0, 0, 3, 10, 3, 0, 0, 0, 0]
+math_recurrent         1500      130       68      69   0.95   0.45  1452  0.13    1.00  [111, 12, 2, 0, 0, 2, 2, 0, 0, 1]
+medical_recurrent      1300       53       25     686   0.70   0.47   225  0.13    1.00  [37, 0, 0, 0, 16, 0, 0, 0, 0, 0]
+code_revisit            450       97       50      14   1.00   0.42  1190  0.26    1.00  [54, 29, 14, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600       91       64     444   0.30   0.25    92  0.00    1.00  [0, 27, 0, 1, 30, 1, 13, 13, 6, 0]
+TOTAL                  6000      553      298    1629   0.80         5870  0.22    1.00
+
+== results_live/rebuttal_volume_live/shared_frozen_schedule_random-seed2024
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       66       26      99   0.67   0.51   982  0.52    1.00  [16, 17, 11, 0, 0, 1, 18, 3, 0, 0]
+code_recurrent         1500      100       49       8   1.00   0.60  1862  0.40    1.00  [99, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+novel_inject            150       16       16     153   1.00   0.88   101  0.12    1.00  [0, 0, 0, 3, 10, 3, 0, 0, 0, 0]
+math_recurrent         1500      130       68      17   0.95   0.48  1038  0.26    1.00  [111, 12, 2, 0, 0, 2, 2, 0, 0, 1]
+medical_recurrent      1300       53       25     815   0.70   0.58   155  0.38    1.00  [37, 0, 0, 0, 16, 0, 0, 0, 0, 0]
+code_revisit            450       97       50       6   1.00   0.47   377  0.43    1.00  [54, 29, 14, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600       90       63     453   0.30   0.37    48  0.06    0.99  [0, 27, 0, 1, 30, 1, 13, 12, 6, 0]
+TOTAL                  6000      552      297    1551   0.80         4563  0.32    1.00
+
+== results_live/rebuttal_volume_live/schedule_anti-seed7
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       32       13     143   1.00   0.41   271  0.28    1.00  [9, 18, 5, 0, 0, 0, 0, 0, 0, 0]
+code_recurrent         1500       20       14      65   0.95   0.55   153  0.70    1.00  [19, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+novel_inject            150        0        0     623      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+math_recurrent         1500       22       20     188   0.59   0.21   506  0.00    1.00  [10, 7, 1, 0, 0, 3, 0, 0, 1, 0]
+medical_recurrent      1300        7        5     868   1.00   0.56    44  0.00    1.00  [7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+code_revisit            450       27       14      21   1.00   0.48   191  0.33    1.00  [20, 5, 2, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600        2        2     619   0.50   0.14     0  0.00    1.00  [0, 0, 1, 0, 1, 0, 0, 0, 0, 0]
+TOTAL                  6000      110       68    2527   0.90         1165  0.29    1.00
+
+== results_live/rebuttal_volume_live/schedule_random-seed7
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       32       13     130   1.00   0.46    22  0.25    1.00  [9, 18, 5, 0, 0, 0, 0, 0, 0, 0]
+code_recurrent         1500       20       14      82   0.95   0.57   164  0.60    1.00  [19, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+novel_inject            150        0        0     417      -      -     0     -       -  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+math_recurrent         1500       22       20     219   0.59   0.39   466  0.09    1.00  [10, 7, 1, 0, 0, 3, 0, 0, 1, 0]
+medical_recurrent      1300        7        5     815   1.00   0.76    93  0.43    1.00  [7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+code_revisit            450       27       14      31   1.00   0.51   201  0.15    1.00  [20, 5, 2, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600        2        2     562   0.50   0.26     1  0.00    1.00  [0, 0, 1, 0, 1, 0, 0, 0, 0, 0]
+TOTAL                  6000      110       68    2256   0.90          947  0.26    1.00
+
+== results_live/rebuttal_volume_live/shared_frozen_schedule_anti-seed7
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       45       22     129   0.96   0.52   336  0.56    1.00  [14, 11, 16, 2, 0, 0, 1, 0, 1, 0]
+code_recurrent         1500      101       55      58   0.93   0.37  1358  0.11    1.00  [94, 1, 4, 0, 0, 1, 1, 0, 0, 0]
+novel_inject            150       12       10     152   1.00   0.84     6  0.00    1.00  [0, 0, 0, 3, 6, 0, 0, 3, 0, 0]
+math_recurrent         1500      124       44      69   0.99   0.57  1881  0.27    1.00  [109, 14, 0, 0, 0, 1, 0, 0, 0, 0]
+medical_recurrent      1300       61       31     738   0.72   0.49    63  0.18    1.00  [43, 1, 0, 12, 0, 0, 4, 0, 0, 1]
+code_revisit            450      100       46      11   1.00   0.37   807  0.26    1.00  [49, 40, 11, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600       55       30     467   0.85   0.44   111  0.15    1.00  [9, 9, 6, 23, 0, 0, 5, 0, 3, 0]
+TOTAL                  6000      498      238    1624   0.93         4562  0.23    1.00
+
+== results_live/rebuttal_volume_live/shared_frozen_schedule_random-seed7
+phase                 steps  commits  c-steps  defers  early     C̄   ctl   ovl  vs ref  deciles
+general_warm            500       45       22     135   0.96   0.56   334  0.58    1.00  [14, 11, 16, 2, 0, 0, 1, 0, 1, 0]
+code_recurrent         1500      101       55      57   0.93   0.52  2522  0.24    1.00  [94, 1, 4, 0, 0, 1, 1, 0, 0, 0]
+novel_inject            150       12       10     137   1.00   0.91    89  0.08    1.00  [0, 0, 0, 3, 6, 0, 0, 3, 0, 0]
+math_recurrent         1500      122       44      47   0.99   0.52   678  0.26    0.98  [107, 14, 0, 0, 0, 1, 0, 0, 0, 0]
+medical_recurrent      1300       61       31     827   0.72   0.56   173  0.21    1.00  [43, 1, 0, 12, 0, 0, 4, 0, 0, 1]
+code_revisit            450      100       46       9   1.00   0.55   566  0.59    1.00  [49, 40, 11, 0, 0, 0, 0, 0, 0, 0]
+mixed_tail              600       55       30     409   0.85   0.54   203  0.47    1.00  [9, 9, 6, 23, 0, 0, 5, 0, 3, 0]
+TOTAL                  6000      496      238    1621   0.93         4565  0.36    1.00

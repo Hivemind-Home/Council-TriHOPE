@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_v1_live/anti_commit-seed1337",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 17.76620525574981,
+  "changed_coords": 86182475,
+  "coords": 440401920,
+  "max_abs": 0.008544921875,
+  "l2_delta": 4.214997657858164
+ },
+ "shared": {
+  "sq_norm_delta": 31932.932625298177,
+  "changed_coords": 272394967,
+  "coords": 311230464,
+  "max_abs": 0.1005859375,
+  "l2_delta": 178.69788086403872
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 105,
+  "sum_frob_BA": 2.9001611368730664
+ },
+ "unmatched_keys": []
+}

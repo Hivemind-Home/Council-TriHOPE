@@ -1,0 +1,24 @@
+{
+ "run": "runs/rebuttal_v1_live/shared_frozen_anti_commit-seed2024",
+ "checkpoint": "step_00005999",
+ "routed": {
+  "sq_norm_delta": 141.35220482805198,
+  "changed_coords": 112008086,
+  "coords": 440401920,
+  "max_abs": 0.0204620361328125,
+  "l2_delta": 11.889163335914432
+ },
+ "shared": {
+  "sq_norm_delta": 0.0,
+  "changed_coords": 0,
+  "coords": 311230464,
+  "max_abs": 0.0,
+  "l2_delta": 0.0
+ },
+ "adapters": {
+  "modules": 196,
+  "nonzero_B": 92,
+  "sum_frob_BA": 3.2100347466766834
+ },
+ "unmatched_keys": []
+}

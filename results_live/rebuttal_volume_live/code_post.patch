@@ -1,0 +1,202 @@
+diff --git a/scripts/commit_schedule.py b/scripts/commit_schedule.py
+index 4356e1d..bcc0641 100755
+--- a/scripts/commit_schedule.py
++++ b/scripts/commit_schedule.py
+@@ -173,7 +173,12 @@ def main(argv: list[str] | None = None) -> int:
+             f"{fmt(t['early_frac']):>7}{'':>7}{fmt(t.get('controller_commits')):>6}"
+             f"{fmt(t.get('overlap_frac')):>6}{fmt(total_ratio):>8}"
+         )
+-        if "controller_commits" in t and t["controller_commits"] != t["commits"]:
++        # schedule_* arms commit the reference's count, not their own controller's, so the
++        # live-yoking invariant does not apply to them; the "vs ref" ratio is their check.
++        # status.json drops the command once a run is done, so read the hydra overrides.
++        ov = run / "hydra" / "rank0" / ".hydra" / "overrides.yaml"
++        scheduled = ov.exists() and "policy_override=schedule_" in ov.read_text()
++        if not scheduled and "controller_commits" in t and t["controller_commits"] != t["commits"]:
+             # Live-yoking invariant: the arm commits exactly as often as the
+             # controller would have on the same trajectory.
+             print(f"   FAIL: yoked arm committed {t['commits']} but the controller would have "
+diff --git a/src/hivemind/controller/config.py b/src/hivemind/controller/config.py
+index 3947705..8427b84 100644
+--- a/src/hivemind/controller/config.py
++++ b/src/hivemind/controller/config.py
+@@ -361,7 +361,16 @@ class DebugConfig:
+     # and commit timing match the controller step for step in the arm's own
+     # trajectory; only WHICH blocks are committed changes. Unlike
+     # ``random_commit`` no reference run or share file is needed.
++    #
++    # ``schedule_random`` / ``schedule_anti`` (volume-matched rebuttal
++    # controls): as above, but k_t is read from a REFERENCE controller run's
++    # commits.jsonl (``commit_schedule_path``, its per-step ``p``) instead of
++    # the arm's own controller labels, so total commit volume and per-step
++    # timing equal the reference run's exactly (capped at the step's
++    # non-deferred blocks; the shortfall shows up in commit_schedule.py's
++    # ratio). Removes the volume difference the live-yoked arms drift into.
+     policy_override: str | None = None
++    commit_schedule_path: str | None = None
+     # Selective rollback (task T5): a P action is demoted to F while the
+     # batch's teacher is listed, and on resume every module whose pending
+     # attribution is dominated (share ≥ block_min_share) by a listed teacher
+@@ -383,12 +392,12 @@ class DebugConfig:
+     def __post_init__(self) -> None:
+         if self.policy_override not in (
+             None, "always_p", "always_f", "always_r", "random_matched", "random_commit",
+-            "quota_shuffle", "yoked_random", "anti_commit",
++            "quota_shuffle", "yoked_random", "anti_commit", "schedule_random", "schedule_anti",
+         ):
+             raise ValueError(
+                 f"Unknown policy_override '{self.policy_override}'; "
+                 "allowed: always_p | always_f | always_r | random_matched | random_commit | "
+-                "quota_shuffle | yoked_random | anti_commit"
++                "quota_shuffle | yoked_random | anti_commit | schedule_random | schedule_anti"
+             )
+         if self.random_unit not in ("module", "step"):
+             raise ValueError(
+diff --git a/src/hivemind/controller/policy.py b/src/hivemind/controller/policy.py
+index 3f56836..192eeaf 100644
+--- a/src/hivemind/controller/policy.py
++++ b/src/hivemind/controller/policy.py
+@@ -9,6 +9,7 @@ Determines where knowledge should be stored for each selected module:
+ from __future__ import annotations
+ 
+ import hashlib
++import json
+ import random
+ 
+ import csv
+@@ -32,6 +33,26 @@ def _phase_salt(phase: str | None) -> int:
+     return int.from_bytes(hashlib.sha1((phase or "").encode("utf-8")).digest()[:4], "big")
+ 
+ 
++def load_commit_schedule(path: "str | Path | None") -> dict[int, int]:
++    """``{step: p}`` from a reference run's ``commits.jsonl`` (schedule_* controls).
++
++    Unlike the share file this has no fallback: a missing or commit-free
++    schedule would silently turn the arm into never_commit, a different arm.
++    """
++    p = Path(path) if path else None
++    if p is None or not p.exists():
++        raise ValueError(f"schedule_* override needs commit_schedule_path; {path!r} not found")
++    out: dict[int, int] = {}
++    with open(p, encoding="utf-8") as fh:
++        for line in fh:
++            if line.strip():
++                rec = json.loads(line)
++                out[int(rec["step"])] = int(rec.get("p", 0))  # last record wins (resume)
++    if not any(out.values()):
++        raise ValueError(f"commit schedule {p} has no commits")
++    return out
++
++
+ def load_random_shares(
+     path: "str | Path | None", spec_id: str
+ ) -> dict[str, tuple[float, float, float]]:
+@@ -132,6 +153,11 @@ class RFPPolicy:
+             self._random_shares = load_random_shares(
+                 self.debug.random_shares_path, self.debug.random_shares_spec_id
+             )
++        # schedule_*: {step: reference commit count}. Read once; every rank
++        # reads the same file, so the schedule is rank-consistent.
++        self._schedule: dict[int, int] = {}
++        if override in ("schedule_random", "schedule_anti"):
++            self._schedule = load_commit_schedule(self.debug.commit_schedule_path)
+         if override == "random_commit" and not self._random_shares:
+             # random_matched degrades to uniform draws, but random_commit would
+             # silently never commit -- a different arm. Fail at startup instead.
+@@ -207,7 +233,7 @@ class RFPPolicy:
+         # blocks. See :meth:`_yoked_labels`.
+         yoked: tuple[list[str], list[str]] | None = (
+             self._yoked_labels(selected, low_confidence, teacher_name, step or 0, phase)
+-            if self.override in ("yoked_random", "anti_commit")
++            if self.override in ("yoked_random", "anti_commit", "schedule_random", "schedule_anti")
+             else None
+         )
+ 
+@@ -343,13 +369,25 @@ class RFPPolicy:
+         controller = [
+             self._controller_label(sig, low_confidence, teacher_name) for sig in selected
+         ]
+-        k = sum(1 for s in controller if s == "P")
+         control = ["R" if s == "R" else "F" for s in controller]
++        candidates = [i for i, s in enumerate(controller) if s != "R"]
++        if self.override in ("schedule_random", "schedule_anti"):
++            # The reference run's k_t; capped, since this arm may defer more
++            # blocks than the reference did on this step.
++            k = min(self._schedule.get(int(step), 0), len(candidates))
++            # Same gates the controller's own P labels pass through.
++            if (
++                "P" in self.ablation.disable_stores
++                or low_confidence
++                or (teacher_name is not None and teacher_name in self.debug.block_p_for_teachers)
++            ):
++                k = 0
++        else:
++            # k ≤ len(candidates) always holds: every controller P is non-R.
++            k = sum(1 for s in controller if s == "P")
+         if k == 0:
+             return controller, control
+-        candidates = [i for i, s in enumerate(controller) if s != "R"]
+-        # k ≤ len(candidates) always holds: every controller P is non-R.
+-        if self.override == "anti_commit":
++        if self.override in ("anti_commit", "schedule_anti"):
+             cfg = self.config
+             def agreement(i: int) -> float:
+                 sig = selected[i]
+diff --git a/tests/test_rebuttal_controls.py b/tests/test_rebuttal_controls.py
+index b3d81ee..43a8ee2 100644
+--- a/tests/test_rebuttal_controls.py
++++ b/tests/test_rebuttal_controls.py
+@@ -206,6 +206,53 @@ class TestGatesStillApply:
+         assert set(lab.values()) == {"R"}
+ 
+ 
++class TestScheduleMatched:
++    """schedule_random / schedule_anti: k_t comes from the reference run's
++    commits.jsonl, not from the arm's own controller, so volume is matched."""
++
++    @staticmethod
++    def _sched(tmp_path: Path, counts: dict[int, int]) -> DebugConfig:
++        f = tmp_path / "commits.jsonl"
++        f.write_text("".join(json.dumps({"step": s, "p": p, "r": 0, "f": 0}) + "\n"
++                             for s, p in counts.items()))
++        return DebugConfig(policy_override="schedule_random", commit_schedule_path=str(f))
++
++    @pytest.mark.parametrize("name", ["schedule_random", "schedule_anti"])
++    def test_commit_count_follows_reference_not_controller(self, tmp_path, name) -> None:
++        dbg = self._sched(tmp_path, {0: 0, 1: 1, 2: 3, 3: 9})
++        ctl = RFPPolicy(_CFG, override=name, debug=dbg, seed=4)
++        # The arm's own controller would commit 2 every step.
++        for step, want in [(0, 0), (1, 1), (2, 3), (3, 5), (4, 0)]:
++            lab = _labels(ctl.decide(_step_signals(), step=step, phase="code"))
++            assert sum(v == "P" for v in lab.values()) == want  # step 3 capped at 5 candidates
++            assert lab[2] == "R"  # its own deferral is kept
++
++    def test_anti_picks_lowest_agreement(self, tmp_path) -> None:
++        dbg = self._sched(tmp_path, {0: 3})
++        lab = _labels(RFPPolicy(_CFG, override="schedule_anti", debug=dbg).decide(
++            _step_signals(), step=0))
++        assert [i for i, s in sorted(lab.items()) if s == "P"] == [3, 4, 5]
++
++    @pytest.mark.parametrize("name", ["schedule_random", "schedule_anti"])
++    def test_gates_zero_the_reference_count(self, tmp_path, name) -> None:
++        dbg = self._sched(tmp_path, {0: 2})
++        ab = AblationConfig(use_teacher_confidence=True, confidence_threshold=0.5)
++        ctl = RFPPolicy(_CFG, ablation=ab, override=name, debug=dbg)
++        lab = _labels(ctl.decide(_step_signals(), teacher_confidence=0.1, step=0))
++        assert "P" not in lab.values()
++        no_p = AblationConfig(disable_stores=["P"])
++        ctl = RFPPolicy(_CFG, ablation=no_p, override=name, debug=dbg)
++        assert "P" not in _labels(ctl.decide(_step_signals(), step=0)).values()
++
++    def test_missing_or_empty_schedule_fails_loudly(self, tmp_path) -> None:
++        with pytest.raises(ValueError, match="commit_schedule_path"):
++            RFPPolicy(_CFG, override="schedule_random",
++                      debug=DebugConfig(policy_override="schedule_random"))
++        dbg = self._sched(tmp_path, {0: 0, 1: 0})
++        with pytest.raises(ValueError, match="no commits"):
++            RFPPolicy(_CFG, override="schedule_random", debug=dbg)
++
++
+ # ---------------------------------------------------------------------------
+ # Training-loop level: trainable=routed, commits.jsonl
+ # ---------------------------------------------------------------------------
