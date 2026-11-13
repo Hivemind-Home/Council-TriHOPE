@@ -151,3 +151,41 @@ differences, 3 seeds, reported with the seed-level interval the paper already us
 | `trihope_e256` 32-row M1 != 0.0805 +- sigma_GPU (E1 trihope; 0.084 is `random_commit`) | code/box drift | report it with the GPU-nondeterminism sigma from the paper (0.005) |
 
 Pre-state these readings in the rebuttal **before** the numbers arrive.
+
+## Follow-up batch 2 (2026-11-13): two extra seeds, shared-frozen regime
+
+Why: the frozen-regime comparisons rest on 3 seeds (best sign-test p = 0.125), and
+`shared_frozen_schedule_anti` forgetting *less* than the controller on 3/3 seeds
+needs to be confirmed or refuted. Seeds 42 and 314; no code change, branch
+`rebuttal/extra-seeds`.
+
+```bash
+git fetch origin && git checkout -B rebuttal/extra-seeds origin/rebuttal/extra-seeds
+```
+
+**Stage A**: references (4 runs):
+```bash
+python scripts/run_experiment.py configs/experiments/rebuttal_seeds_ref.yaml --live --resume --concurrent 3
+```
+
+**Stage B**: volume-matched arms (4 runs). Start it as soon as BOTH
+`runs/rebuttal_seeds_live/shared_frozen_trihope-seed{42,314}/status.json` say `done`;
+the last never-commit run of stage A may still be going (then use `--concurrent 2`):
+```bash
+python scripts/run_experiment.py configs/experiments/rebuttal_seeds_sched.yaml --live --resume --concurrent 3
+```
+It refuses to start (by design) if a reference `commits.jsonl` is missing.
+
+**Post** (also fine on a partial batch):
+```bash
+python scripts/weight_drift.py runs/rebuttal_seeds_live/*-seed* runs/rebuttal_seeds_sched_live/*-seed* --expect-shared-unchanged
+for s in 42 314; do
+  python scripts/commit_schedule.py runs/rebuttal_seeds_sched_live/*-seed$s \
+      --reference runs/rebuttal_seeds_live/shared_frozen_trihope-seed$s --expect-match
+done
+python scripts/m1_rows.py runs/rebuttal_v1_live runs/rebuttal_volume_live runs/rebuttal_seeds_live runs/rebuttal_seeds_sched_live
+tar --exclude=checkpoints --exclude=torchrun_logs -czf rebuttal_seeds_$(date -u +%Y%m%dT%H%MZ).tgz \
+    runs/rebuttal_seeds_live runs/rebuttal_seeds_sched_live
+```
+`m1_rows.py` merges all seeds across the four dirs (5-seed table for the frozen arms,
+with sign-test p-values). Send the tarball and the console output.

@@ -1,0 +1,34 @@
+# ICLR-2027 rebuttal, extra seeds, STAGE A (run first): the shared-frozen
+# reference controller and never-commit for two more seeds, so the frozen-regime
+# comparisons go from 3 to 5 seeds (best one-sided sign-test p: 0.125 -> 0.031; two-sided 0.25 -> 0.0625).
+#
+#   python scripts/run_experiment.py configs/experiments/rebuttal_seeds_ref.yaml --live --resume --concurrent 3
+#
+# Stage B (configs/experiments/rebuttal_seeds_sched.yaml) and the oracle arms
+# (configs/experiments/rebuttal_oracle.yaml) read each seed's commits.jsonl
+# from this stage, so they must NOT start before both shared_frozen_trihope
+# runs here are done. Everything else is rebuttal_v1's.
+experiment: rebuttal_seeds
+base_config: stream_small
+output_root: runs
+seeds: [42, 314]
+cleanup_checkpoints: keep_final
+_pin: &pin
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+_eval: &eval
+  - eval.max_batches=128
+  - eval.row_losses=true
+runs:
+  - id: shared_frozen_trihope
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+  - id: shared_frozen_never_commit
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+      - controller.ablation.disable_stores=[P]
