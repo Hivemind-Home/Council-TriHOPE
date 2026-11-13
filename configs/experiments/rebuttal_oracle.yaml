@@ -1,0 +1,75 @@
+# ICLR-2027 rebuttal, follow-up batch 3 (2026-11-13): INTERFERENCE-ORACLE bracket
+# at the controller's exact per-step commit volume. Reviewer BDmh Q2: "an
+# anti-selection arm at the controller's commit rate, for example committing
+# the selected blocks with the lowest agreement C-bar, or those with the
+# largest interference with earlier domains".
+#
+#   python scripts/run_experiment.py configs/experiments/rebuttal_oracle.yaml --live --resume --concurrent 3
+#
+# The lowest-C-bar version (schedule_anti, rebuttal_volume) did NOT forget more
+# than the controller. Here the k_t blocks (k_t = the same-seed reference
+# controller's per-step commit count) are ranked by an oracle the controller
+# cannot see: the first-order predicted change in earlier-domain loss,
+# <g_old, Δθ>, where Δθ is the exact MaskedAdamW update the block would get
+# this step and g_old the gradient of per-domain per-token CE on 4 training
+# rows of every other domain (src/hivemind/controller/oracle.py).
+#   schedule_oracle_bad:  the k_t highest (most predicted forgetting)
+#   schedule_oracle_good: the k_t lowest  (least predicted forgetting)
+# In the first phase (no earlier domain yet) both fall back to the
+# schedule_random pick; commits.jsonl marks those steps (oracle_fallback).
+#
+# ORDER: the frozen pair first (the regime where commits cause the forgetting:
+# never_commit 0.000 vs controller 0.071). The trainable pair runs after.
+#
+# Readings, stated before any number exists (M1 = mean over domains of worst
+# retention delta, seed-paired vs the same-seed reference controller):
+#   oracle_bad > reference and oracle_good < reference (all seeds)
+#       -> the benchmark resolves selection; the gap bad - good is the room
+#          selection has at this volume, and the controller's position in it
+#          (with schedule_random's) is the answer to "does C-bar select".
+#   oracle_bad > reference only
+#       -> positive control holds; no room to do better than the controller.
+#   oracle_bad ~ oracle_good ~ reference
+#       -> even an oracle that sees the true first-order interference cannot
+#          move forgetting at this volume: volume is the only lever.
+#   score_p of oracle_bad <= score_cand_mean, or of oracle_good >= it
+#       -> manipulation failed; report it, do not interpret M1.
+experiment: rebuttal_oracle
+base_config: stream_small
+output_root: runs
+seeds: [1337, 2024, 7]
+cleanup_checkpoints: keep_final
+_pin: &pin
+  - controller.policy.surprise_high=1.25
+  - controller.policy.repetition_low=0.40
+  - controller.retrieval.replay_on_hit=true
+_eval: &eval
+  - eval.max_batches=128
+  - eval.row_losses=true
+runs:
+  - id: shared_frozen_schedule_oracle_bad
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+      - controller.debug.policy_override=schedule_oracle_bad
+      - controller.debug.commit_schedule_path=runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl
+  - id: shared_frozen_schedule_oracle_good
+    overrides:
+      - *pin
+      - *eval
+      - train.trainable=routed
+      - controller.debug.policy_override=schedule_oracle_good
+      - controller.debug.commit_schedule_path=runs/rebuttal_v1_live/shared_frozen_trihope-seed${train.seed}/commits.jsonl
+  - id: schedule_oracle_bad
+    overrides:
+      - *pin
+      - *eval
+      - controller.debug.policy_override=schedule_oracle_bad
+      - controller.debug.commit_schedule_path=runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl
+  - id: schedule_oracle_good
+    overrides:
+      - *pin
+      - *eval
+      - controller.debug.policy_override=schedule_oracle_good
+      - controller.debug.commit_schedule_path=runs/rebuttal_v1_live/trihope_e256-seed${train.seed}/commits.jsonl

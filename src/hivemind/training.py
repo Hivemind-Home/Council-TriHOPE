@@ -35,6 +35,7 @@ from .controller.config import (
     WriterConfig,
 )
 from .controller.consolidation import ConsolidationScheduler
+from .controller.oracle import ORACLE_OVERRIDES, ProbeBuffer, interference_scores
 from .controller.module_index import ModuleId, build_module_index
 from .controller.policy import RFPPolicy, StoreAction
 from .controller.signals import ModuleSignals, SignalComputer
@@ -634,6 +635,15 @@ def run_training_loop(
         seed=int(seed),
     )
     controller_enabled = ctrl_config.enabled
+    # schedule_oracle_* (rebuttal): the probe buffer is filled from the local
+    # batch and the oracle backward runs on the local model, so these arms are
+    # single-process only (the rebuttal runs are). Refuse rather than diverge.
+    oracle_active = controller_enabled and ctrl_config.debug.policy_override in ORACLE_OVERRIDES
+    if oracle_active and dist.world_size > 1:
+        raise ValueError(
+            f"policy_override={ctrl_config.debug.policy_override} is single-process only "
+            f"(world_size={dist.world_size})"
+        )
     masked_updates = masked_updates and controller_enabled
     p_store_disabled = "P" in ctrl_config.ablation.disable_stores
     force_steps = set(ctrl_config.debug.force_consolidate_steps)
@@ -1222,6 +1232,17 @@ def run_training_loop(
 
     _prev_handler = signal.signal(signal.SIGINT, _sigint_handler)
 
+    # schedule_oracle_*: probe rows of each domain, persisted next to the
+    # traces so a resumed run keeps the rows captured before its checkpoint.
+    probe_buffer: ProbeBuffer | None = None
+    probe_path = Path(log_cfg.get("events_path", "logs/events.jsonl")).parent / "oracle_probe.pt"
+    if oracle_active:
+        probe_buffer = ProbeBuffer(ctrl_config.debug.oracle_probe_rows_per_domain)
+        if start_step > 0 and probe_path.exists():
+            probe_buffer.load_state_dict(
+                torch.load(probe_path, map_location="cpu"), before_step=start_step
+            )
+
     current_phase: str | None = (
         stream_schedule.phase_at(start_step).name
         if stream_schedule is not None and start_step < steps
@@ -1327,6 +1348,15 @@ def run_training_loop(
 
         batch = _unpack_batch(raw, device)
         tokens = batch["input_ids"]  # [B, T]
+        if probe_buffer is not None and probe_buffer.add_batch(
+            tokens,
+            batch.get("labels"),
+            batch.get("attention_mask"),
+            (batch.get("metadata") or {}).get("domain"),
+            step=step,
+        ):
+            probe_path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(probe_buffer.state_dict(), probe_path)
 
         # === Step 1: Embed for routing ===
         h_t = routing_embed(tokens)  # [B, d]
@@ -1489,6 +1519,26 @@ def run_training_loop(
         if meta and meta.get("teacher_output_text"):
             teacher_text_repr = str(meta["teacher_output_text"][0] or "")
 
+        # === Step 8b (schedule_oracle_* only): interference oracle ===
+        # After backward (``.grad`` = this step's gradient) and BEFORE the
+        # optimizer step (m/v still pre-step), like the signals. Only on steps
+        # the reference schedule commits; the main step's ``.grad``, the
+        # optimizer state and the RNG are left untouched (see oracle.py).
+        oracle_scores: dict[ModuleId, float] | None = None
+        if probe_buffer is not None and policy.needs_oracle_scores(step):
+            if stream_schedule is not None:
+                _ph = stream_schedule.phase_at(step)
+                _cur = set(_ph.domains or ([_ph.domain] if _ph.domain else []))
+            else:
+                _cur = set((batch.get("metadata") or {}).get("domain") or [])
+            _probe = probe_buffer.probe(exclude=_cur)
+            if _probe:
+                with profiler.timer.section("oracle"):
+                    _cands = [module_map[s.module_id] for s in policy.select_top_m(module_signals)]
+                    oracle_scores = interference_scores(
+                        student, _cands, optimizer, _probe, device, autocast_ctx
+                    )
+
         # === Step 9: R/F/P routing policy ===
         policy_section = profiler.timer.section("policy_write")
         policy_section.__enter__()
@@ -1501,6 +1551,7 @@ def run_training_loop(
                 teacher_name=teacher_name_repr if teacher_name_repr else None,
                 teacher_index=teacher_idx_repr,
                 num_teachers=len(registry.teachers),
+                oracle_scores=oracle_scores,
             )
             if controller_enabled
             else []
@@ -1575,6 +1626,19 @@ def run_training_loop(
             ]
             if controller_p:
                 rec["controller_p"] = controller_p
+            # Oracle arms: was the pick scored or the first-phase random
+            # fallback; on scored committing steps the committed blocks'
+            # scores and the mean over all non-deferred candidates (= what a
+            # random pick would get in expectation) — the manipulation check.
+            if policy.last_oracle_fallback is not None and committed:
+                rec["oracle_fallback"] = bool(policy.last_oracle_fallback)
+                if oracle_scores:
+                    rec["score_p"] = [oracle_scores[a.module_id] for a in committed
+                                      if a.module_id in oracle_scores]
+                    cand = [oracle_scores[a.module_id] for a in actions
+                            if a.store != "R" and a.module_id in oracle_scores]
+                    if cand:
+                        rec["score_cand_mean"] = sum(cand) / len(cand)
             commit_trace.emit(rec)
 
         policy_section.__exit__(None, None, None)

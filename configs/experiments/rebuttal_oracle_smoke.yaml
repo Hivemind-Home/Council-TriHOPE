@@ -1,0 +1,20 @@
+# CPU smoke of the schedule_oracle_* controls on stream_smoke; reference = the
+# v1 smoke trihope run (runs/rebuttal_smoke/trihope-seed1337, produced by
+# `bash scripts/run_rebuttal.sh smoke`). Checks that scoring actually happens
+# once an earlier domain exists (oracle_fallback false, score_p present).
+experiment: rebuttal_oracle_smoke
+base_config: stream_smoke
+output_root: runs
+seeds: [1337]
+cleanup_checkpoints: keep_final
+runs:
+  - id: schedule_oracle_bad
+    overrides:
+      - eval.row_losses=true
+      - controller.debug.policy_override=schedule_oracle_bad
+      - controller.debug.commit_schedule_path=runs/rebuttal_smoke/trihope-seed${train.seed}/commits.jsonl
+  - id: schedule_oracle_good
+    overrides:
+      - eval.row_losses=true
+      - controller.debug.policy_override=schedule_oracle_good
+      - controller.debug.commit_schedule_path=runs/rebuttal_smoke/trihope-seed${train.seed}/commits.jsonl

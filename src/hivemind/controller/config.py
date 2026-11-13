@@ -371,6 +371,12 @@ class DebugConfig:
     # ratio). Removes the volume difference the live-yoked arms drift into.
     policy_override: str | None = None
     commit_schedule_path: str | None = None
+    # ``schedule_oracle_bad`` / ``schedule_oracle_good``: as ``schedule_*``,
+    # but the k_t blocks are the highest / lowest by an interference oracle
+    # (first-order predicted change in earlier-domain loss from this step's
+    # update; see ``hivemind.controller.oracle``). Probe set: the first
+    # ``oracle_probe_rows_per_domain`` training rows of each domain.
+    oracle_probe_rows_per_domain: int = 4
     # Selective rollback (task T5): a P action is demoted to F while the
     # batch's teacher is listed, and on resume every module whose pending
     # attribution is dominated (share ≥ block_min_share) by a listed teacher
@@ -393,11 +399,13 @@ class DebugConfig:
         if self.policy_override not in (
             None, "always_p", "always_f", "always_r", "random_matched", "random_commit",
             "quota_shuffle", "yoked_random", "anti_commit", "schedule_random", "schedule_anti",
+            "schedule_oracle_bad", "schedule_oracle_good",
         ):
             raise ValueError(
                 f"Unknown policy_override '{self.policy_override}'; "
                 "allowed: always_p | always_f | always_r | random_matched | random_commit | "
-                "quota_shuffle | yoked_random | anti_commit | schedule_random | schedule_anti"
+                "quota_shuffle | yoked_random | anti_commit | schedule_random | schedule_anti | "
+                "schedule_oracle_bad | schedule_oracle_good"
             )
         if self.random_unit not in ("module", "step"):
             raise ValueError(

@@ -19,6 +19,8 @@ from pathlib import Path
 
 import torch
 
+from .oracle import ORACLE_OVERRIDES
+
 from .config import AblationConfig, DebugConfig, PolicyConfig
 from .module_index import ModuleId
 from .signals import ModuleSignals
@@ -156,8 +158,12 @@ class RFPPolicy:
         # schedule_*: {step: reference commit count}. Read once; every rank
         # reads the same file, so the schedule is rank-consistent.
         self._schedule: dict[int, int] = {}
-        if override in ("schedule_random", "schedule_anti"):
+        if override in ("schedule_random", "schedule_anti", *ORACLE_OVERRIDES):
             self._schedule = load_commit_schedule(self.debug.commit_schedule_path)
+        # schedule_oracle_*: whether the last decide() fell back to a random
+        # pick because no oracle scores were supplied (first phase: no earlier
+        # domain to interfere with). ``None`` for every other override.
+        self.last_oracle_fallback: bool | None = None
         if override == "random_commit" and not self._random_shares:
             # random_matched degrades to uniform draws, but random_commit would
             # silently never commit -- a different arm. Fail at startup instead.
@@ -177,6 +183,7 @@ class RFPPolicy:
         teacher_name: str | None = None,
         teacher_index: int | None = None,
         num_teachers: int | None = None,
+        oracle_scores: "dict[ModuleId, float] | None" = None,
     ) -> list[StoreAction]:
         """Determine R/F/P routing for each selected module.
 
@@ -232,8 +239,11 @@ class RFPPolicy:
         # this step with its k_t commits moved onto other non-deferred
         # blocks. See :meth:`_yoked_labels`.
         yoked: tuple[list[str], list[str]] | None = (
-            self._yoked_labels(selected, low_confidence, teacher_name, step or 0, phase)
-            if self.override in ("yoked_random", "anti_commit", "schedule_random", "schedule_anti")
+            self._yoked_labels(
+                selected, low_confidence, teacher_name, step or 0, phase, oracle_scores
+            )
+            if self.override
+            in ("yoked_random", "anti_commit", "schedule_random", "schedule_anti", *ORACLE_OVERRIDES)
             else None
         )
 
@@ -339,6 +349,7 @@ class RFPPolicy:
         teacher_name: str | None,
         step: int,
         phase: str | None,
+        oracle_scores: "dict[ModuleId, float] | None" = None,
     ) -> tuple[list[str], list[str]]:
         """Controller labels with the step's commits re-seated on other blocks.
 
@@ -371,7 +382,7 @@ class RFPPolicy:
         ]
         control = ["R" if s == "R" else "F" for s in controller]
         candidates = [i for i, s in enumerate(controller) if s != "R"]
-        if self.override in ("schedule_random", "schedule_anti"):
+        if self.override in ("schedule_random", "schedule_anti", *ORACLE_OVERRIDES):
             # The reference run's k_t; capped, since this arm may defer more
             # blocks than the reference did on this step.
             k = min(self._schedule.get(int(step), 0), len(candidates))
@@ -385,9 +396,27 @@ class RFPPolicy:
         else:
             # k ≤ len(candidates) always holds: every controller P is non-R.
             k = sum(1 for s in controller if s == "P")
+        if self.override in ORACLE_OVERRIDES:
+            self.last_oracle_fallback = None
         if k == 0:
             return controller, control
-        if self.override in ("anti_commit", "schedule_anti"):
+        scored = (
+            self.override in ORACLE_OVERRIDES
+            and oracle_scores is not None
+            and all(selected[i].module_id in oracle_scores for i in candidates)
+        )
+        if self.override in ORACLE_OVERRIDES:
+            self.last_oracle_fallback = not scored
+        if scored:
+            # Oracle bracket: the k_t candidates with the highest (bad) or
+            # lowest (good) predicted earlier-domain loss change; ties by
+            # Top-M rank.
+            sign = -1.0 if self.override == "schedule_oracle_bad" else 1.0
+            chosen = sorted(
+                candidates,
+                key=lambda i: (sign * oracle_scores[selected[i].module_id], i),  # type: ignore[index]
+            )[:k]
+        elif self.override in ("anti_commit", "schedule_anti"):
             cfg = self.config
             def agreement(i: int) -> float:
                 sig = selected[i]
@@ -406,6 +435,13 @@ class RFPPolicy:
         for i in chosen:
             control[i] = "P"
         return controller, control
+
+    def needs_oracle_scores(self, step: int) -> bool:
+        """``schedule_oracle_*`` only: does this step's reference schedule
+        commit at all? The (one extra forward/backward) oracle scoring is
+        skipped on every other step. The gates in ``_yoked_labels`` may still
+        zero the count; scoring then is wasted but harmless."""
+        return self.override in ORACLE_OVERRIDES and self._schedule.get(int(step), 0) > 0
 
     def select_top_m(
         self, module_signals: dict[ModuleId, ModuleSignals]

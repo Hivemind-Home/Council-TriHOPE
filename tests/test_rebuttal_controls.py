@@ -357,3 +357,224 @@ class TestCommitTrace:
             assert all(len(r["controller_p"]) == r["p"] for r in committed)
         else:
             assert not any("controller_p" in r for r in recs)
+
+
+# ---------------------------------------------------------------------------
+# schedule_oracle_bad / schedule_oracle_good (BDmh Q2: interference-ranked
+# selection at the controller's volume)
+# ---------------------------------------------------------------------------
+
+from hivemind.controller.module_index import build_module_index  # noqa: E402
+from hivemind.controller.oracle import (  # noqa: E402
+    ProbeBuffer,
+    adamw_open_delta,
+    interference_scores,
+)
+from hivemind.optim.masked_adamw import MaskedAdamW  # noqa: E402
+
+
+def _sched_cfg(tmp_path: Path, name: str, counts: dict[int, int]) -> DebugConfig:
+    f = tmp_path / "commits.jsonl"
+    f.write_text("".join(json.dumps({"step": s, "p": p}) + "\n" for s, p in counts.items()))
+    return DebugConfig(policy_override=name, commit_schedule_path=str(f))
+
+
+class TestOraclePolicy:
+    # Non-deferred candidates are layers 0,1,3,4,5 (layer 2 is the controller's R).
+    SCORES = {ModuleId(i, "attn", p): s for i, p, s in
+              [(0, "P", 0.5), (1, "F", -2.0), (2, "F", 9.0), (3, "P", 3.0),
+               (4, "F", -0.1), (5, "P", 1.0)]}
+
+    @pytest.mark.parametrize("name", ["schedule_oracle_bad", "schedule_oracle_good"])
+    def test_config_accepts(self, name: str) -> None:
+        DebugConfig(policy_override=name)
+
+    def test_bad_commits_highest_good_lowest_r_kept(self, tmp_path) -> None:
+        for name, want in [("schedule_oracle_bad", [3, 5]), ("schedule_oracle_good", [1, 4])]:
+            pol = RFPPolicy(_CFG, override=name, debug=_sched_cfg(tmp_path, name, {7: 2}))
+            lab = _labels(pol.decide(_step_signals(), step=7, oracle_scores=self.SCORES))
+            # layer 2 has the highest score of all but is the controller's
+            # deferral: it must stay R, never be committed.
+            assert lab[2] == "R"
+            assert [i for i, s in sorted(lab.items()) if s == "P"] == want, name
+            assert pol.last_oracle_fallback is False
+
+    def test_without_scores_falls_back_to_schedule_random(self, tmp_path) -> None:
+        o = RFPPolicy(_CFG, override="schedule_oracle_bad", seed=3,
+                      debug=_sched_cfg(tmp_path, "schedule_oracle_bad", {4: 2}))
+        r = RFPPolicy(_CFG, override="schedule_random", seed=3,
+                      debug=_sched_cfg(tmp_path, "schedule_random", {4: 2}))
+        lo = _labels(o.decide(_step_signals(), step=4, phase="x"))
+        lr_ = _labels(r.decide(_step_signals(), step=4, phase="x"))
+        assert lo == lr_ and sum(v == "P" for v in lo.values()) == 2
+        assert o.last_oracle_fallback is True
+
+    def test_needs_scores_only_on_scheduled_steps(self, tmp_path) -> None:
+        pol = RFPPolicy(_CFG, override="schedule_oracle_good",
+                        debug=_sched_cfg(tmp_path, "schedule_oracle_good", {3: 1, 4: 0}))
+        assert [pol.needs_oracle_scores(s) for s in (2, 3, 4)] == [False, True, False]
+        plain = RFPPolicy(_CFG, override="schedule_random",
+                          debug=_sched_cfg(tmp_path, "schedule_random", {3: 1}))
+        assert not plain.needs_oracle_scores(3)
+
+    @pytest.mark.parametrize("name", ["schedule_oracle_bad", "schedule_oracle_good"])
+    def test_gates_zero_the_count(self, tmp_path, name) -> None:
+        dbg = _sched_cfg(tmp_path, name, {0: 2})
+        ab = AblationConfig(use_teacher_confidence=True, confidence_threshold=0.5)
+        lab = _labels(RFPPolicy(_CFG, ablation=ab, override=name, debug=dbg).decide(
+            _step_signals(), teacher_confidence=0.1, step=0, oracle_scores=self.SCORES))
+        assert "P" not in lab.values()
+
+
+class TestAdamwOpenDelta:
+    """The closed-form delta must equal what MaskedAdamW actually does."""
+
+    @pytest.mark.parametrize("path", ["uniform", "masked"])
+    def test_matches_real_optimizer_step(self, path: str) -> None:
+        torch.manual_seed(0)
+        # float64 so the comparison tests the formula, not fp32 rounding of p
+        p = torch.nn.Parameter(torch.randn(5, 7, dtype=torch.float64))
+        opt = MaskedAdamW([p], lr=3e-3, weight_decay=0.05)
+        for i in range(4):  # build history (coordinate-local when masked)
+            p.grad = torch.randn_like(p)
+            if path == "masked":
+                opt.set_masks({p: torch.rand(5, 7) > 0.4})
+            opt.step()
+        p.grad = torch.randn_like(p)
+        want = adamw_open_delta(p, opt, opt.param_groups[0])
+        before = p.detach().clone()
+        state_before = {k: v.clone() for k, v in opt.state[p].items()}
+        if path == "masked":
+            opt.set_masks({p: torch.ones(5, 7, dtype=torch.bool)})
+        opt.step()
+        # Up to fp32 rounding: the delta is computed in fp32, and the masked
+        # optimizer path itself rounds p to fp32.
+        torch.testing.assert_close(p.detach() - before, want.double(), rtol=1e-3, atol=2e-7)
+        # computing the delta must not have touched the state
+        assert set(state_before) == set(opt.state[p])
+
+    def test_fresh_param_and_no_grad(self) -> None:
+        p = torch.nn.Parameter(torch.randn(3))
+        opt = MaskedAdamW([p], lr=1e-2, weight_decay=0.0)
+        assert adamw_open_delta(p, opt, opt.param_groups[0]) is None
+        p.grad = torch.randn(3)
+        d = adamw_open_delta(p, opt, opt.param_groups[0])
+        before = p.detach().clone()
+        opt.step()
+        torch.testing.assert_close(p.detach() - before, d)
+
+
+def _probe_rows(vocab: int, n: int, length: int, seed: int):
+    g = torch.Generator().manual_seed(seed)
+    return [(torch.randint(0, vocab, (length,), generator=g),) * 2 for _ in range(n)]
+
+
+class TestInterferenceScores:
+    def _setup(self, tiny_model):
+        model = tiny_model.double()
+        mods = build_module_index(model)
+        opt = MaskedAdamW([p for p in model.parameters() if p.requires_grad],
+                          lr=1e-4, weight_decay=0.01)
+        x = torch.randint(0, 64, (2, 16))
+        for _ in range(2):  # some optimizer history
+            opt.zero_grad()
+            model(x).logsumexp(-1).mean().backward()
+            opt.step()
+        opt.zero_grad()
+        model(x).logsumexp(-1).mean().backward()  # this step's gradient
+        probe = {"math": _probe_rows(64, 2, 12, 1), "code": _probe_rows(64, 3, 9, 2)}
+        return model, mods, opt, probe
+
+    @staticmethod
+    def _old_loss(model, probe) -> float:
+        tot = 0.0
+        with torch.no_grad():
+            for rows in probe.values():
+                s = n = 0.0
+                for ids, lab in rows:
+                    lg = model(ids[None])[:, :-1]
+                    s += float(torch.nn.functional.cross_entropy(
+                        lg.reshape(-1, lg.shape[-1]), lab[None, 1:].reshape(-1), reduction="sum"))
+                    n += lab.numel() - 1
+                tot += s / n
+        return tot / len(probe)
+
+    def test_first_order_matches_finite_difference(self, tiny_model) -> None:
+        model, mods, opt, probe = self._setup(tiny_model)
+        cands = mods[:6]
+        scores = interference_scores(model, cands, opt, probe, torch.device("cpu"))
+        groups = {id(p): g for g in opt.param_groups for p in g["params"]}
+        base = self._old_loss(model, probe)
+        checked = 0
+        for m in cands:
+            deltas = [(p, adamw_open_delta(p, opt, groups[id(p)])) for p in m.params]
+            with torch.no_grad():
+                for p, d in deltas:
+                    p.add_(d)
+            actual = self._old_loss(model, probe) - base
+            with torch.no_grad():
+                for p, d in deltas:
+                    p.sub_(d)
+            if abs(actual) > 1e-9:
+                assert scores[m.id] == pytest.approx(actual, rel=0.05), str(m.id)
+                checked += 1
+        assert checked >= 3
+
+    def test_no_side_effects(self, tiny_model) -> None:
+        model, mods, opt, probe = self._setup(tiny_model)
+        grads = {id(p): p.grad.clone() for p in model.parameters() if p.grad is not None}
+        state = {id(p): {k: v.clone() for k, v in s.items()} for p, s in opt.state.items()}
+        rng = torch.get_rng_state()
+        model.train()
+        interference_scores(model, mods[:4], opt, probe, torch.device("cpu"))
+        assert model.training
+        assert torch.equal(torch.get_rng_state(), rng)
+        for p in model.parameters():
+            if p.grad is not None:
+                assert torch.equal(p.grad, grads[id(p)])
+        for p, s in opt.state.items():
+            for k, v in s.items():
+                assert torch.equal(v, state[id(p)][k])
+
+    def test_empty_probe_returns_nothing(self, tiny_model) -> None:
+        model, mods, opt, _ = self._setup(tiny_model)
+        assert interference_scores(model, mods[:2], opt, {}, torch.device("cpu")) == {}
+
+
+class TestProbeBuffer:
+    def test_fill_trim_exclude_and_resume(self) -> None:
+        buf = ProbeBuffer(rows_per_domain=2)
+        ids = torch.arange(24).view(3, 8)
+        mask = torch.ones(3, 8, dtype=torch.long)
+        mask[1, 5:] = 0  # padded row
+        labels = ids.clone()
+        labels[2] = -100  # nothing to score on: skipped
+        assert buf.add_batch(ids, labels, mask, ["math", "math", "code"], step=10)
+        assert [r[0].numel() for r in buf.rows["math"]] == [8, 5]
+        assert "code" not in buf.rows
+        assert not buf.add_batch(ids, ids, mask, ["math", "math", "math"], step=11)  # full
+        buf.add_batch(ids, ids, None, ["code", "x", "x"], step=20)
+        assert sorted(buf.probe(exclude={"math"})) == ["code", "x"]
+        # resume from a checkpoint at step 15: rows captured at >= 15 are dropped
+        again = ProbeBuffer(1)
+        again.load_state_dict(buf.state_dict(), before_step=15)
+        assert sorted(again.rows) == ["math"] and len(again.rows["math"]) == 2
+
+
+class TestOracleTrainingLoop:
+    def test_runs_and_traces_fallback_on_synthetic(self, tmp_path: Path) -> None:
+        # Synthetic batches carry no domain, so the probe is empty and every
+        # scheduled commit falls back to the random pick: the arm runs, keeps
+        # the reference volume, and says so in commits.jsonl.
+        sched = tmp_path / "ref_commits.jsonl"
+        sched.write_text("".join(json.dumps({"step": s, "p": 1 if s % 3 == 0 else 0}) + "\n"
+                                 for s in range(12)))
+        cfg = _loop_cfg(tmp_path)
+        cfg.controller.debug = {"policy_override": "schedule_oracle_bad",
+                                "commit_schedule_path": str(sched)}
+        run_training_loop(cfg, device=torch.device("cpu"))
+        recs = [json.loads(line) for line in (tmp_path / "commits.jsonl").read_text().splitlines()]
+        assert len(recs) == 12
+        committing = [r for r in recs if r["p"]]
+        assert committing and all(r.get("oracle_fallback") is True for r in committing)
+        assert all(r["step"] % 3 == 0 for r in committing)

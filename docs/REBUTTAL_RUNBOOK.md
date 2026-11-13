@@ -189,3 +189,41 @@ tar --exclude=checkpoints --exclude=torchrun_logs -czf rebuttal_seeds_$(date -u 
 ```
 `m1_rows.py` merges all seeds across the four dirs (5-seed table for the frozen arms,
 with sign-test p-values). Send the tarball and the console output.
+
+## Follow-up batch 3 (2026-11-13): interference-oracle bracket — PRIORITY
+
+Why: BDmh Q2 asked for anti-selection by lowest C̄ **or by largest interference with
+earlier domains**. The C̄ version (`schedule_anti`) did not forget more, so BDmh's
+own reading would be "the null reflects insensitivity". These two arms rank the
+candidate blocks by an oracle the controller cannot see, the first-order predicted
+change in earlier-domain loss from this step's exact update, at the reference's
+per-step commit count:
+`schedule_oracle_bad` (most predicted forgetting) / `schedule_oracle_good` (least).
+Code: `src/hivemind/controller/oracle.py`; readings are pre-stated in the manifest
+header. Same branch, `rebuttal/extra-seeds`.
+
+**Priority over batch 2.** If batch 2 is running, Ctrl-C it once (each run saves a
+checkpoint; `--resume` continues it later) and start this. The first 6 runs (frozen
+pair, 3 seeds) are the ones the rebuttal needs; the trainable pair runs after.
+
+```bash
+git fetch origin && git checkout -B rebuttal/extra-seeds origin/rebuttal/extra-seeds
+python scripts/run_experiment.py configs/experiments/rebuttal_oracle.yaml --live --resume --concurrent 3
+```
+Needs `runs/rebuttal_v1_live/{shared_frozen_trihope,trihope_e256}-seed{1337,2024,7}/commits.jsonl`
+(the batch-1 references; refuses to start without them). Single-process only.
+
+**Post:**
+```bash
+python scripts/oracle_check.py runs/rebuttal_oracle_live/*-seed*        # must print PASS
+python scripts/weight_drift.py runs/rebuttal_oracle_live/shared_frozen_*-seed* --expect-shared-unchanged
+for s in 1337 2024 7; do
+  python scripts/commit_schedule.py runs/rebuttal_oracle_live/shared_frozen_*-seed$s \
+      --reference runs/rebuttal_v1_live/shared_frozen_trihope-seed$s --expect-match
+done
+python scripts/m1_rows.py runs/rebuttal_v1_live runs/rebuttal_volume_live runs/rebuttal_oracle_live
+tar --exclude=checkpoints --exclude=torchrun_logs -czf rebuttal_oracle_$(date -u +%Y%m%dT%H%MZ).tgz runs/rebuttal_oracle_live
+```
+`oracle_check.py` FAIL means the oracle did not select what it claims: report it,
+the M1 numbers of that run are not interpretable. Send the tarball and console output
+as soon as the 6 frozen runs are done; do not wait for the trainable pair.
