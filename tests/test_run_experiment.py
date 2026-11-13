@@ -317,3 +317,35 @@ class TestConcurrentSharedGpu:
         assert code == 0
         assert seen == [None] * 4
         assert active["peak"] <= 2
+
+
+class TestLaunchStatus:
+    """An interrupted run (exit 0, summary says interrupted) must not count as
+    done, or --resume would skip it and leave a truncated run behind."""
+
+    @staticmethod
+    def _launch(tmp_path, monkeypatch, summary: dict | None, code: int = 0) -> dict:
+        import json as _json
+        import run_experiment as rx
+
+        run = ResolvedRun(run_id="a-seed1", spec_id="a", seed=1,
+                          run_dir=tmp_path / "a-seed1", overrides=[])
+        body = ""
+        if summary is not None:
+            body = (f"import json,pathlib;pathlib.Path({str(run.run_dir / 'run_summary.json')!r})"
+                    f".write_text(json.dumps({summary!r}));")
+        monkeypatch.setattr(rx, "build_command",
+                            lambda *a, **k: [sys.executable, "-c", body + f"raise SystemExit({code})"])
+        rx.launch(run, "stream_small")
+        return _json.loads((run.run_dir / "status.json").read_text())
+
+    def test_finished_run_is_done(self, tmp_path, monkeypatch) -> None:
+        assert self._launch(tmp_path, monkeypatch, {"interrupted": False})["state"] == "done"
+
+    def test_interrupted_run_is_failed_so_resume_continues_it(self, tmp_path, monkeypatch) -> None:
+        st = self._launch(tmp_path, monkeypatch, {"interrupted": True})
+        assert st["state"] == "failed" and st["interrupted"] is True
+
+    def test_no_summary_or_nonzero_exit_is_failed(self, tmp_path, monkeypatch) -> None:
+        assert self._launch(tmp_path, monkeypatch, None)["state"] == "failed"
+        assert self._launch(tmp_path, monkeypatch, {"interrupted": False}, code=1)["state"] == "failed"

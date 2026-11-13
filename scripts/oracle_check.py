@@ -49,7 +49,11 @@ def main(argv: list[str] | None = None) -> int:
         mean = lambda xs: (sum(xs) / len(xs)) if xs else float("nan")
         print(f"{run.name:<44}{len(com):>8}{fb:>8}{len(scored):>8}{mean(sp):>14.3e}"
               f"{mean(cm):>12.3e}{'-' if frac is None else f'{frac:.2f}':>12}")
-        if frac is None or frac < args.min_side:
+        # No scored step yet is only a failure for a finished run (a run still
+        # in its first phase has nothing to score against).
+        st_file = run / "status.json"
+        finished = st_file.exists() and json.loads(st_file.read_text()).get("state") == "done"
+        if (frac is None and finished) or (frac is not None and frac < args.min_side):
             ok = False
     print("manipulation check:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

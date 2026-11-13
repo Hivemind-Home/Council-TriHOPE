@@ -1232,6 +1232,16 @@ def run_training_loop(
 
     _prev_handler = signal.signal(signal.SIGINT, _sigint_handler)
 
+    # schedule_* / schedule_oracle_*: the reference commit schedule must cover
+    # the whole run. A truncated reference (an interrupted run) would silently
+    # turn every step past its end into a never-commit step.
+    if policy.schedule_last_step is not None and policy.schedule_last_step < steps - 1:
+        raise ValueError(
+            f"commit schedule {ctrl_config.debug.commit_schedule_path} ends at step "
+            f"{policy.schedule_last_step} but this run has {steps} steps: the reference "
+            "run did not finish. Finish it first (run_experiment --resume)."
+        )
+
     # schedule_oracle_*: probe rows of each domain, persisted next to the
     # traces so a resumed run keeps the rows captured before its checkpoint.
     probe_buffer: ProbeBuffer | None = None

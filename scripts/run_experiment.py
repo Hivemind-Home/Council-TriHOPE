@@ -252,10 +252,25 @@ def launch(
         )
         code = proc.wait()
 
-    # A run only counts as done when its summary was written.
-    ok = code == 0 and (run.run_dir / "run_summary.json").exists()
-    _write_status(run, "done" if ok else "failed", exit_code=code)
-    return code
+    # A run only counts as done when its summary was written AND says it ran
+    # to the end. On SIGINT/SIGTERM training saves a checkpoint, writes a
+    # summary with "interrupted": true and exits 0; under --concurrent the
+    # worker threads never see the KeyboardInterrupt, so without this check
+    # an interrupted run was marked done and --resume skipped it for good
+    # (a truncated run, silently used downstream).
+    summ = run.run_dir / "run_summary.json"
+    interrupted = False
+    if summ.exists():
+        try:
+            interrupted = bool(json.loads(summ.read_text()).get("interrupted", False))
+        except (OSError, ValueError):
+            interrupted = True  # unreadable summary: not a finished run
+    ok = code == 0 and summ.exists() and not interrupted
+    _write_status(
+        run, "done" if ok else "failed", exit_code=code,
+        **({"interrupted": True} if interrupted else {}),
+    )
+    return code if not interrupted else (code or 130)
 
 
 def cleanup_checkpoints(run: ResolvedRun, policy: str) -> None:

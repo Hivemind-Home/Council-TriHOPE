@@ -578,3 +578,15 @@ class TestOracleTrainingLoop:
         committing = [r for r in recs if r["p"]]
         assert committing and all(r.get("oracle_fallback") is True for r in committing)
         assert all(r["step"] % 3 == 0 for r in committing)
+
+
+def test_truncated_reference_schedule_is_refused(tmp_path: Path) -> None:
+    # A reference that stopped early (interrupted run) must not silently turn
+    # the rest of the arm into never-commit.
+    sched = tmp_path / "ref_commits.jsonl"
+    sched.write_text("".join(json.dumps({"step": s, "p": 1}) + "\n" for s in range(6)))
+    cfg = _loop_cfg(tmp_path)  # 12 steps
+    cfg.controller.debug = {"policy_override": "schedule_random",
+                            "commit_schedule_path": str(sched)}
+    with pytest.raises(ValueError, match="did not finish"):
+        run_training_loop(cfg, device=torch.device("cpu"))

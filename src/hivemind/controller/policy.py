@@ -436,6 +436,11 @@ class RFPPolicy:
             control[i] = "P"
         return controller, control
 
+    @property
+    def schedule_last_step(self) -> int | None:
+        """Last step covered by the reference commit schedule (schedule_* only)."""
+        return max(self._schedule) if self._schedule else None
+
     def needs_oracle_scores(self, step: int) -> bool:
         """``schedule_oracle_*`` only: does this step's reference schedule
         commit at all? The (one extra forward/backward) oracle scoring is

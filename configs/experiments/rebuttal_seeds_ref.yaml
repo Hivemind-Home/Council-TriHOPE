@@ -4,10 +4,11 @@
 #
 #   python scripts/run_experiment.py configs/experiments/rebuttal_seeds_ref.yaml --live --resume --concurrent 3
 #
-# Stage B (configs/experiments/rebuttal_seeds_sched.yaml) and the oracle arms
-# (configs/experiments/rebuttal_oracle.yaml) read each seed's commits.jsonl
-# from this stage, so they must NOT start before both shared_frozen_trihope
-# runs here are done. Everything else is rebuttal_v1's.
+# Stage B (configs/experiments/rebuttal_seeds_sched.yaml) reads each seed's
+# commits.jsonl from this stage, so it must NOT start before both
+# shared_frozen_trihope runs here are done. (The oracle arms read batch 1's
+# runs/rebuttal_v1_live references, not this stage.) Everything else is
+# rebuttal_v1's.
 experiment: rebuttal_seeds
 base_config: stream_small
 output_root: runs

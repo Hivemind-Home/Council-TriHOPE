@@ -152,6 +152,10 @@ differences, 3 seeds, reported with the seed-level interval the paper already us
 
 Pre-state these readings in the rebuttal **before** the numbers arrive.
 
+> **2026-11-13: batches 2 and 3 below are run with `scripts/run_rebuttal_nov13.sh` as
+> described in `docs/GPU_RUN_NOV13.md`. That page supersedes the commands in the two
+> sections below.**
+
 ## Follow-up batch 2 (2026-11-13): two extra seeds, shared-frozen regime
 
 Why: the frozen-regime comparisons rest on 3 seeds (best sign-test p = 0.125), and

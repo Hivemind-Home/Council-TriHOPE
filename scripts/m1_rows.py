@@ -53,6 +53,9 @@ def main():
     for r in ROOTS:
         for p in sorted(r.glob("*-seed*")):
             if p.is_dir() and (p / "run_summary.json").exists() and (p / "eval_rows.jsonl").exists():
+                if json.loads((p / "run_summary.json").read_text()).get("interrupted"):
+                    print(f"SKIPPED (interrupted, not finished): {p}")
+                    continue
                 arm, s = p.name.rsplit("-seed", 1)
                 if (arm, s) in where:
                     print(f"WARNING: {arm}-seed{s} in two roots; using {where[(arm, s)]}")
